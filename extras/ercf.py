@@ -927,7 +927,6 @@ class Ercf:
         status = self.printer.lookup_object("idle_timeout").get_status(self.printer.get_reactor().monotonic())
         if self.printer.lookup_object("pause_resume").is_paused:
             status["state"] = "Paused"
-        self._log_always("******* PAUL: is_in_print status=%s" % status)
         return status["state"] == "Printing" and status["printing_time"] > 3.0
 
     def _set_above_min_temp(self):
