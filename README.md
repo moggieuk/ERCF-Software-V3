@@ -6,7 +6,7 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 <ul>
 <li>Support all options for both toolhead sensor based loading/unloading and sensorless filament homing (with no toolhead sensor)
 <li>Supports sync load and unloading steps, including a config with toolhead sensor that can work with FLEX materials!
-  <li>Fully implements *“EndlessSpool”* with new concept of Tool --> Gate mapping.  This allows empty gates to be identified and tool changes subsequent to runout to use the correct filament spool.  It has the added advantage for being able to map gates to tools in case of slicing to spool loading mismatch.
+  <li>Fully implements “EndlessSpool” with new concept of Tool --> Gate mapping.  This allows empty gates to be identified and tool changes subsequent to runout to use the correct filament spool.  It has the added advantage for being able to map gates to tools in case of slicing to spool loading mismatch.
 <li>Measures “spring” after extruder homing for more accurate calibration reference
 <li>Adds servo_up delay making the gear to extruder transition of filament more reliable (maintains pressure)
 <li>Ability to secify empty or disabled tools (gates).
@@ -138,14 +138,27 @@ If you have installed the optional filament bypass block your can configure its 
   
   Will update the distance from homing postion to nozzle.  The change is designed for testing was will not be persistent.  Once you find your tuned settings be sure to update `ercf_parameters.cfg`
   
+## Testing:
+  This software is largely rewritten as well as being extended and so, despite best efforts, has probably introducted some bugs that may not exist in the official driver.  It also lacks extensive testing on different configurations that will stress the corner cases.  I have been using successfully on Voron 2.4 / ERCF with EASY-BRD.  I use a self-modified CW2 extruder with foolproof microswitch toolhead sensor and sensorless selector configuration. My day-to-day configuration is to load the filament to the extruder in a single movement, then home to toolhead sensor with synchronous gear/extruder movement (option #1 explained above).  I use the sensorless selector and have runout and EndlessSpool enabled.
   
+> Klipper Host Version: v0.10.0-594
+> <br>Primary MCU Klipper version: v0.10.0-594
+> <br>EASY-BRD firmware version: v0.10.0-220
+
+### My Setup:
+<img src="doc/My Voron 2.4 and ERCF.jpg" width="400" alt="My Setup">
+
+### Some setup notes based on my learnings:
+<ul>
+  <li>Firstly the importance of a reliable and fairly accurate encoder should not be under estimated. If you cannot get very reliable results from `ERCF_CALIBRATE_ENCODER` then don't proceed with setup - address the encoder problem first. Note that I had really good luck with this https://discord.com/channels/460117602945990666/909743915475816458/1023873076095615036 approach of blackening the encoder wheel and then adjusting the sensor is little *further* away from the gear.
+  <li>If using a toolhead sensor, that must be reliable too.  The hall effect based switch is very awkward to get right because of so many variables: strength of magnet, amount of iron in washer, even temperature, therefore I strongly recommend a simple microswitch based detection.  They work first time, every time.
+  <li>Eliminate all points of friction in the filament path.  There is lots written about this already but I found some unusual places where filament was rubbing on plastic and drilling out the path imporved things a good deal
+</ul>The version of the driver software both compensates for and exploits the spring that is inherently built when homing to the extruder.  The `ERCF_CALIBRATE_SINGLE TOOL=0` (which calibrates the *ercf_calib_ref* length) averages the measurement of multiple passes, measured the spring rebound and considers the configuration options when recommending and setting the ercf_calib_ref length.  If you change basic configuration options it is advisable to rerun this calibration step.
   
-## Full set of ERCF Commands:
+## Appendix Full set of ERCF Commands:
   *Note that some of these commands have been enhanced from the original*
   
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
   | TODO | TODO | TODO |
   
-## My Setup:
-<img src="doc/My Voron 2.4 and ERCF.jpg" width="500" alt="My Setup">
