@@ -112,9 +112,10 @@ When changing a tool with the `Tx` command ERCF would by default select the fila
 
   on a 9-gate ERCF would mark gates 2, 3, 5, 6 & 7 as empty
  
-To view the current
+To view the current mapping you can use either `ERCF_STATUS`, `ERCF_STATUS DETAIL=1` or `ERCF_DUMP_TT
   
-### Visualization of filamanet position
+### Visualization of filament position
+  The `log_visual` setting turns on an off the addition of a filament tracking visualization. Can be nice with log_level of 0 on when functioning setup.
 ![Bling is always better](visual_filament.png "San Juan Mountains")
   
 ### Filament bypass
