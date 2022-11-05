@@ -36,13 +36,63 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
  
 ## Summary of new commands:
   | Commmand | Description | Parameters |
-  | :--- | ----------- | ---------- |
-  | ERCF_STATUS | Report on state and essential configuration options (see some examples below) | TODO |
+  | -------- | ----------- | ---------- |
+  | ERCF_STATUS | Report on ERCF state, cababilities and Tool-to-Gate map | DETAIL=\[0\|\1] Forces TTG map display even if EndlessSpool is not configured |
   | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime | Many. Best to run ERCF_TEST_CONFIG without options to report all parameters than can be specified |
   | ERCF_DISPLAY_TTG_MAP | Displays the current Tool -> Gate mapping (can be used all the time but generally designed for EndlessSpool  | DETAIL=\[0 \| 1\] Whether to also show the tool --> gate mapping |
   | ERCF_REMAP_TTG | Reconfiguration of the Tool - to - Gate (TTG) map.  Can also set gates as empty! | TOOL=\[0..n\] <br>GATE=\[0..n\] Maps specified tool to this gate (multiple tools can point to same gate) <br>AVAILABLE=\[0\|1\]  Marks gate as available or empty |
   | ERCF_SELECT_BYPASS | Unload and select the bypass selector position if configured | None |
   | ERCF_LOAD_BYPASS | Does the extruder loading part of the load sequence - designed for bypass filament loading | None |
   | ERCF_TEST_HOME_TO_EXTRUDER | For calibrating extruder homing - TMC current setting, etc. | Return=\[0\|1\] Whether to return the filament to the approximate starting position after homing - good for repeated testing |
+  
+  Note that some existing comments have been enhanced.  See the [complete set of commands](#command_summary) here.
+  
+## New features in detail:
+### Config Loading and Unload sequences explained
+Note that if a toolhead sensor is configured it will become the default filament homing method and `home_to_extruder` an optional (but unecessary in this case) step. Also note the `home_to_extruder` step will always be performed during calibration regardless of these settings. For accurate homing and to avoid grinding, tune the gear stepper current reduction
+
+#### Possible loading options with toolhead sensor:
+    home_to_extruder=0          toolhead_homing_max=20       This is probably the BEST option and can work with FLEX
+                                toolhead_homing_step=1       Filament can load close to extruder gear, then is pulled
+                                sync_load_length=1           through to home on toolhead sensor by synchronized gear and
+                                                             extruder motors
+  
+    home_to_extruder=0          toolhead_homing_max=20       Not recommended but can avoid problems with sync move.  The
+                                toolhead_homing_step=1       initial load to end of bowden must press the filament to create
+                                sync_load_length=0           spring so that extruder will pick up the filamanent
+        
+  
+  home_to_extruder=1            toolhead_homing_max=20       Not recommended. The filament will be rammed against extruder
+  extruder_homing_max=50        toolhead_homing_step=1       to home and then synchronously pulled through to home again on
+  extruder_homing_step=2        sync_load_length=1           toolhead sensor (no more than 20mm away in this example)
+  extruder_homing_current=50
+  
+  home_to_extruder=1            toolhead_homing_max=20       A bit redundant to home twice but allows for reliable filament
+  extruder_homing_max=50        toolhead_homing_step=1       pickup by extruder, accurate toolhead homing and avoids possible 
+  extruder_homing_step=2        sync_load_length=0           problems with sync move
+  extruder_homing_current=50
+
+#### Possible loading options without toolhead sensor:
+  home_to_extruder=1            sync_load_length=10          BEST option without a toolhead sensor.  Filament is homed to
+  extruder_homing_max=50                                     extruder gear and then the initial move into the extruder is
+  extruder_homing_step=2                                     synchronised for accurate pickup
+  extruder_homing_current=50
+  
+  home_to_extruder=1            sync_load_length=0           Same as above but avoids the synchronous move.  Can be reliable
+  extruder_homing_max=50                                     with accurate calibration reference length and accurate encoder
+  extruder_homing_step=2
+  extruder_homing_current=50
+  
+Advanced options:
+When not using synchronous load move the spring tension in the filament held by servo will be leverage to help feed the filament into the extruder. This is controlled with the `delay_servo_release` setting. It defaults to 2mm and is unlikely that it will need to be altered.
+  
+#### Possible unloading options:
+This is much simplier than loading. The toolhead sensor, if installed, will automatically be leveraged
+sync_unload_length: 10			# mm of synchronized movement at start of bowden unloading
+
+## Full set of ERCF Commands:
+  | Commmand | Description | Parameters |
+  | -------- | ----------- | ---------- |
+  | TODO | TODO | TODO |
   
 ![The San Juan Mountains are beautiful!](/assets/images/san-juan-mountains.jpg "San Juan Mountains")
