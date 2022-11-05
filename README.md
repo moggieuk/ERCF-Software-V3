@@ -124,7 +124,7 @@ To view the current mapping you can use either `ERCF_STATUS DETAIL=1` or `ERCF_D
 <br>
   
 ### Visualization of filament position
-  The `log_visual` setting turns on an off the addition of a filament tracking visualization. Can be nice with log_level of 0 on when functioning setup.
+  The `log_visual` setting turns on an off the addition of a filament tracking visualization. Can be nice with log_level of 0 or 1 on a tuned and functioning setup.
   
 ![Bling is always better](doc/visual_filament.png "Visual Filament Location")
   
