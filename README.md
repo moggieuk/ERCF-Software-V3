@@ -6,7 +6,7 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 <ul>
 <li>Support all options for both toolhead sensor based loading/unloading and sensorless filament homing (with no toolhead sensor)
 <li>Supports sync load and unloading steps, including a config with toolhead sensor that can work with FLEX materials!
-  <li>Fully implements <em>“EndlessSpool”</em> with new concept of Tool --> Gate mapping.  This allows empty gates to be identified and tool changes subsequent to runout to use the correct filament spool.  It has the added advantage for being able to map gates to tools in case of slicing to spool loading mismatch.
+  <li>Fully implements *“EndlessSpool”* with new concept of Tool --> Gate mapping.  This allows empty gates to be identified and tool changes subsequent to runout to use the correct filament spool.  It has the added advantage for being able to map gates to tools in case of slicing to spool loading mismatch.
 <li>Measures “spring” after extruder homing for more accurate calibration reference
 <li>Adds servo_up delay making the gear to extruder transition of filament more reliable (maintains pressure)
 <li>Ability to secify empty or disabled tools (gates).
@@ -55,6 +55,7 @@ Note that if a toolhead sensor is configured it will become the default filament
 <i>Obviously the actual distances shown below may be customized</i>
 
     Extruder homing config          Toolhead homing config     Notes
+    ----------------------          ----------------------     -----
     
     1. home_to_extruder=0           toolhead_homing_max=20     This is probably the BEST option and can work with FLEX
                                     toolhead_homing_step=1     Filament can load close to extruder gear, then is pulled
@@ -86,15 +87,38 @@ Note that if a toolhead sensor is configured it will become the default filament
        extruder_homing_step=2                                  accurate encoder
        extruder_homing_current=50
 
-<em>Obviously the actual distances shown above may be customized</em>
-**Advanced options**
-When not using synchronous load move the spring tension in the filament held by servo will be leverage to help feed the filament into the extruder. This is controlled with the `delay_servo_release` setting. It defaults to 2mm and is unlikely that it will need to be altered.
+*Obviously the actual distances shown above may be customized*
+  
+  **Advanced options**
+When not using synchronous load move the spring tension in the filament held by servo will be leverage to help feed the filament into the extruder. This is controlled with the `delay_servo_release` setting. It defaults to 2mm and is unlikely that it will need to be altered. An option to home to the extruder using stallguard `homing_method=1` is avaiable but not recommended: (i) it is not necessary with current reduction, (ii) it is not readily compatible with EASY-BRD and (iii) is currently incompatible with sensorless selector homing which hijacks the gear endstop configuration.
+  
+  **Note about post homing distance**
+Regardless of loading settings above it is important to accurately set `home_to_nozzle` distance.  If you are not homing to the toolhead sensor this will be from the extruder entrance to nozzle.  If you are hoing to toolhead sensor, this will be the (smaller) distance from sensor to nozzle.  For example in my setup of Revo & Clockwork 2, the distance is 72mm or 62mm respectively.
   
 #### Possible unloading options:
 This is much simplier than loading. The toolhead sensor, if installed, will automatically be leveraged as a checkpoint when extracting from the extruder.
 `sync_unload_length` controls the mm of synchronized movement at start of bowden unloading.  This can make unloading more reliable and will act as what Ette refers to as a "hair pulling" step on unload.  This is an optional step, set to 0 to disable.
   
-### Config Loading and Unload sequences explained
+### Tool-to-Gate (TTG) mapping and EndlessSpool application
+When changing a tool with the `Tx` command ERCF would by default select the filament at the gate (spool) of the same number.  The mapping built into this *Angry Hare* driver allows you to modify that.  There are 3 primarly use cases for this feature:
+<ol>
+  <li>You have loaded your filaments differently than you sliced gcode file. No problem, just issue the appropriate remapping commands prior to printing
+  <li>Some of "tools" don't have filament and you want to mark them as empty
+  <li>Most importantly, for EndlessSpool - when a filament runs out on one gate (spool) then next in the sequence is automatically mapped to the original tool.  It will therefore continue to print on subsequent tool changes.  You can also replace the spool and update the map to indicate avaiablity mid print
+</ol>
+
+*Note that the initial availability of filament at each gate can also be specfied in the `ercf_parameters.cfg` file by updating the `gate_status` list. E.g.
+>gate_status = 1, 1, 0, 0, 1, 0, 0, 0, 1
+
+  on a 9-gate ERCF would mark gates 2, 3, 5, 6 & 7 as empty
+ 
+To view the current
+  
+### Visualization of filamanet position
+![Bling is always better](visual_filament.png "San Juan Mountains")
+  
+### Filament bypass
+TODO
 
 ## Full set of ERCF Commands:
   | Commmand | Description | Parameters |
