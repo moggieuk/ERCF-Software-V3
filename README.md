@@ -163,8 +163,61 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   
 ## Appendix Full set of ERCF Commands:
   *Note that some of these commands have been enhanced from the original*
-  
+
+### Logging and Stats
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
-  | TODO | TODO | TODO |
+  | ERCF_RESET_STATS | Reset the ERCF statistics | None |
+  | ERCF_DUMP_STATS | Dump the ERCF statistics | None |
+  | ERCF_SET_LOG_LEVEL | Sets the logging level and turning on/off of visual loading/unloading sequence | LEVEL=\[1..4\] <br>VISUAL=\[0 \|1 \] Whether to also show visual representation |
+  | ERCF_STATUS | Report on ERCF state, cababilities and Tool-to-Gate map | DETAIL=\[0\|\1] Displays TTG map and gate status (automatic if EndlessSpool is  configured) |
+  | ERCF_DISPLAY_ENCODER_POS | Displays the current value of the ERCF encoder | None |
   
+### Calibration
+  | Commmand | Description | Parameters |
+  | -------- | ----------- | ---------- |
+  | ERCF_CALIBRATE | TODO | None |
+  | ERCF_CALIBRATE_SINGLE | TOOL', 0, minval=0, maxval=len(self.selector_offsets)-1) <br>REPEATS=\[1..10\] How many times to repeat the calibration for reference tool T0 (ercf_calib_ref) |
+  | ERCF_CALIB_SELECTOR | TOOL', 0, minval=0, maxval=len(self.selector_offsets)-1) |
+  | ERCF_CALIBRATE_ENCODER | DIST=.. Distance to measure over. Longer is better, defaults to calibration default length <br>RANGE=.. Number of times to average over <br>SPEED=.. Speed of gear motor move. Defaults to long move speed <br>ACCEL=.. Accel of gear motor move. Defaults to motor setting in ercf_hardware.cfg |
+  
+### Servo and motor control
+  | Commmand | Description | Parameters |
+  | -------- | ----------- | ---------- |
+  | ERCF_SERVO_DOWN | TODO | None |
+  | ERCF_SERVO_UP | TODO | None |
+  | ERCF_MOTORS_OFF | TODO | None |
+  | ERCF_BUZZ_GEAR_MOTOR | TODO | None |
+  
+### Core ERCF functionality
+  | Commmand | Description | Parameters |
+  | -------- | ----------- | ---------- |
+  | ERCF_UNLOCK | TODO | None |
+  | ERCF_HOME | TOOL', 0, minval=0, maxval=len(self.selector_offsets)-1) |
+  | ERCF_SELECT_TOOL | TOOL', 0, minval=0, maxval=len(self.selector_offsets)-1) |
+  | ERCF_SELECT_BYPASS | Unload and select the bypass selector position if configured | None |
+  | ERCF_LOAD_BYPASS | Does the extruder loading part of the load sequence - designed for bypass filament loading | None |
+  | ERCF_CHANGE_TOOL | TODO | None |
+  | ERCF_EJECT | TODO | None |
+  | ERCF_PAUSE | TODO | None |
+  
+### User Testing
+  | Commmand | Description | Parameters |
+  | -------- | ----------- | ---------- |
+  | ERCF_TEST_GRIP |  TODO | None |
+  | ERCF_TEST_SERVO | TODO | None |
+  | ERCF_TEST_MOVE_GEAR | LENGTH', 200.) SPEED', 50.) ACCEL', 200.) |
+  | ERCF_TEST_LOAD_SEQUENCE | LOOP=\[x\] Number of times to loop while testing <br>RANDOM=\[0 \|1 \] Whether to randomize tool selection <br>FULL=\[0 \|1 \] Whether to perform full load to nozzle or short load just past encoder |
+  | ERCF_TEST_LOAD | TODO | None |
+  | ERCF_LOAD | LENGTH', 100.) |
+  | ERCF_TEST_UNLOAD | LENGTH', 100.) UNKNOWN=\[0 \|1 \] |
+  | ERCF_TEST_HOME_TO_EXTRUDER | For calibrating extruder homing - TMC current setting, etc. | RETURN=\[0\|1\] Whether to return the filament to the approximate starting position after homing - good for repeated testing |
+  | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime | Many. Best to run ERCF_TEST_CONFIG without options to report all parameters than can be specified |
+  
+### Tool to Gate map  and Endless spool
+  | Commmand | Description | Parameters |
+  | -------- | ----------- | ---------- |
+  | ERCF_ENCODER_RUNOUT | Filament runout handler that will also implement EndlessSpool if enabled | None |
+  | ERCF_DISPLAY_TTG_MAP | Displays the current Tool -> Gate mapping (can be used all the time but generally designed for EndlessSpool  | DETAIL=\[0 \| 1\] Whether to also show the gate availability |
+  | ERCF_REMAP_TTG | Reconfiguration of the Tool - to - Gate (TTG) map.  Can also set gates as empty! | TOOL=\[0..n\] <br>GATE=\[0..n\] Maps specified tool to this gate (multiple tools can point to same gate) <br>AVAILABLE=\[0\|1\]  Marks gate as available or empty |
+  | ERCF_RESET_TTG_MAP | Reset the Tool-to-Gate map back to default | None |
