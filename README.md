@@ -205,7 +205,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_SELECT_BYPASS | Unload and select the bypass selector position if configured | None |
   | ERCF_LOAD_BYPASS | Does the extruder loading part of the load sequence - designed for bypass filament loading | None |
   | ERCF_CHANGE_TOOL | Perform a tool swap (generally called from 'Tx' macros) | TOOL=\[0..n\] |
-  | ERCF_CHANGE_TOOL_STANDALONE | Deprecated, 'ERCF_TOOL_CHANGE' can handle. Was: Perform a tool swap outside of print | TOOL=\[0..n\] |
+  | (ERCF_CHANGE_TOOL_STANDALONE) | Deprecated, 'ERCF_TOOL_CHANGE' can handle. Was: Perform a tool swap outside of print | TOOL=\[0..n\] |
   | ERCF_EJECT | Eject filament and park it in the ERCF | None |
   | ERCF_PAUSE | Pause the current print and lock the ERCF operations | None |
   <br>
@@ -218,7 +218,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_TEST_MOVE_GEAR | Move the ERCF gear | LENGTH=..\[200\] Length of gear move in mm <br>SPEED=..\[50\] Stepper move speed50 <br>ACCEL=..\[200\] Gear stepper accel |
   | ERCF_TEST_LOAD_SEQUENCE | Soak testing of load sequence. Great for testing reliability and repeatability| LOOP=..\[10\] Number of times to loop while testing <br>RANDOM=\[0 \|1 \] Whether to randomize tool selection <br>FULL=\[0 \|1 \] Whether to perform full load to nozzle or short load just past encoder |
   | ERCF_TEST_LOAD | Test loading filament | LENGTH=..[100] Test load the specified length of filament into selected tool |
-  | ERCF_LOAD | Identical to ERCF_TEST_LOAD | |
+  | (ERCF_LOAD) | Identical to ERCF_TEST_LOAD | |
   | ERCF_TEST_UNLOAD | Move the ERCF gear | LENGTH=..[100] Lenght of filament to be unloaded <br>UNKNOWN=\[0\|1\] Whether the state of the extruder is known. Generally 0 for standalone use, 1 simulates call as if it was from slicer when tip has already been formed |
   | ERCF_TEST_HOME_TO_EXTRUDER | For calibrating extruder homing - TMC current setting, etc. | RETURN=\[0\|1\] Whether to return the filament to the approximate starting position after homing - good for repeated testing |
   | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime | Many. Best to run ERCF_TEST_CONFIG without options to report all parameters than can be specified |
