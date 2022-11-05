@@ -168,7 +168,6 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   
   *Note that some of these commands have been enhanced from the original*
 
-
   ## Logging and Stats
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
@@ -177,7 +176,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_SET_LOG_LEVEL | Sets the logging level and turning on/off of visual loading/unloading sequence | LEVEL=\[1..4\] <br>VISUAL=\[0\|1\] Whether to also show visual representation |
   | ERCF_STATUS | Report on ERCF state, cababilities and Tool-to-Gate map | DETAIL=\[0\|\1] Displays TTG map and gate status (automatic if EndlessSpool is  configured) |
   | ERCF_DISPLAY_ENCODER_POS | Displays the current value of the ERCF encoder | None |
-  
+  <br>
 
   ## Calibration
   | Commmand | Description | Parameters |
@@ -186,7 +185,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_CALIBRATE_SINGLE | Calibration of a single ERCF tool | TOOL=\[0..n\] <br>REPEATS=\[1..10\] How many times to repeat the calibration for reference tool T0 (ercf_calib_ref) |
   | ERCF_CALIB_SELECTOR | Calibration of the selector for the defined tool | TOOL=\[0..n\] |
   | ERCF_CALIBRATE_ENCODER | Calibration routine for ERCF encoder | DIST=.. Distance to measure over. Longer is better, defaults to calibration default length <br>RANGE=.. Number of times to average over <br>SPEED=.. Speed of gear motor move. Defaults to long move speed <br>ACCEL=.. Accel of gear motor move. Defaults to motor setting in ercf_hardware.cfg |
-  
+  <br>
 
   ## Servo and motor control
   | Commmand | Description | Parameters |
@@ -195,7 +194,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_SERVO_UP | Disengage the ERCF gear | None |
   | ERCF_MOTORS_OFF | Turn off both ERCF motors | None |
   | ERCF_BUZZ_GEAR_MOTOR | Buzz the ERCF gear motor and report on whether filament was detected | None |
-  
+  <br>
 
   ## Core ERCF functionality
   | Commmand | Description | Parameters |
@@ -209,7 +208,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_CHANGE_TOOL_STANDALONE | Deprecated, 'ERCF_TOOL_CHANGE' can handle. Was: Perform a tool swap outside of print | TOOL=\[0..n\] |
   | ERCF_EJECT | Eject filament and park it in the ERCF | None |
   | ERCF_PAUSE | Pause the current print and lock the ERCF operations | None |
-  
+  <br>
 
   ## User Testing
   | Commmand | Description | Parameters |
@@ -223,7 +222,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_TEST_UNLOAD | Move the ERCF gear | LENGTH=..[100] Lenght of filament to be unloaded <br>UNKNOWN=\[0\|1\] Whether the state of the extruder is known. Generally 0 for standalone use, 1 simulates call as if it was from slicer when tip has already been formed |
   | ERCF_TEST_HOME_TO_EXTRUDER | For calibrating extruder homing - TMC current setting, etc. | RETURN=\[0\|1\] Whether to return the filament to the approximate starting position after homing - good for repeated testing |
   | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime | Many. Best to run ERCF_TEST_CONFIG without options to report all parameters than can be specified |
-  
+  <br>
 
   ## Tool to Gate map  and Endless spool
   | Commmand | Description | Parameters |
@@ -232,3 +231,4 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_DISPLAY_TTG_MAP | Displays the current Tool -> Gate mapping (can be used all the time but generally designed for EndlessSpool  | DETAIL=\[0\|1\] Whether to also show the gate availability |
   | ERCF_REMAP_TTG | Reconfiguration of the Tool - to - Gate (TTG) map.  Can also set gates as empty! | TOOL=\[0..n\] <br>GATE=\[0..n\] Maps specified tool to this gate (multiple tools can point to same gate) <br>AVAILABLE=\[0\|1\]  Marks gate as available or empty |
   | ERCF_RESET_TTG_MAP | Reset the Tool-to-Gate map back to default | None |
+  
