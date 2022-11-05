@@ -35,6 +35,7 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 </ul>
  
 <br>
+
 ## Summary of new commands:
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
@@ -49,6 +50,7 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
   Note that some existing comments have been enhanced.  See the [complete set of commands](#ercf-command-reference) here.
   
 <br>
+
 ## New features in detail:
 ### Config Loading and Unload sequences explained
 Note that if a toolhead sensor is configured it will become the default filament homing method and home to extruder an optional but unecessary step. Also note the home to extruder step will always be performed during calibration of tool 0 (to accurately set `ercf_calib_ref`) regardless of the `home_to_extruder` setting. For accurate homing and to avoid grinding, tune the gear stepper current reduction `extruder_homing_current` as a % of the default run current.
@@ -101,6 +103,7 @@ This is much simplier than loading. The toolhead sensor, if installed, will auto
 `sync_unload_length` controls the mm of synchronized movement at start of bowden unloading.  This can make unloading more reliable and will act as what Ette refers to as a "hair pulling" step on unload.  This is an optional step, set to 0 to disable.
   
 <br>
+
 ### Tool-to-Gate (TTG) mapping and EndlessSpool application
 When changing a tool with the `Tx` command ERCF would by default select the filament at the gate (spool) of the same number.  The mapping built into this *Angry Hare* driver allows you to modify that.  There are 3 primarly use cases for this feature:
 <ol>
@@ -124,6 +127,7 @@ To view the current mapping you can use either `ERCF_STATUS DETAIL=1` or `ERCF_D
 ![Bling is always better](doc/visual_filament.png "Visual Filament Location")
   
 <br>
+
 ### Filament bypass
 If you have installed the optional filament bypass block your can configure its selector position by setting `bypass_selector` in `ercf_parameters.cfg`. Once this is done you can use the following command to unload any ERCF controlled filament and select the bypass:
   > ERCF_SELECT_BYPASS
@@ -142,6 +146,7 @@ If you have installed the optional filament bypass block your can configure its 
   Will update the distance from homing postion to nozzle.  The change is designed for testing was will not be persistent.  Once you find your tuned settings be sure to update `ercf_parameters.cfg`
   
 <br>
+
 ## Testing:
   This software is largely rewritten as well as being extended and so, despite best efforts, has probably introducted some bugs that may not exist in the official driver.  It also lacks extensive testing on different configurations that will stress the corner cases.  I have been using successfully on Voron 2.4 / ERCF with EASY-BRD.  I use a self-modified CW2 extruder with foolproof microswitch toolhead sensor and sensorless selector configuration. My day-to-day configuration is to load the filament to the extruder in a single movement, then home to toolhead sensor with synchronous gear/extruder movement (option #1 explained above).  I use the sensorless selector and have runout and EndlessSpool enabled.
   
@@ -150,6 +155,7 @@ If you have installed the optional filament bypass block your can configure its 
 > <br>EASY-BRD firmware version: v0.10.0-220
 
 <br>
+
 ### My Setup:
 <img src="doc/My Voron 2.4 and ERCF.jpg" width="400" alt="My Setup">
 
