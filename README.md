@@ -137,6 +137,8 @@ TODO
   
   
 ## Full set of ERCF Commands:
+  *Note that some of these commands have been enhanced from the original*
+  
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
   | TODO | TODO | TODO |
