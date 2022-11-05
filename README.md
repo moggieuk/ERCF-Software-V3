@@ -147,3 +147,5 @@ If you have installed the optional filament bypass block your can configure its 
   | -------- | ----------- | ---------- |
   | TODO | TODO | TODO |
   
+## My Setup:
+<img src="doc/My Voron 2.4 and ERCF.jpg" width="500" alt="My Setup">
