@@ -1,4 +1,4 @@
-This readme is work in progress
+*This readme is work in progress...*
 # ERCF-Software-V3 "Angry Hare"
 I love my ERCF and building it was the most fun I've had in many years of the 3D-printing hobby. Whilst the design is brilliant I found a few problems with the software and wanted to add some features and improve user friendliness.  This became especially true after the separation of functionality with the introduction of the "sensorless" branch. I liked the new python implementation as a Klipper plug-in but wanted to leverage my (very reliable) toolhead sensor.  So I rewrote the software behind ERCF - it still has the structure and much of the code of the original but significantly it has many new features, integrates the toolhead sensor and sensorless options.  I'm calling it the **"Angry Hare"** release or v3.
 
@@ -26,7 +26,7 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 <li>Experimental logic to use stallguard filament homing (Caveat: not easy to setup using EASY-BRD and not compatible with sensorless selector homing option)
 </ul>
   
-## Other benefites of the code cleanup / rewrite:
+## Other benefits of the code cleanup / rewrite:
 <ul>
 <li>Vastly increased error detection/checking.
 <l1>Consistent handling of errors. E.g. use exceptions to avoid multiple calls to _pause()
@@ -37,13 +37,13 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 ## Summary of new commands:
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
-  | ERCF_STATUS | Report on ERCF state, cababilities and Tool-to-Gate map | DETAIL=\[0\|\1] Forces TTG map display even if EndlessSpool is not configured |
+  | ERCF_STATUS | Report on ERCF state, cababilities and Tool-to-Gate map | DETAIL=\[0\|\1] Displays TTG map and gate status (automatic if EndlessSpool is  configured) |
   | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime | Many. Best to run ERCF_TEST_CONFIG without options to report all parameters than can be specified |
-  | ERCF_DISPLAY_TTG_MAP | Displays the current Tool -> Gate mapping (can be used all the time but generally designed for EndlessSpool  | DETAIL=\[0 \| 1\] Whether to also show the tool --> gate mapping |
+  | ERCF_DISPLAY_TTG_MAP | Displays the current Tool -> Gate mapping (can be used all the time but generally designed for EndlessSpool  | DETAIL=\[0 \| 1\] Whether to also show the gate availability |
   | ERCF_REMAP_TTG | Reconfiguration of the Tool - to - Gate (TTG) map.  Can also set gates as empty! | TOOL=\[0..n\] <br>GATE=\[0..n\] Maps specified tool to this gate (multiple tools can point to same gate) <br>AVAILABLE=\[0\|1\]  Marks gate as available or empty |
   | ERCF_SELECT_BYPASS | Unload and select the bypass selector position if configured | None |
   | ERCF_LOAD_BYPASS | Does the extruder loading part of the load sequence - designed for bypass filament loading | None |
-  | ERCF_TEST_HOME_TO_EXTRUDER | For calibrating extruder homing - TMC current setting, etc. | Return=\[0\|1\] Whether to return the filament to the approximate starting position after homing - good for repeated testing |
+  | ERCF_TEST_HOME_TO_EXTRUDER | For calibrating extruder homing - TMC current setting, etc. | RETURN=\[0\|1\] Whether to return the filament to the approximate starting position after homing - good for repeated testing |
   
   Note that some existing comments have been enhanced.  See the [complete set of commands](#command_summary) here.
   
@@ -112,17 +112,34 @@ When changing a tool with the `Tx` command ERCF would by default select the fila
 
   on a 9-gate ERCF would mark gates 2, 3, 5, 6 & 7 as empty
  
-To view the current
+To view the current mapping you can use either `ERCF_STATUS DETAIL=1` or `ERCF_DISPLAY_TTG_MAP`
   
-### Visualization of filamanet position
-![Bling is always better](visual_filament.png "San Juan Mountains")
+![ERCF_STATUS](ercf_status.png "ERCF_STATUS")
+  
+### Visualization of filament position
+  The `log_visual` setting turns on an off the addition of a filament tracking visualization. Can be nice with log_level of 0 on when functioning setup.
+  
+![Bling is always better](visual_filament.png "Visual Filament Location")
   
 ### Filament bypass
 TODO
 
+### Adjusting configuration at runtime
+  All the essential configuration and tuning parameters can be modified at runtime without restarting Klipper. Use the `ERCF_TEST_CONFIG` command to do this
+  
+  <img src="doc/ercf_test_config.png" width="500" alt="ERCF_TEST_CONFIG">
+  
+  Any of the displayed config settings can be modifed.  E.g.
+  > ERCF_TEST_CONFIG home_position_to_nozzle=45
+  
+  Will update the distance from homing postion to nozzle.  The change is designed for testing was will not be persistent.  Once you find your tuned settings be sure to update `ercf_parameters.cfg`
+  
+  
+  
 ## Full set of ERCF Commands:
+  *Note that some of these commands have been enhanced from the original*
+  
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
   | TODO | TODO | TODO |
   
-![The San Juan Mountains are beautiful!](/assets/images/san-juan-mountains.jpg "San Juan Mountains")
