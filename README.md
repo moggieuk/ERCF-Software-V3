@@ -45,7 +45,7 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
   | ERCF_LOAD_BYPASS | Does the extruder loading part of the load sequence - designed for bypass filament loading | None |
   | ERCF_TEST_HOME_TO_EXTRUDER | For calibrating extruder homing - TMC current setting, etc. | RETURN=\[0\|1\] Whether to return the filament to the approximate starting position after homing - good for repeated testing |
   
-  Note that some existing comments have been enhanced.  See the [complete set of commands](#reference-ercf-commands) here.
+  Note that some existing comments have been enhanced.  See the [complete set of commands](#ercf-command-reference) here.
   
 ## New features in detail:
 ### Config Loading and Unload sequences explained
@@ -160,8 +160,12 @@ If you have installed the optional filament bypass block your can configure its 
 </ul>
 
 Good luck and hopefully a little less *enraged* printing.  You can find me on discord as *moggieuk#6538*
+
   
-#Reference ERCF Commands
+  ---
+  
+# ERCF Command Reference
+  
   *Note that some of these commands have been enhanced from the original*
 
 
