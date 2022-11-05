@@ -1,11 +1,12 @@
-# ERCF-Software-V3
-I love my ERCF and building it was the most fun I've had in many years of the 3D-printing hobby. Whilst the design is brilliant I found a few problems with the software and wanted to add some features and improve user friendliness.  This became especially true after the separation of functionality with the introduction of the "sensorless" branch. I liked the new python implementation as a Klipper plug-in but wanted to leverage my (very reliable) toolhead sensor.  So I rewrote the software behind ERCF - it still has the structure and much of the code of the original but significantly it has many new features, integrates the toolhead sensor and sensorless options.  I'm calling it the **"Angry Rabbit"** release or v3.
+This readme is work in progress
+# ERCF-Software-V3 "Angry Hare"
+I love my ERCF and building it was the most fun I've had in many years of the 3D-printing hobby. Whilst the design is brilliant I found a few problems with the software and wanted to add some features and improve user friendliness.  This became especially true after the separation of functionality with the introduction of the "sensorless" branch. I liked the new python implementation as a Klipper plug-in but wanted to leverage my (very reliable) toolhead sensor.  So I rewrote the software behind ERCF - it still has the structure and much of the code of the original but significantly it has many new features, integrates the toolhead sensor and sensorless options.  I'm calling it the **"Angry Hare"** release or v3.
 
 ## Major new features:
 <ul>
 <li>Support all options for both toolhead sensor based loading/unloading and sensorless filament homing (with no toolhead sensor)
 <li>Supports sync load and unloading steps, including a config with toolhead sensor that can work with FLEX materials!
-<li>Fully implements _“EndlessSpool”_ with new concept of Tool -> Gate mapping.  This allows empty gates to be identified and tool changes subsequent to runout to use the correct filament spool.  It has the added advantage for being able to map gates to tools in case of slicing to spool loading mismatch.
+  <li>Fully implements <em>“EndlessSpool”</em> with new concept of Tool --> Gate mapping.  This allows empty gates to be identified and tool changes subsequent to runout to use the correct filament spool.  It has the added advantage for being able to map gates to tools in case of slicing to spool loading mismatch.
 <li>Measures “spring” after extruder homing for more accurate calibration reference
 <li>Adds servo_up delay making the gear to extruder transition of filament more reliable (maintains pressure)
 <li>Ability to secify empty or disabled tools (gates).
@@ -27,22 +28,21 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
   
 ## Other benefites of the code cleanup / rewrite:
 <ul>
-<li>Vastly increased error detection/checking
-<l1>Consistent error handling. E.g. use exceptions to avoid multiple calls to _pause()
+<li>Vastly increased error detection/checking.
+<l1>Consistent handling of errors. E.g. use exceptions to avoid multiple calls to _pause()
 <li>Wrapping of all stepper movements to facilitate “DEVELOPER” logging level and easier debugging
 <li>Renewed load and unload sequences (to support all build configurations) and effectively combine the sensor and sensorless logic
-<li>Vastly increased error detection/checking
 </ul>
  
 ## Summary of new commands:
-  | Commmand | Description |
-  | --- | ----------- |
-  | ERCF_STATUS | Report on state and essential configuration options (see some examples below) |
-  | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime |
-  | ERCF_DISPLAY_TTG_MAP | Displays the current Tool -> Gate mapping (can be used all the time but generally designed for EndlessSpool  |
-  | ERCF_REMAP_TTG | Reconfiguration of the Tool - to - Gate (TTG) map.  Can also set gates as empty! |
-  | ERCF_SELECT_BYPASS | Unload and select the bypass selector position if configured |
-  | ERCF_LOAD_BYPASS | Does the extruder loading part of the load sequence - designed for bypass filament loading |
-  | ERCF_TEST_HOME_TO_EXTRUDER | For calibrating extruder homing - TMC current setting, etc. |
+  | Commmand | Description | Parameters |
+  | :--- | ----------- | ---------- |
+  | ERCF_STATUS | Report on state and essential configuration options (see some examples below) | TODO |
+  | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime | Many. Best to run ERCF_TEST_CONFIG without options to report all parameters than can be specified |
+  | ERCF_DISPLAY_TTG_MAP | Displays the current Tool -> Gate mapping (can be used all the time but generally designed for EndlessSpool  | DETAIL=\[0 \| 1\] Whether to also show the tool --> gate mapping |
+  | ERCF_REMAP_TTG | Reconfiguration of the Tool - to - Gate (TTG) map.  Can also set gates as empty! | TOOL=\[0..n\] <br>GATE=\[0..n\] Maps specified tool to this gate (multiple tools can point to same gate) <br>AVAILABLE=\[0\|1\]  Marks gate as available or empty |
+  | ERCF_SELECT_BYPASS | Unload and select the bypass selector position if configured | None |
+  | ERCF_LOAD_BYPASS | Does the extruder loading part of the load sequence - designed for bypass filament loading | None |
+  | ERCF_TEST_HOME_TO_EXTRUDER | For calibrating extruder homing - TMC current setting, etc. | Return=\[0\|1\] Whether to return the filament to the approximate starting position after homing - good for repeated testing |
   
 ![The San Juan Mountains are beautiful!](/assets/images/san-juan-mountains.jpg "San Juan Mountains")
