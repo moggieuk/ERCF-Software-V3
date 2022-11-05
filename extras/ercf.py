@@ -107,7 +107,7 @@ class Ercf:
         self.parking_distance = config.getfloat('parking_distance', 23., above=15., below=30.)
         self.encoder_move_step_size = config.getfloat('encoder_move_step_size', 15., above=5., below=25.)
         self.selector_offsets = config.getfloatlist('colorselector')
-        self.gate_status = config.getintlist('gate_status', {})
+        self.gate_status = list(config.getintlist('gate_status', []))
         self.bypass_offset = config.getfloat('bypass_selector', 0)
         self.timeout_pause = config.getint('timeout_pause', 72000)
         self.disable_heater = config.getint('disable_heater', 600)
@@ -490,7 +490,7 @@ class Ercf:
         detail = gcmd.get_int('DETAIL', 0, minval=0, maxval=1)
         msg = "ERCF with %d gates" % (len(self.selector_offsets))
         msg += " is %s" % ("PAUSED/LOCKED" if self.is_paused else "OPERATIONAL")
-        msg += " with the servo in a %s position" % ("UP" if self.servo_state == self.SERVO_UP_STATE else "DOWN")
+        msg += " with the servo in a %s position" % ("UP" if self.servo_state == self.SERVO_UP_STATE else "DOWN" if self.servo_state == self.SERVO_DOWN_STATE else "unknown")
         msg += ", Encoder reads %.2fmm" % self._counter.get_distance()
         msg += "\nTool %s is selected " % self._selected_tool_string()
         msg += " on gate %s" % self._selected_gate_string()
@@ -1408,10 +1408,12 @@ class Ercf:
         if not skip_sync_move and self.sync_unload_length > 0:
             self._log_debug("Moving the gear and extruder motors in sync for %.1fmm" % -self.sync_unload_length) 
             delta = self._trace_filament_move("Sync unload", -self.sync_unload_length, speed=10, motor="both")
-# PAUL TODO
+# PAUL TODO - shouldn't be necessary if/when servo behaves..
 #            if delta > self.sync_unload_length / 2:
 #                self._log_info("Error unloading filament - not enough detected at encoder. Retrying...")
-#                self._log_always("********* PAUL BOGUS SERVO ******* delta=%.1fmm" % delta)
+#                self._log_always("*******************************************************")
+#                self._log_always("*****************  BOGUS SERVO ************* delta=%.1fmm" % delta)
+#                self._log_always("*******************************************************")
 #                self._servo_up()
 #                self._servo_down()
 #                delta = self._trace_filament_move("Retrying sync unload move after servo reset", -delta)
@@ -1980,9 +1982,9 @@ class Ercf:
                     msg += " [ACTIVE supporting tool T%d]" % self.tool_selected
         return msg
 
-    def _remap_tool(self, tool, gate, loaded):
+    def _remap_tool(self, tool, gate, available):
         self.tool_to_gate_map[tool] = gate
-        self.gate_status[gate] = loaded
+        self.gate_status[gate] = available
 
 ### GOCDE COMMMANDS FOR RUNOUT LOGIC ##################################
 
@@ -2003,9 +2005,9 @@ class Ercf:
     def cmd_ERCF_REMAP_TTG(self, gcmd):
         tool = gcmd.get_int('TOOL', minval=0, maxval=len(self.selector_offsets)-1)
         gate = gcmd.get_int('GATE', minval=0, maxval=len(self.selector_offsets)-1)
-        loaded = gcmd.get_int('AVAILABLE', 1, minval=0, maxval=1)
-        self._remap_tool(tool, gate, loaded)
-        self._log_info(self._tool_to_gate_map_to_human_string())
+        available = gcmd.get_int('AVAILABLE', 1, minval=0, maxval=1)
+        self._remap_tool(tool, gate, available)
+        self._log_info(self._tool_to_gate_map_to_human_string(True))
 
     cmd_ERCF_RESET_TTG_MAP_help = "Reset the tool to gate map"
     def cmd_ERCF_RESET_TTG_MAP(self, gcmd):
