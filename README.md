@@ -124,6 +124,11 @@ To view the current mapping you can use either `ERCF_STATUS DETAIL=1` or `ERCF_D
 ### Filament bypass
 TODO
 
+### Adjusting configuration at runtime
+  All the essential configuration and tuning parameters can be modified at runtime without restarting Klipper. Use the `ERCF_TEST_CONFIG` command to do this.
+  <img src="doc/ercf_test_config.png" width="500" alt="ERCF_TEST_CONFIG">
+  Any of the displayed config settings can be modifed.  E.g.
+  > ERCF_TEST_CONFIG 
 ## Full set of ERCF Commands:
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
