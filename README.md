@@ -170,7 +170,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | -------- | ----------- | ---------- |
   | ERCF_RESET_STATS | Reset the ERCF statistics | None |
   | ERCF_DUMP_STATS | Dump the ERCF statistics | None |
-  | ERCF_SET_LOG_LEVEL | Sets the logging level and turning on/off of visual loading/unloading sequence | LEVEL=\[1..4\] <br>VISUAL=\[0 \|1 \] Whether to also show visual representation |
+  | ERCF_SET_LOG_LEVEL | Sets the logging level and turning on/off of visual loading/unloading sequence | LEVEL=\[1..4\] <br>VISUAL=\[0\|1\] Whether to also show visual representation |
   | ERCF_STATUS | Report on ERCF state, cababilities and Tool-to-Gate map | DETAIL=\[0\|\1] Displays TTG map and gate status (automatic if EndlessSpool is  configured) |
   | ERCF_DISPLAY_ENCODER_POS | Displays the current value of the ERCF encoder | None |
   
@@ -197,8 +197,8 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
   | ERCF_UNLOCK | Unlock ERCF operations | None |
-  | ERCF_HOME | Home the ERCF selector and optionally selects gate associated with the specified tool | TOOL=\[0..n\]
-  | ERCF_SELECT_TOOL | Selects the gate associated with the specified tool | TOOL=\[0..n\] |
+  | ERCF_HOME | Home the ERCF selector and optionally selects gate associated with the specified tool | TOOL=\[0..n\] |
+  | ERCF_SELECT_TOOL | Selects the gate associated with the specified tool | TOOL=\[0..n\] The tool to be selected (technically the gate associated with this tool will be selected) |
   | ERCF_SELECT_BYPASS | Unload and select the bypass selector position if configured | None |
   | ERCF_LOAD_BYPASS | Does the extruder loading part of the load sequence - designed for bypass filament loading | None |
   | ERCF_CHANGE_TOOL | Perform a tool swap (generally called from 'Tx' macros) | TOOL=\[0..n\] |
@@ -212,11 +212,11 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | -------- | ----------- | ---------- |
   | ERCF_TEST_GRIP | Test the ERCF grip of the currently selected tool | None |
   | ERCF_TEST_SERVO | Test the servo angle | VALUE=.. Angle value sent to servo |
-  | ERCF_TEST_MOVE_GEAR | LENGTH=..\[200\] Length of gear move in mm <br>SPEED=..\[50\] Stepper move speed50 <br>ACCEL=..\[200\] Gear stepper accel |
-  | ERCF_TEST_LOAD_SEQUENCE | Soak testing of load sequence. Great for testing reliability and repeatability| LOOP=\[x\] Number of times to loop while testing <br>RANDOM=\[0 \|1 \] Whether to randomize tool selection <br>FULL=\[0 \|1 \] Whether to perform full load to nozzle or short load just past encoder |
+  | ERCF_TEST_MOVE_GEAR | Move the ERCF gear | LENGTH=..\[200\] Length of gear move in mm <br>SPEED=..\[50\] Stepper move speed50 <br>ACCEL=..\[200\] Gear stepper accel |
+  | ERCF_TEST_LOAD_SEQUENCE | Soak testing of load sequence. Great for testing reliability and repeatability| LOOP=..\[10\] Number of times to loop while testing <br>RANDOM=\[0 \|1 \] Whether to randomize tool selection <br>FULL=\[0 \|1 \] Whether to perform full load to nozzle or short load just past encoder |
   | ERCF_TEST_LOAD | Test loading filament | LENGTH=..[100] Test load the specified length of filament into selected tool |
   | ERCF_LOAD | Identical to ERCF_TEST_LOAD | |
-  | ERCF_TEST_UNLOAD | LENGTH=..[100] Lenght of filament to be unloaded <br>UNKNOWN=\[0 \|1 \] Whether the state of the extruder is known. Generally 0 for standalone use, 1 simulates call as if it was from slicer when tip has already been formed |
+  | ERCF_TEST_UNLOAD | Move the ERCF gear | LENGTH=..[100] Lenght of filament to be unloaded <br>UNKNOWN=\[0\|1\] Whether the state of the extruder is known. Generally 0 for standalone use, 1 simulates call as if it was from slicer when tip has already been formed |
   | ERCF_TEST_HOME_TO_EXTRUDER | For calibrating extruder homing - TMC current setting, etc. | RETURN=\[0\|1\] Whether to return the filament to the approximate starting position after homing - good for repeated testing |
   | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime | Many. Best to run ERCF_TEST_CONFIG without options to report all parameters than can be specified |
   
@@ -225,6 +225,6 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
   | ERCF_ENCODER_RUNOUT | Filament runout handler that will also implement EndlessSpool if enabled | None |
-  | ERCF_DISPLAY_TTG_MAP | Displays the current Tool -> Gate mapping (can be used all the time but generally designed for EndlessSpool  | DETAIL=\[0 \| 1\] Whether to also show the gate availability |
+  | ERCF_DISPLAY_TTG_MAP | Displays the current Tool -> Gate mapping (can be used all the time but generally designed for EndlessSpool  | DETAIL=\[0\|1\] Whether to also show the gate availability |
   | ERCF_REMAP_TTG | Reconfiguration of the Tool - to - Gate (TTG) map.  Can also set gates as empty! | TOOL=\[0..n\] <br>GATE=\[0..n\] Maps specified tool to this gate (multiple tools can point to same gate) <br>AVAILABLE=\[0\|1\]  Marks gate as available or empty |
   | ERCF_RESET_TTG_MAP | Reset the Tool-to-Gate map back to default | None |
