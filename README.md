@@ -26,7 +26,7 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 <li>Experimental logic to use stallguard filament homing (Caveat: not easy to setup using EASY-BRD and not compatible with sensorless selector homing option)
 </ul>
   
-## Other benefites of the code cleanup / rewrite:
+## Other benefits of the code cleanup / rewrite:
 <ul>
 <li>Vastly increased error detection/checking.
 <l1>Consistent handling of errors. E.g. use exceptions to avoid multiple calls to _pause()
@@ -131,6 +131,10 @@ TODO
   
   Any of the displayed config settings can be modifed.  E.g.
   > ERCF_TEST_CONFIG home_position_to_nozzle=45
+  
+  Will update the distance from homing postion to nozzle.  The change is designed for testing was will not be persistent.  Once you find your tuned settings be sure to update `ercf_parameters.cfg`
+  
+  
   
 ## Full set of ERCF Commands:
   | Commmand | Description | Parameters |
