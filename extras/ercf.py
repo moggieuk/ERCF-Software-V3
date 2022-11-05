@@ -108,7 +108,7 @@ class Ercf:
         self.encoder_move_step_size = config.getfloat('encoder_move_step_size', 15., above=5., below=25.)
         self.selector_offsets = config.getfloatlist('colorselector')
         self.gate_status = config.getintlist('gate_status', {})
-        self.bypass_offset = config.getfloat('bypassselector', 0)
+        self.bypass_offset = config.getfloat('bypass_selector', 0)
         self.timeout_pause = config.getint('timeout_pause', 72000)
         self.disable_heater = config.getint('disable_heater', 600)
         self.min_temp_extruder = config.getfloat('min_temp_extruder', 180.)
@@ -289,16 +289,6 @@ class Ercf:
                     self.cmd_ERCF_RESET_TTG_MAP,
                     desc = self.cmd_ERCF_RESET_TTG_MAP_help)
 
-        self.gcode.register_command('PAUL', self.cmd_PAUL)
-
-    def cmd_PAUL(self, gcmd):
-        length = gcmd.get_int('LENGTH', 10)
-        speed = gcmd.get_int('SPEED', 10)
-        self._servo_down()
-        self._log_always("Moving the gear and extruder motors in sync for %.1fmm" % length) 
-        delta = self._trace_filament_move("Sync unload", length, speed=10, motor="both")
-        if delta > 1.0:
-            self._log_always("***************************** WTF!!! ************************************")
 
     def handle_connect(self):
         self.toolhead = self.printer.lookup_object('toolhead')
@@ -497,6 +487,7 @@ class Ercf:
 
     cmd_ERCF_STATUS_help = "Complete dump of current ERCF state and important configuration"
     def cmd_ERCF_STATUS(self, gcmd):
+        detail = gcmd.get_int('DETAIL', 0, minval=0, maxval=1)
         msg = "ERCF with %d gates" % (len(self.selector_offsets))
         msg += " is %s" % ("PAUSED/LOCKED" if self.is_paused else "OPERATIONAL")
         msg += " with the servo in a %s position" % ("UP" if self.servo_state == self.SERVO_UP_STATE else "DOWN")
@@ -541,7 +532,7 @@ class Ercf:
         msg += "\nLogging level is %d (%s)" % (self.log_level, log)
         msg += "%s" % " and statistics are being logged" if self.log_statistics else ""
 
-        if self.enable_endless_spool:
+        if self.enable_endless_spool or detail:
             msg += "\n\nEndlessSpool and tool/gate mapping:"
             msg += "\n%s" % self._tool_to_gate_map_to_human_string(True)
 
@@ -587,7 +578,7 @@ class Ercf:
         self.servo_state = self.SERVO_UP_STATE
 
         # Report on spring back in filament then reset counter
-        self.toolhead.dwell(0.5)
+        self.toolhead.dwell(0.3)
         self.toolhead.wait_moves()
         delta = self._counter.get_distance() - initial_encoder_position
         if delta > 0.:
@@ -868,7 +859,6 @@ class Ercf:
         self.is_paused = True
         self._track_pause_start()
         self.paused_extruder_temp = self.printer.lookup_object("extruder").heater.target_temp
-        self._servo_up()
         self.gcode.run_script_from_command("SET_IDLE_TIMEOUT TIMEOUT=%d" % self.timeout_pause)
         self.reactor.update_timer(self.heater_off_handler, self.reactor.monotonic() + self.disable_heater)
         msg = "An issue with the ERCF has been detected and the ERCF has been PAUSED"
@@ -978,7 +968,6 @@ class Ercf:
             speed = self.gear_stepper.velocity
         start = self._counter.get_distance()
         trace_str += ". Stepper: '%s' moved %%.1fmm, encoder measured %%.1fmm (delta %%.1fmm)" % motor
-
         if motor == "both":
             self._log_stepper("BOTH: dist=%.1f, speed=%d, accel=%d" % (distance, speed, self.gear_sync_accel))
             self.gear_stepper.do_set_position(0.)                   # Make incremental move
@@ -1152,7 +1141,7 @@ class Ercf:
                 break
         if delta >= tolerance:
             self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
-            raise ErcfError("Too much slippage detected during the load of bowden. Possible causes:\nCalibration ref length is too long\nERCF gears are not properly gripping filament\nEncoder reading is inaccurate")
+            raise ErcfError("Too much slippage detected during the load of bowden. Possible causes:\nCalibration ref length is too long\nERCF gears are not properly gripping filament\nEncoder reading is inaccurate\nFaulty servo")
 
     # This optional step snugs the filament up to the extruder gears.
     def _home_to_extruder(self, max_length):
@@ -1419,6 +1408,13 @@ class Ercf:
         if not skip_sync_move and self.sync_unload_length > 0:
             self._log_debug("Moving the gear and extruder motors in sync for %.1fmm" % -self.sync_unload_length) 
             delta = self._trace_filament_move("Sync unload", -self.sync_unload_length, speed=10, motor="both")
+# PAUL TODO
+#            if delta > self.sync_unload_length / 2:
+#                self._log_info("Error unloading filament - not enough detected at encoder. Retrying...")
+#                self._log_always("********* PAUL BOGUS SERVO ******* delta=%.1fmm" % delta)
+#                self._servo_up()
+#                self._servo_down()
+#                delta = self._trace_filament_move("Retrying sync unload move after servo reset", -delta)
             if delta > 2.0:
                 # Actually we are likely still stuck in extruder
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
