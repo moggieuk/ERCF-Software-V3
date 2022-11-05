@@ -52,7 +52,6 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 Note that if a toolhead sensor is configured it will become the default filament homing method and home to extruder an optional but unecessary step. Also note the home to extruder step will always be performed during calibration of tool 0 (to accurately set `ercf_calib_ref`) regardless of the `home_to_extruder` setting. For accurate homing and to avoid grinding, tune the gear stepper current reduction `extruder_homing_current` as a % of the default run current.
 
 #### Possible loading options with toolhead sensor:
-<i>Obviously the actual distances shown below may be customized</i>
 
     Extruder homing config          Toolhead homing config     Notes
     ----------------------          ----------------------     -----
