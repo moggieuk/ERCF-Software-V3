@@ -1,4 +1,4 @@
-This readme is work in progress
+*This readme is work in progress...*
 # ERCF-Software-V3 "Angry Hare"
 I love my ERCF and building it was the most fun I've had in many years of the 3D-printing hobby. Whilst the design is brilliant I found a few problems with the software and wanted to add some features and improve user friendliness.  This became especially true after the separation of functionality with the introduction of the "sensorless" branch. I liked the new python implementation as a Klipper plug-in but wanted to leverage my (very reliable) toolhead sensor.  So I rewrote the software behind ERCF - it still has the structure and much of the code of the original but significantly it has many new features, integrates the toolhead sensor and sensorless options.  I'm calling it the **"Angry Hare"** release or v3.
 
@@ -112,11 +112,14 @@ When changing a tool with the `Tx` command ERCF would by default select the fila
 
   on a 9-gate ERCF would mark gates 2, 3, 5, 6 & 7 as empty
  
-To view the current mapping you can use either `ERCF_STATUS`, `ERCF_STATUS DETAIL=1` or `ERCF_DUMP_TT
+To view the current mapping you can use either `ERCF_STATUS DETAIL=1` or `ERCF_DISPLAY_TTG_MAP`
+  
+![ERCF_STATUS](ercf_status.png "ERCF_STATUS")
   
 ### Visualization of filament position
   The `log_visual` setting turns on an off the addition of a filament tracking visualization. Can be nice with log_level of 0 on when functioning setup.
-![Bling is always better](visual_filament.png "San Juan Mountains")
+  
+![Bling is always better](visual_filament.png "Visual Filament Location")
   
 ### Filament bypass
 TODO
@@ -126,4 +129,3 @@ TODO
   | -------- | ----------- | ---------- |
   | TODO | TODO | TODO |
   
-![The San Juan Mountains are beautiful!](/assets/images/san-juan-mountains.jpg "San Juan Mountains")
