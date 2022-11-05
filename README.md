@@ -161,10 +161,11 @@ If you have installed the optional filament bypass block your can configure its 
 
 Good luck and hopefully a little less *enraged* printing.  You can find me on discord as *moggieuk#6538*
   
-## Appendix Full set of ERCF Commands:
+# Appendix Full set of ERCF Commands:
   *Note that some of these commands have been enhanced from the original*
 
-### Logging and Stats
+
+  ## Logging and Stats
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
   | ERCF_RESET_STATS | Reset the ERCF statistics | None |
@@ -173,15 +174,17 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_STATUS | Report on ERCF state, cababilities and Tool-to-Gate map | DETAIL=\[0\|\1] Displays TTG map and gate status (automatic if EndlessSpool is  configured) |
   | ERCF_DISPLAY_ENCODER_POS | Displays the current value of the ERCF encoder | None |
   
-### Calibration
+
+  ## Calibration
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
   | ERCF_CALIBRATE | TODO | None |
-  | ERCF_CALIBRATE_SINGLE | TOOL', 0, minval=0, maxval=len(self.selector_offsets)-1) <br>REPEATS=\[1..10\] How many times to repeat the calibration for reference tool T0 (ercf_calib_ref) |
-  | ERCF_CALIB_SELECTOR | TOOL', 0, minval=0, maxval=len(self.selector_offsets)-1) |
-  | ERCF_CALIBRATE_ENCODER | DIST=.. Distance to measure over. Longer is better, defaults to calibration default length <br>RANGE=.. Number of times to average over <br>SPEED=.. Speed of gear motor move. Defaults to long move speed <br>ACCEL=.. Accel of gear motor move. Defaults to motor setting in ercf_hardware.cfg |
+  | ERCF_CALIBRATE_SINGLE | TODO | TOOL=\[0..n\] <br>REPEATS=\[1..10\] How many times to repeat the calibration for reference tool T0 (ercf_calib_ref) |
+  | ERCF_CALIB_SELECTOR | TODO | TOOL=\[0..n\] |
+  | ERCF_CALIBRATE_ENCODER | TODO | DIST=.. Distance to measure over. Longer is better, defaults to calibration default length <br>RANGE=.. Number of times to average over <br>SPEED=.. Speed of gear motor move. Defaults to long move speed <br>ACCEL=.. Accel of gear motor move. Defaults to motor setting in ercf_hardware.cfg |
   
-### Servo and motor control
+
+  ## Servo and motor control
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
   | ERCF_SERVO_DOWN | TODO | None |
@@ -189,24 +192,26 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_MOTORS_OFF | TODO | None |
   | ERCF_BUZZ_GEAR_MOTOR | TODO | None |
   
-### Core ERCF functionality
+
+  ## Core ERCF functionality
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
   | ERCF_UNLOCK | TODO | None |
-  | ERCF_HOME | TOOL', 0, minval=0, maxval=len(self.selector_offsets)-1) |
-  | ERCF_SELECT_TOOL | TOOL', 0, minval=0, maxval=len(self.selector_offsets)-1) |
+  | ERCF_HOME | Home the ERCF selector and optionally selects gate associated with the specified tool | TOOL=\[0..n\]
+  | ERCF_SELECT_TOOL | Selects the gate associated with the specified tool | TOOL=\[0..n\]
   | ERCF_SELECT_BYPASS | Unload and select the bypass selector position if configured | None |
   | ERCF_LOAD_BYPASS | Does the extruder loading part of the load sequence - designed for bypass filament loading | None |
   | ERCF_CHANGE_TOOL | TODO | None |
   | ERCF_EJECT | TODO | None |
   | ERCF_PAUSE | TODO | None |
   
-### User Testing
+
+  ## User Testing
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
-  | ERCF_TEST_GRIP |  TODO | None |
+  | ERCF_TEST_GRIP | TODO | None |
   | ERCF_TEST_SERVO | TODO | None |
-  | ERCF_TEST_MOVE_GEAR | LENGTH', 200.) SPEED', 50.) ACCEL', 200.) |
+  | ERCF_TEST_MOVE_GEAR | LENGTH=..\[200\] Length of gear move in mm <br>SPEED=..\[50\] Stepper move speed50 <br>ACCEL=..\[200\] Gear stepper accel |
   | ERCF_TEST_LOAD_SEQUENCE | LOOP=\[x\] Number of times to loop while testing <br>RANDOM=\[0 \|1 \] Whether to randomize tool selection <br>FULL=\[0 \|1 \] Whether to perform full load to nozzle or short load just past encoder |
   | ERCF_TEST_LOAD | TODO | None |
   | ERCF_LOAD | LENGTH', 100.) |
@@ -214,7 +219,8 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_TEST_HOME_TO_EXTRUDER | For calibrating extruder homing - TMC current setting, etc. | RETURN=\[0\|1\] Whether to return the filament to the approximate starting position after homing - good for repeated testing |
   | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime | Many. Best to run ERCF_TEST_CONFIG without options to report all parameters than can be specified |
   
-### Tool to Gate map  and Endless spool
+
+  ## Tool to Gate map  and Endless spool
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
   | ERCF_ENCODER_RUNOUT | Filament runout handler that will also implement EndlessSpool if enabled | None |
