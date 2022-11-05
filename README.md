@@ -114,15 +114,19 @@ When changing a tool with the `Tx` command ERCF would by default select the fila
  
 To view the current mapping you can use either `ERCF_STATUS DETAIL=1` or `ERCF_DISPLAY_TTG_MAP`
   
-![ERCF_STATUS](ercf_status.png "ERCF_STATUS")
+![ERCF_STATUS](doc/ercf_status.png "ERCF_STATUS")
   
 ### Visualization of filament position
   The `log_visual` setting turns on an off the addition of a filament tracking visualization. Can be nice with log_level of 0 on when functioning setup.
   
-![Bling is always better](visual_filament.png "Visual Filament Location")
+![Bling is always better](doc/visual_filament.png "Visual Filament Location")
   
 ### Filament bypass
-TODO
+If you have installed the optional filament bypass block your can configure its selector position by setting `bypass_selector` in `ercf_parameters.cfg`. Once this is done you can use the following command to unload any ERCF controlled filament and select the bypass:
+  > ERCF_SELECT_BYPASS
+  
+  Once you have filament loaded upto the extruder you can load the filament to nozzle with
+  > ERCF_LOAD_BYPASS
 
 ### Adjusting configuration at runtime
   All the essential configuration and tuning parameters can be modified at runtime without restarting Klipper. Use the `ERCF_TEST_CONFIG` command to do this
