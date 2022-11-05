@@ -178,44 +178,45 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   ## Calibration
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
-  | ERCF_CALIBRATE | TODO | None |
-  | ERCF_CALIBRATE_SINGLE | TODO | TOOL=\[0..n\] <br>REPEATS=\[1..10\] How many times to repeat the calibration for reference tool T0 (ercf_calib_ref) |
-  | ERCF_CALIB_SELECTOR | TODO | TOOL=\[0..n\] |
-  | ERCF_CALIBRATE_ENCODER | TODO | DIST=.. Distance to measure over. Longer is better, defaults to calibration default length <br>RANGE=.. Number of times to average over <br>SPEED=.. Speed of gear motor move. Defaults to long move speed <br>ACCEL=.. Accel of gear motor move. Defaults to motor setting in ercf_hardware.cfg |
+  | ERCF_CALIBRATE | Complete calibration of all ERCF tools | None |
+  | ERCF_CALIBRATE_SINGLE | Calibration of a single ERCF tool | TOOL=\[0..n\] <br>REPEATS=\[1..10\] How many times to repeat the calibration for reference tool T0 (ercf_calib_ref) |
+  | ERCF_CALIB_SELECTOR | Calibration of the selector for the defined tool | TOOL=\[0..n\] |
+  | ERCF_CALIBRATE_ENCODER | Calibration routine for ERCF encoder | DIST=.. Distance to measure over. Longer is better, defaults to calibration default length <br>RANGE=.. Number of times to average over <br>SPEED=.. Speed of gear motor move. Defaults to long move speed <br>ACCEL=.. Accel of gear motor move. Defaults to motor setting in ercf_hardware.cfg |
   
 
   ## Servo and motor control
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
-  | ERCF_SERVO_DOWN | TODO | None |
-  | ERCF_SERVO_UP | TODO | None |
-  | ERCF_MOTORS_OFF | TODO | None |
-  | ERCF_BUZZ_GEAR_MOTOR | TODO | None |
+  | ERCF_SERVO_DOWN | Enguage the ERCF gear | None |
+  | ERCF_SERVO_UP | Disengage the ERCF gear | None |
+  | ERCF_MOTORS_OFF | Turn off both ERCF motors | None |
+  | ERCF_BUZZ_GEAR_MOTOR | Buzz the ERCF gear motor and report on whether filament was detected | None |
   
 
   ## Core ERCF functionality
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
-  | ERCF_UNLOCK | TODO | None |
+  | ERCF_UNLOCK | Unlock ERCF operations | None |
   | ERCF_HOME | Home the ERCF selector and optionally selects gate associated with the specified tool | TOOL=\[0..n\]
-  | ERCF_SELECT_TOOL | Selects the gate associated with the specified tool | TOOL=\[0..n\]
+  | ERCF_SELECT_TOOL | Selects the gate associated with the specified tool | TOOL=\[0..n\] |
   | ERCF_SELECT_BYPASS | Unload and select the bypass selector position if configured | None |
   | ERCF_LOAD_BYPASS | Does the extruder loading part of the load sequence - designed for bypass filament loading | None |
-  | ERCF_CHANGE_TOOL | TODO | None |
-  | ERCF_EJECT | TODO | None |
-  | ERCF_PAUSE | TODO | None |
+  | ERCF_CHANGE_TOOL | Perform a tool swap (generally called from 'Tx' macros) | TOOL=\[0..n\] |
+  | ERCF_CHANGE_TOOL_STANDALONE | Deprecated, 'ERCF_TOOL_CHANGE' can handle. Was: Perform a tool swap outside of print | TOOL=\[0..n\] |
+  | ERCF_EJECT | Eject filament and park it in the ERCF | None |
+  | ERCF_PAUSE | Pause the current print and lock the ERCF operations | None |
   
 
   ## User Testing
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
-  | ERCF_TEST_GRIP | TODO | None |
-  | ERCF_TEST_SERVO | TODO | None |
+  | ERCF_TEST_GRIP | Test the ERCF grip of the currently selected tool | None |
+  | ERCF_TEST_SERVO | Test the servo angle | VALUE=.. Angle value sent to servo |
   | ERCF_TEST_MOVE_GEAR | LENGTH=..\[200\] Length of gear move in mm <br>SPEED=..\[50\] Stepper move speed50 <br>ACCEL=..\[200\] Gear stepper accel |
-  | ERCF_TEST_LOAD_SEQUENCE | LOOP=\[x\] Number of times to loop while testing <br>RANDOM=\[0 \|1 \] Whether to randomize tool selection <br>FULL=\[0 \|1 \] Whether to perform full load to nozzle or short load just past encoder |
-  | ERCF_TEST_LOAD | TODO | None |
-  | ERCF_LOAD | LENGTH', 100.) |
-  | ERCF_TEST_UNLOAD | LENGTH', 100.) UNKNOWN=\[0 \|1 \] |
+  | ERCF_TEST_LOAD_SEQUENCE | Soak testing of load sequence. Great for testing reliability and repeatability| LOOP=\[x\] Number of times to loop while testing <br>RANDOM=\[0 \|1 \] Whether to randomize tool selection <br>FULL=\[0 \|1 \] Whether to perform full load to nozzle or short load just past encoder |
+  | ERCF_TEST_LOAD | Test loading filament | LENGTH=..[100] Test load the specified length of filament into selected tool |
+  | ERCF_LOAD | Identical to ERCF_TEST_LOAD | |
+  | ERCF_TEST_UNLOAD | LENGTH=..[100] Lenght of filament to be unloaded <br>UNKNOWN=\[0 \|1 \] Whether the state of the extruder is known. Generally 0 for standalone use, 1 simulates call as if it was from slicer when tip has already been formed |
   | ERCF_TEST_HOME_TO_EXTRUDER | For calibrating extruder homing - TMC current setting, etc. | RETURN=\[0\|1\] Whether to return the filament to the approximate starting position after homing - good for repeated testing |
   | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime | Many. Best to run ERCF_TEST_CONFIG without options to report all parameters than can be specified |
   
