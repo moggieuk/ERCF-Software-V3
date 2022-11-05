@@ -120,6 +120,8 @@ When changing a tool with the `Tx` command ERCF would by default select the fila
 To view the current mapping you can use either `ERCF_STATUS DETAIL=1` or `ERCF_DISPLAY_TTG_MAP`
   
 ![ERCF_STATUS](doc/ercf_status.png "ERCF_STATUS")
+
+<br>
   
 ### Visualization of filament position
   The `log_visual` setting turns on an off the addition of a filament tracking visualization. Can be nice with log_level of 0 on when functioning setup.
