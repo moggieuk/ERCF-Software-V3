@@ -151,7 +151,7 @@ If you have installed the optional filament bypass block your can configure its 
 ### Updated Calibration Ref
   Setting the `ercf_calib_ref` is slightly different in that it will, by default, average 3 runs and compsensate for spring tension in filament held by servo. It might be worth limiting to a single pass until you have tuned the gear motor current. Here is an example:
   
-  <img src="doc/calibration_ref.png" width="500" alt="ERCF_CALIBRATION_SINGLE TOOL=0">
+  <img src="doc/Calibration Ref.png" width="500" alt="ERCF_CALIBRATION_SINGLE TOOL=0">
   
 <br>
 
