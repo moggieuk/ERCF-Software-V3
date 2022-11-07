@@ -139,7 +139,7 @@ If you have installed the optional filament bypass block your can configure its 
   > ERCF_LOAD_BYPASS
 
 ### Adjusting configuration at runtime
-  All the essential configuration and tuning parameters can be modified at runtime without restarting Klipper. Use the `ERCF_TEST_CONFIG` command to do this
+  All the essential configuration and tuning parameters can be modified at runtime without restarting Klipper. Use the `ERCF_TEST_CONFIG` command to do this:
   
   <img src="doc/ercf_test_config.png" width="500" alt="ERCF_TEST_CONFIG">
   
@@ -147,6 +147,11 @@ If you have installed the optional filament bypass block your can configure its 
   > ERCF_TEST_CONFIG home_position_to_nozzle=45
   
   Will update the distance from homing postion to nozzle.  The change is designed for testing was will not be persistent.  Once you find your tuned settings be sure to update `ercf_parameters.cfg`
+  
+### Updated Calibration Ref
+  Setting the `ercf_calib_ref` is slightly different in that it will, by default, average 3 runs and compsensate for spring tension in filament held by servo. It might be worth limiting to a single pass until you have tuned the gear motor current. Here is an example:
+  
+  <img src="doc/calibration_ref.png" width="500" alt="ERCF_CALIBRATION_SINGLE TOOL=0">
   
 <br>
 
