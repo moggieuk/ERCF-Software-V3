@@ -34,13 +34,15 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 </ul>
  
 <br>
+  To try it out I recommend you save your old configuration and then take the supplied `ercf_parameters.cfg` file as a starting point and edit back some of your known settings.  The replace ercf.py in the Klipper extra folder and restart. 
+<br>
 
 ## Summary of new commands:
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
-  | ERCF_STATUS | Report on ERCF state, cababilities and Tool-to-Gate map | DETAIL=\[0\|\1] Displays TTG map and gate status (automatic if EndlessSpool is  configured) |
-  | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime | Many. Best to run ERCF_TEST_CONFIG without options to report all parameters than can be specified |
-  | ERCF_DISPLAY_TTG_MAP | Displays the current Tool -> Gate mapping (can be used all the time but generally designed for EndlessSpool  | DETAIL=\[0 \| 1\] Whether to also show the gate availability |
+  | ERCF_STATUS | Report on ERCF state, cababilities and Tool-to-Gate map | DETAIL=\[0\|1\] Displays TTG map and gate status (automatic if EndlessSpool is  configured) |
+  | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime | Many. Best to run ERCF_TEST_CONFIG without options to report all parameters that can be specified |
+  | ERCF_DISPLAY_TTG_MAP | Displays the current Tool - to - Gate mapping (can be used all the time but generally designed for EndlessSpool  | DETAIL=\[0\|1\] Whether to also show the gate availability |
   | ERCF_REMAP_TTG | Reconfiguration of the Tool - to - Gate (TTG) map.  Can also set gates as empty! | TOOL=\[0..n\] <br>GATE=\[0..n\] Maps specified tool to this gate (multiple tools can point to same gate) <br>AVAILABLE=\[0\|1\]  Marks gate as available or empty |
   | ERCF_SELECT_BYPASS | Unload and select the bypass selector position if configured | None |
   | ERCF_LOAD_BYPASS | Does the extruder loading part of the load sequence - designed for bypass filament loading | None |
@@ -148,8 +150,8 @@ If you have installed the optional filament bypass block your can configure its 
   
 <br>
 
-## Testing:
-  This software is largely rewritten as well as being extended and so, despite best efforts, has probably introducted some bugs that may not exist in the official driver.  It also lacks extensive testing on different configurations that will stress the corner cases.  I have been using successfully on Voron 2.4 / ERCF with EASY-BRD.  I use a self-modified CW2 extruder with foolproof microswitch toolhead sensor and sensorless selector configuration. My day-to-day configuration is to load the filament to the extruder in a single movement, then home to toolhead sensor with synchronous gear/extruder movement (option #1 explained above).  I use the sensorless selector and have runout and EndlessSpool enabled.
+## My Testing:
+  This software is largely rewritten as well as being extended and so, despite best efforts, has probably introducted some bugs that may not exist in the official driver.  It also lacks extensive testing on different configurations that will stress the corner cases.  I have been using successfully on Voron 2.4 / ERCF with EASY-BRD.  I use a self-modified CW2 extruder with foolproof microswitch toolhead sensor. My day-to-day configuration is to load the filament to the extruder in a single movement (num_moves=1), then home to toolhead sensor with synchronous gear/extruder movement (option #1 explained above).  I use the sensorless selector and have runout and EndlessSpool enabled.
   
 > Klipper Host Version: v0.10.0-594
 > <br>Primary MCU Klipper version: v0.10.0-594
@@ -166,9 +168,9 @@ If you have installed the optional filament bypass block your can configure its 
   <li>If using a toolhead sensor, that must be reliable too.  The hall effect based switch is very awkward to get right because of so many variables: strength of magnet, amount of iron in washer, even temperature, therefore I strongly recommend a simple microswitch based detection.  They work first time, every time.
   <li>Eliminate all points of friction in the filament path.  There is lots written about this already but I found some unusual places where filament was rubbing on plastic and drilling out the path improved things a good deal.
   <li>This version of the driver software both, compensates for, and exploits the spring that is inherently built when homing to the extruder.  The `ERCF_CALIBRATE_SINGLE TOOL=0` (which calibrates the *ercf_calib_ref* length) averages the measurement of multiple passes, measures the spring rebound and considers the configuration options when recommending and setting the ercf_calib_ref length.  If you change basic configuration options it is advisable to rerun this calibration step again.
-  <li>The dreaded "Timer too close" can occur but I believe I have worked around many of these cases.  The problem is not always an overloaded mcu as often cited -- there are a couple of bugs in Klipper that will delay messages between mcu and host and thus provoke this problem.
+  <li>The dreaded "Timer too close" can occur but I believe I have worked around these cases.  The problem is not always an overloaded mcu as often cited -- there are a couple of bugs in Klipper that will delay messages between mcu and host and thus provoke this problem.
   <li>The servo problem where a servo with move to end position and then jump back can occur due to bug in Klipper just like the original software. The workaroud is increase the same servo "dwell" config options in small increments until the servo works reliably.
-  <li>I highly recommend the "sensorless selector" option -- it works well and provides for additional recovery abilities if filment gets stuck in encoder preventing selection of a different gate.
+  <li>I highly recommend Ette's "sensorless selector" option -- it works well and provides for additional recovery abilities if filment gets stuck in encoder preventing selection of a different gate.
 </ul>
 
 Good luck and hopefully a little less *enraged* printing.  You can find me on discord as *moggieuk#6538*
