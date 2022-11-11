@@ -104,6 +104,7 @@ class Ercf:
         self.extra_servo_dwell_down = config.getint('extra_servo_dwell_down', 0)
         self.extra_servo_dwell_up = config.getint('extra_servo_dwell_up', 0)
         self.num_moves = config.getint('num_moves', 2, minval=1)
+        self.apply_bowden_correction = config.getint('apply_bowden_correction', 1, minval=0, maxval=1)
         self.parking_distance = config.getfloat('parking_distance', 23., above=15., below=30.)
         self.encoder_move_step_size = config.getfloat('encoder_move_step_size', 15., above=5., below=25.)
         self.selector_offsets = config.getfloatlist('colorselector')
@@ -533,8 +534,8 @@ class Ercf:
         msg += "%s" % " and statistics are being logged" if self.log_statistics else ""
 
         if self.enable_endless_spool or detail:
-            msg += "\n\nEndlessSpool and tool/gate mapping:"
-            msg += "\n%s" % self._tool_to_gate_map_to_human_string(True)
+            msg += "\n\nTool/gate mapping and EndlessSpool groups:"
+            msg += "\n%s" % self._tool_to_gate_map_to_human_string(detail)
 
         msg += "\n\n%s" % self._statistics_to_human_string()
         self._log_always(msg)
@@ -865,7 +866,7 @@ class Ercf:
         msg += "\nReason: %s" % reason
         msg += "\nWhen you intervene to fix the issue, first call \"ERCF_UNLOCK\""
         msg += "\nRefer to the manual before resuming the print"
-        self.gcode.respond_raw("!! %s" % msg)   # alternative self._log_always(msg)
+        self.gcode.respond_raw("!! %s" % msg)   # non highlighted alternative self._log_always(msg)
         self.gcode.run_script_from_command("SAVE_GCODE_STATE NAME=ERCF_state")
         self._disable_encoder_sensor()
         self.gcode.run_script_from_command("PAUSE")
@@ -883,11 +884,11 @@ class Ercf:
 
     def _disable_encoder_sensor(self):
         self._log_trace("Disable encoder sensor")
-        self.gcode.run_script_from_command("SET_FILAMENT_SENSOR SENSOR=encoder_sensor ENABLE=0")
+        self.encoder_sensor.runout_helper.sensor_enabled = 0
 
     def _enable_encoder_sensor(self):
         self._log_trace("Enable encoder sensor")
-        self.gcode.run_script_from_command("SET_FILAMENT_SENSOR SENSOR=encoder_sensor ENABLE=1")
+        self.encoder_sensor.runout_helper.sensor_enabled = 1
 
     def _check_is_paused(self):
         if self.is_paused:
@@ -1119,7 +1120,7 @@ class Ercf:
         return self._counter.get_distance() - initial_encoder_position
     
     # Fast load of filament to approximate end of bowden (without homing)
-    def _load_bowden(self, length, tolerance=4.0):
+    def _load_bowden(self, length, tolerance=3.0):
         self._log_debug("Loading bowden tube")
         self.filament_direction = self.DIRECTION_LOAD
         self._servo_down()
@@ -1132,16 +1133,20 @@ class Ercf:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
 
         # Correction attempts to load the filament according to encoder reporting
-        for i in range(2):
+        if self.apply_bowden_correction:
+            for i in range(2):
+                if delta >= tolerance:
+                    msg = "Correction load move #%d into bowden" % (i+1)
+                    delta = self._trace_filament_move(msg, delta)
+                    self._log_debug("Correction load move was necessary, encoder now measures %.1fmm" % self._counter.get_distance())
+                else:
+                    break
+                if delta >= tolerance:
+                    self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
+                    raise ErcfError("Too much slippage detected during the load of bowden. Possible causes:\nCalibration ref length is too long\nERCF gears are not properly gripping filament\nEncoder reading is inaccurate\nFaulty servo")
+        else:
             if delta >= tolerance:
-                msg = "Correction load move #%d into bowden" % (i+1)
-                delta = self._trace_filament_move(msg, delta)
-                self._log_debug("Correction load move was necessary, encoder now measures %.1fmm" % self._counter.get_distance())
-            else:
-                break
-        if delta >= tolerance:
-            self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
-            raise ErcfError("Too much slippage detected during the load of bowden. Possible causes:\nCalibration ref length is too long\nERCF gears are not properly gripping filament\nEncoder reading is inaccurate\nFaulty servo")
+                self._log_info("Warning: Excess slippage was detected in bowden tube load but 'apply_bowden_correction' is disabled. Moved %.1fmm, Encoder delta %.1fmm" % (length, delta))
 
     # This optional step snugs the filament up to the extruder gears.
     def _home_to_extruder(self, max_length):
@@ -1399,7 +1404,7 @@ class Ercf:
         self._set_loaded_status(self.LOADED_STATUS_PARTIAL_END_OF_BOWDEN)
 
     # Fast unload of filament from exit of extruder gear (end of bowden) to close to ERCF (but still in encoder)
-    def _unload_bowden(self, length, skip_sync_move=False, tolerance=2.0):
+    def _unload_bowden(self, length, skip_sync_move=False, tolerance=3.0):
         self._log_debug("Unloading bowden tube")
         self.filament_direction = self.DIRECTION_UNLOAD
         self._servo_down()
@@ -1408,15 +1413,14 @@ class Ercf:
         if not skip_sync_move and self.sync_unload_length > 0:
             self._log_debug("Moving the gear and extruder motors in sync for %.1fmm" % -self.sync_unload_length) 
             delta = self._trace_filament_move("Sync unload", -self.sync_unload_length, speed=10, motor="both")
-# PAUL TODO - shouldn't be necessary if/when servo behaves..
-#            if delta > self.sync_unload_length / 2:
-#                self._log_info("Error unloading filament - not enough detected at encoder. Retrying...")
-#                self._log_always("*******************************************************")
-#                self._log_always("*****************  BOGUS SERVO ************* delta=%.1fmm" % delta)
-#                self._log_always("*******************************************************")
-#                self._servo_up()
-#                self._servo_down()
-#                delta = self._trace_filament_move("Retrying sync unload move after servo reset", -delta)
+            # This check should be necessary if servo behaves. It could happen in other places too on first move
+            # after servo down but this option is an easy place to catch it and attempt to reset
+            if delta > self.sync_unload_length / 2:
+                self._log_always("Error unloading filament - not enough detected at encoder. Suspect servo not properly down")
+                self._log_always("Adjusting 'extra_servo_dwell_dwon' may help. Retrying...")
+                self._servo_up()
+                self._servo_down()
+                delta = self._trace_filament_move("Retrying sync unload move after servo reset", -delta)
             if delta > 2.0:
                 # Actually we are likely still stuck in extruder
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
@@ -1433,16 +1437,20 @@ class Ercf:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
 
         # Correction attempts to unload the filament according to encoder reporting
-        for i in range(2):
+        if self.apply_bowden_correction:
+            for i in range(2):
+                if delta >= tolerance:
+                    msg = "Correction unload move #%d from bowden" % (i+1)
+                    delta = self._trace_filament_move(msg, -delta)
+                    self._log_debug("Correction unload move was necessary, encoder now measures %.1fmm" % self._counter.get_distance())
+                else:
+                    break
+            if delta > tolerance:
+                self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
+                raise ErcfError("Too much slippage detected during the unload")
+        else:
             if delta >= tolerance:
-                msg = "Correction unload move #%d from bowden" % (i+1)
-                delta = self._trace_filament_move(msg, -delta)
-                self._log_debug("Correction unload move was necessary, encoder now measures %.1fmm" % self._counter.get_distance())
-            else:
-                break
-        if delta > tolerance:
-            self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
-            raise ErcfError("Too much slippage detected during the unload")
+                self._log_info("Warning: Excess slippage was detected in bowden tube unload but 'apply_bowden_correction' is disabled. Moved %.1fmm, Encoder delta %.1fmm" % (length, delta))
 
         self._set_loaded_status(self.LOADED_STATUS_PARTIAL_PAST_ENCODER)
 
@@ -1863,6 +1871,8 @@ class Ercf:
 
     cmd_ERCF_TEST_CONFIG_help = "Runtime adjustment of ERCF configuration for testing purposes"
     def cmd_ERCF_TEST_CONFIG(self, gcmd):
+        self.long_moves_speed = gcmd.get_float('LONG_MOVES_SPEED', self.long_moves_speed, above=20.)
+        self.short_moves_speed = gcmd.get_float('SHORT_MOVES_SPEED', self.short_moves_speed, above=20.)
         self.home_to_extruder = gcmd.get_int('HOME_TO_EXTRUDER', self.home_to_extruder, minval=0, maxval=1)
         self.extruder_homing_max = gcmd.get_float('EXTRUDER_HOMING_MAX', self.extruder_homing_max, above=20.)
         self.extruder_homing_step = gcmd.get_float('EXTRUDER_HOMING_STEP', self.extruder_homing_step, above=0.5, maxval=5.)
@@ -1874,20 +1884,24 @@ class Ercf:
         self.sync_load_length = gcmd.get_float('SYNC_LOAD_LENGTH', self.sync_load_length, minval=0., maxval=100.)
         self.sync_unload_length = gcmd.get_float('SYNC_UNLOAD_LENGTH', self.sync_unload_length, minval=0., maxval=100.)
         self.num_moves = gcmd.get_int('NUM_MOVES', self.num_moves, minval=1)
+        self.apply_bowden_correction = gcmd.get_int('APPLY_BOWDEN_CORRECTION', self.apply_bowden_correction, minval=0, maxval=1)
         self.home_position_to_nozzle = gcmd.get_float('HOME_POSITION_TO_NOZZLE', self.home_position_to_nozzle, minval=25.)
         self.variables['ercf_calib_ref'] = gcmd.get_float('ERCF_CALIB_REF', self.variables['ercf_calib_ref'], minval=10.)
-        msg = "home_to_extruder = %d" % self.home_to_extruder
-        msg += "\nextruder_homing_max = %1.f" % self.extruder_homing_max
-        msg += "\nextruder_homing_step = %1.f" % self.extruder_homing_step
+        msg = "long_moves_speed = %.1f" % self.long_moves_speed
+        msg += "\nshort_moves_speed = %.1f" % self.short_moves_speed
+        msg += "\nhome_to_extruder = %d" % self.home_to_extruder
+        msg += "\nextruder_homing_max = %.1f" % self.extruder_homing_max
+        msg += "\nextruder_homing_step = %.1f" % self.extruder_homing_step
         msg += "\nextruder_homing_current = %d" % self.extruder_homing_current
-        msg += "\ntoolhead_homing_max = %1.f" % self.toolhead_homing_max
-        msg += "\ntoolhead_homing_step = %1.f" % self.toolhead_homing_step
-        msg += "\ndelay_servo_release = %1.f" % self.delay_servo_release
-        msg += "\nsync_load_length = %1.f" % self.sync_load_length
-        msg += "\nsync_unload_length = %1.f" % self.sync_unload_length
+        msg += "\ntoolhead_homing_max = %.1f" % self.toolhead_homing_max
+        msg += "\ntoolhead_homing_step = %.1f" % self.toolhead_homing_step
+        msg += "\ndelay_servo_release = %.1f" % self.delay_servo_release
+        msg += "\nsync_load_length = %.1f" % self.sync_load_length
+        msg += "\nsync_unload_length = %.1f" % self.sync_unload_length
         msg += "\nnum_moves = %d" % self.num_moves
-        msg += "\nhome_position_to_nozzle = %d" % self.home_position_to_nozzle
-        msg += "\nercf_calib_ref = %d" % self.variables['ercf_calib_ref']
+        msg += "\napply_bowden_correction = %d" % self.apply_bowden_correction
+        msg += "\nhome_position_to_nozzle = %.1f" % self.home_position_to_nozzle
+        msg += "\nercf_calib_ref = %.1f" % self.variables['ercf_calib_ref']
         self._log_info(msg)
 
 
@@ -1936,7 +1950,7 @@ class Ercf:
                 raise ErcfError("No more available EndlessSpool spools available")
             self._log_info("Remapping T%d to gate #%d" % (self.tool_selected, next_gate))
 
-            self.gcode.run_script_from_command("SAVE_GCODE_STATE NAME=ERCF_Pre_Unload")
+            self.gcode.run_script_from_command("SAVE_GCODE_STATE NAME=ERCF_PRE_UNLOAD")
             self.gcode.run_script_from_command("_ERCF_ENDLESS_SPOOL_PRE_UNLOAD")
             if self._form_tip_standalone():
                 in_print = False
@@ -1946,7 +1960,7 @@ class Ercf:
             self._select_and_load_tool(tool)
             self.gcode.run_script_from_command("SET_PRESSURE_ADVANCE ADVANCE=%.6f" % initial_pa)
             self.gcode.run_script_from_command("_ERCF_ENDLESS_SPOOL_POST_LOAD")
-            self.gcode.run_script_from_command("RESTORE_GCODE_STATE NAME=ERCF_Pre_Unload")
+            self.gcode.run_script_from_command("RESTORE_GCODE_STATE NAME=ERCF_PRE_UNLOAD")
             self.gcode.run_script_from_command("RESUME")
 
             self._enable_encoder_sensor()
