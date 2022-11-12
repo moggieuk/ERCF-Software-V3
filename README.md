@@ -202,7 +202,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
   | ERCF_CALIBRATE | Complete calibration of all ERCF tools | None |
-  | ERCF_CALIBRATE_SINGLE | Calibration of a single ERCF tool | TOOL=\[0..n\] <br>REPEATS=\[1..10\] How many times to repeat the calibration for reference tool T0 (ercf_calib_ref) <br>VALIDATE=\[0\|1\] If True then calibration of tool 0 will simply verfiy the ratio i.e. another check of encoder accuracy |
+  | ERCF_CALIBRATE_SINGLE | Calibration of a single ERCF tool | TOOL=\[0..n\] <br>REPEATS=\[1..10\] How many times to repeat the calibration for reference tool T0 (ercf_calib_ref) <br>VALIDATE=\[0\|1\] If True then calibration of tool 0 will simply verify the ratio i.e. another check of encoder accuracy (should result in a ratio of 1.0) |
   | ERCF_CALIB_SELECTOR | Calibration of the selector for the defined tool | TOOL=\[0..n\] |
   | ERCF_CALIBRATE_ENCODER | Calibration routine for ERCF encoder | DIST=.. Distance to measure over. Longer is better, defaults to calibration default length <br>RANGE=.. Number of times to average over <br>SPEED=.. Speed of gear motor move. Defaults to long move speed <br>ACCEL=.. Accel of gear motor move. Defaults to motor setting in ercf_hardware.cfg |
   <br>
