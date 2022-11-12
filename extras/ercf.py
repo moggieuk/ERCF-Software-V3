@@ -132,20 +132,23 @@ class Ercf:
         self.sensorless_selector = config.getint('sensorless_selector', 0, minval=0, maxval=1)
         self.enable_clog_detection = config.getint('enable_clog_detection', 1, minval=0, maxval=1)
         self.enable_endless_spool = config.getint('enable_endless_spool', 0, minval=0, maxval=1)
-        self.endless_spool_groups = config.getintlist('endless_spool_groups')
+        self.endless_spool_groups = list(config.getintlist('endless_spool_groups', []))
 
         self.log_level = config.getint('log_level', 1, minval=0, maxval=3)
         self.log_statistics = config.getint('log_statistics', 0, minval=0, maxval=1)
         self.log_visual = config.getint('log_visual', 1, minval=0, maxval=1)
 
-        if self.enable_endless_spool == 1 and len(self.endless_spool_groups) != len(self.selector_offsets):
-            raise config.error("EndlessSpool mode requires that the endless_spool_groups parameter is set with the same number of values as the number of selectors")
+        if len(self.endless_spool_groups) > 0:
+            if self.enable_endless_spool == 1 and len(self.endless_spool_groups) != len(self.selector_offsets):
+                raise config.error("EndlessSpool mode requires that the endless_spool_groups parameter is set with the same number of values as the number of selectors")
+        else:
+            for i in range(len(self.selector_offsets)):
+                self.endless_spool_groups.append(i)
 
         if len(self.gate_status) > 0:
             if not len(self.gate_status) == len(self.selector_offsets):
                 raise config.error("Gate status map has different number of values than the number of selectors")
         else:
-            self.gate_status = []
             for i in range(len(self.selector_offsets)):
                 self.gate_status.append(self.GATE_AVAILABLE)
 
@@ -638,7 +641,7 @@ class Ercf:
                 self._counter.reset_counts()    # Encoder 0000
                 encoder_moved = self._load_encoder()
                 self._load_bowden(self.calibration_bowden_length - encoder_moved)     
-                self._log_info("Finding home position (try #%d of %d)..." % (i+1, repeats))
+                self._log_info("Finding extruder gear position (try #%d of %d)..." % (i+1, repeats))
                 self._home_to_extruder(extruder_homing_length)
                 measured_movement = self._counter.get_distance()
                 spring = self._servo_up()
@@ -700,9 +703,10 @@ class Ercf:
             delta = self._trace_filament_move("Calibration load movement", test_length, speed=self.long_moves_speed)
             delta = self._trace_filament_move("Calibration unload movement", -test_length, speed=self.long_moves_speed)
             measurement = self._counter.get_distance()
-            ratio = (load_length + test_length) / measurement
-            self._log_always("Calibration move of %.1fmm, average encoder measurement %.1fmm - Ratio is %.6f" % (test_length + test_length, measurement, ratio))
-            self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=ercf_calib_%d VALUE=%.6f" % (tool, ratio))  
+            ratio = (test_length * 2) / (measurement - encoder_moved)
+            self._log_always("Calibration move of %.1fmm, average encoder measurement %.1fmm - Ratio is %.6f" % (test_length * 2, measurement - encoder_moved, ratio))
+            if not tool == 0:
+                self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=ercf_calib_%d VALUE=%.6f" % (tool, ratio))  
             self._unload_encoder(self.unload_buffer)
             self._servo_up()
             self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
@@ -749,10 +753,11 @@ class Ercf:
         if self._check_is_paused(): return
         tool = gcmd.get_int('TOOL', 0, minval=0, maxval=len(self.selector_offsets)-1)
         repeats = gcmd.get_int('REPEATS', 3, minval=1, maxval=10)
+        validate = gcmd.get_int('VALIDATE', 0, minval=0, maxval=1)
         try:
             self.calibrating = True
             self._home(tool)
-            if tool == 0:
+            if tool == 0 and not validate:
                 self._calculate_calibration_ref(repeats=repeats)
             else:
                 self._calculate_calibration_ratio(tool)
@@ -1108,7 +1113,7 @@ class Ercf:
         initial_encoder_position = self._counter.get_distance()
         delta = self._trace_filament_move("Initial load into encoder", self.LONG_MOVE_THRESHOLD)
         if (self.LONG_MOVE_THRESHOLD - delta) <= 6.0:
-            self._log_info("Error loading filament - not enough detected at encoder. Retrying...")
+            self._log_always("Error unloading filament - not enough detected at encoder. Retrying...")
             self._servo_up()
             self._servo_down()
             delta = self._trace_filament_move("Retry load into encoder", self.LONG_MOVE_THRESHOLD)
@@ -1133,7 +1138,7 @@ class Ercf:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
 
         # Correction attempts to load the filament according to encoder reporting
-        if self.apply_bowden_correction:
+        if self.apply_bowden_correction and not self.calibrating:
             for i in range(2):
                 if delta >= tolerance:
                     msg = "Correction load move #%d into bowden" % (i+1)
@@ -1409,23 +1414,30 @@ class Ercf:
         self.filament_direction = self.DIRECTION_UNLOAD
         self._servo_down()
 
-        # Sync unload (ERCF + extruder) for reliability and to help with hair pull
-        if not skip_sync_move and self.sync_unload_length > 0:
-            self._log_debug("Moving the gear and extruder motors in sync for %.1fmm" % -self.sync_unload_length) 
-            delta = self._trace_filament_move("Sync unload", -self.sync_unload_length, speed=10, motor="both")
-            # This check should be necessary if servo behaves. It could happen in other places too on first move
-            # after servo down but this option is an easy place to catch it and attempt to reset
-            if delta > self.sync_unload_length / 2:
-                self._log_always("Error unloading filament - not enough detected at encoder. Suspect servo not properly down")
-                self._log_always("Adjusting 'extra_servo_dwell_dwon' may help. Retrying...")
-                self._servo_up()
-                self._servo_down()
-                delta = self._trace_filament_move("Retrying sync unload move after servo reset", -delta)
+        # Initial short move allows for dealing with (servo) errors. If synchronized it can help with hair pull
+        sync = not skip_sync_move and self.sync_unload_length > 0
+        initial_move = 10. if not sync else self.sync_unload_length
+        if sync:
+            self._log_debug("Moving the gear and extruder motors in sync for %.1fmm" % -initial_move) 
+            delta = self._trace_filament_move("Sync unload", -initial_move, speed=10, motor="both")
+        else:
+            self._log_debug("Moving the gear motor for %.1fmm" % -initial_move) 
+            delta = self._trace_filament_move("Unload", -initial_move, speed=10, motor="gear")
+        if delta > initial_move / 2:
+            self._log_always("Error unloading filament - not enough detected at encoder. Suspect servo not properly down")
+            self._log_always("Adjusting 'extra_servo_dwell_down' may help. Retrying...")
+            self._servo_up()
+            self._servo_down()
+            if sync:
+                delta = self._trace_filament_move("Retrying sync unload move after servo reset", -delta, speed=10, motor="both")
+            else:
+                delta = self._trace_filament_move("Retrying unload move after servo reset", -delta, speed=10, motor="gear")
             if delta > 2.0:
                 # Actually we are likely still stuck in extruder
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
                 raise ErcfError("Too much slippage (%.1fmm) detected during the sync unload from extruder" % delta)
-            length -= (self.sync_unload_length - delta)
+            length -= (initial_move - delta)
+
         
         # Continue fast unload
         moves = 1 if length < (self._get_calibration_ref() / self.num_moves) else self.num_moves
@@ -1437,7 +1449,7 @@ class Ercf:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
 
         # Correction attempts to unload the filament according to encoder reporting
-        if self.apply_bowden_correction:
+        if self.apply_bowden_correction and not self.calibrating:
             for i in range(2):
                 if delta >= tolerance:
                     msg = "Correction unload move #%d from bowden" % (i+1)
