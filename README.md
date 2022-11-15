@@ -61,7 +61,7 @@ Note that if a toolhead sensor is configured it will become the default filament
     ----------------------          ----------------------     -----
     
     1. home_to_extruder=0           toolhead_homing_max=20     This is probably the BEST option and can work with FLEX
-                                    toolhead_homing_step=1     Filament can load close to extruder gear, then is pulled
+                                    toolhead_homing_step=1     Filament. Filament loaded close to extruder gear, then is pulled
                                     sync_load_length=1         through to home on toolhead sensor by synchronized gear
                                                                and extruder motors
     
