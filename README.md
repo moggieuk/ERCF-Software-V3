@@ -105,10 +105,10 @@ This is much simplier than loading. The toolhead sensor, if installed, will auto
 <br>
 
 ### Tool-to-Gate (TTG) mapping and EndlessSpool application
-When changing a tool with the `Tx` command ERCF would by default select the filament at the gate (spool) of the same number.  The mapping built into this *Angry Hare* driver allows you to modify that.  There are 3 primarly use cases for this feature:
+When changing a tool with the `Tx` command the ERCF would by default select the filament at the gate (spool) of the same number.  The mapping built into this *Angry Hare* driver allows you to modify that.  There are 3 primarly use cases for this feature:
 <ol>
-  <li>You have loaded your filaments differently than you sliced gcode file. No problem, just issue the appropriate remapping commands prior to printing
-  <li>Some of "tools" don't have filament and you want to mark them as empty
+  <li>You have loaded your filaments differently than you sliced gcode file... No problem, just issue the appropriate remapping commands prior to printing
+  <li>Some of "tools" don't have filament and you want to mark them as empty to avoid selection.
   <li>Most importantly, for EndlessSpool - when a filament runs out on one gate (spool) then next in the sequence is automatically mapped to the original tool.  It will therefore continue to print on subsequent tool changes.  You can also replace the spool and update the map to indicate avaiablity mid print
 </ol>
 
