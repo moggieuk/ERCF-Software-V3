@@ -33,7 +33,7 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 </ul>
  
 <br>
-  To try it out I recommend you save your old configuration and then take the supplied `ercf_parameters.cfg` file as a starting point and edit back some of your known settings.  The replace ercf.py in the Klipper extra folder and restart. 
+  To try it out I recommend you save your old configuration and then take the supplied `ercf_parameters.cfg` file as a starting point and edit back some of your known settings.  Then replace ercf.py in the Klipper extras folder and restart Klipper. 
 <br>
 
 ## Summary of new commands:
