@@ -87,8 +87,8 @@ Note that if a toolhead sensor is configured it will become the default filament
   
     6. home_to_extruder=1          sync_load_length=0          Same as above but avoids the synchronous move.  Can be
        extruder_homing_max=50                                  reliable with accurate calibration reference length and
-       extruder_homing_step=2                                  accurate encoder
-       extruder_homing_current=50
+       extruder_homing_step=2                                  accurate encoder. Use of 'delay_servo_release' recommended
+       extruder_homing_current=50.                             to keep pressure on the extruder gears for initial load
 
 *Obviously the actual distances shown above may be customized*
   
