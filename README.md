@@ -8,7 +8,7 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
   <li>Fully implements “EndlessSpool” with new concept of Tool --> Gate mapping.  This allows empty gates to be identified and tool changes subsequent to runout to use the correct filament spool.  It has the added advantage for being able to map gates to tools in case of slicing to spool loading mismatch.
 <li>Measures “spring” in filament after extruder homing for more accurate calibration reference
 <li>Adds servo_up delay making the gear to extruder transition of filament more reliable (maintains pressure)
-<li>Ability to secify empty or disabled tools (gates).
+<li>Ability to specify empty or disabled tools (gates).
 <li>Formal support for the filament bypass block with associated new commands and state if using it.
 <li>Ability to reduce gear current (currently TMC2209 only) during “collision” homing procedure to prevent grinding, etc.
 </ul>
