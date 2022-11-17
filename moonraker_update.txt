@@ -1,0 +1,6 @@
+[update_manager ercf]
+type: git_repo
+path: ~/klipper-ercf
+origin: https://github.com/moggieuk/ERCF-Software-V3.git
+install_script: install.sh
+managed_services: klipper
