@@ -32,8 +32,16 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 <li>Renewed load and unload sequences (to support all build configurations) and effectively combine the sensor and sensorless logic
 </ul>
  
+## Installation
+The module can be installed into a existing Klipper installation with an install script.
+
+    cd ~
+    git clone https://github.com/moggieuk/ERCF-Software-V3.git
+    cd ERCF-Software-V3
+    ./install.sh
+
 <br>
-  To try it out I recommend you save your old configuration and then take the supplied `ercf_parameters.cfg` file as a starting point and edit back some of your known settings.  Then replace ercf.py in the Klipper extras folder and restart Klipper. 
+  or you can save your old configuration and then take the supplied `ercf_parameters.cfg` files as a starting point and edit back some of your known settings.  Then replace ercf.py in the Klipper extras folder and restart Klipper. 
 <br>
 
 ## Summary of new commands:
