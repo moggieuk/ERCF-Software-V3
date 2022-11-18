@@ -33,7 +33,7 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 </ul>
  
 ## Installation
-The module can be installed into a existing Klipper installation with an install script.
+The module can be installed into a existing Klipper installation with an install script. If existing ercf*.cfg files are found the new versions will be copied with .template extension
 
     cd ~
     git clone https://github.com/moggieuk/ERCF-Software-V3.git
@@ -41,7 +41,15 @@ The module can be installed into a existing Klipper installation with an install
     ./install.sh
 
 <br>
-  or you can save your old configuration and then take the supplied `ercf_parameters.cfg` files as a starting point and edit back some of your known settings.  Then replace ercf.py in the Klipper extras folder and restart Klipper. 
+or you can save your old configuration and then take the supplied `ercf_parameters.cfg` and `ercf_hardware.cfg` files as a starting point and edit back your known settings.  Then replace ercf.py in the Klipper extras folder and restart Klipper. 
+<br>
+
+## Revision History
+<ul>
+<li> v1.0.0 - Initial Release
+<li> v1.0.3 - Bug fixes from community: Better logging on toolchange (for manual recovery); Advanced config parameters for adjust tolerance used in 'apply_bowden_correction' move; Fixed a couple of silly (non serious) bugs
+</ul>
+
 <br>
 
 ## Summary of new commands:
@@ -178,11 +186,12 @@ If you have installed the optional filament bypass block your can configure its 
 <ul>
   <li>Firstly the importance of a reliable and fairly accurate encoder should not be under estimated. If you cannot get very reliable results from `ERCF_CALIBRATE_ENCODER` then don't proceed with setup - address the encoder problem first. Note that I had really good luck with this https://discord.com/channels/460117602945990666/909743915475816458/1023873076095615036 approach of blackening the encoder wheel and then adjusting the sensor is little *further* away from the gear.
   <li>If using a toolhead sensor, that must be reliable too.  The hall effect based switch is very awkward to get right because of so many variables: strength of magnet, amount of iron in washer, even temperature, therefore I strongly recommend a simple microswitch based detection.  They work first time, every time.
+  <li>The longer the bowden length the more important it is to calibrate correctly (do a couple of times to check for consistency).  Small errors multiply with longer moves!
   <li>Eliminate all points of friction in the filament path.  There is lots written about this already but I found some unusual places where filament was rubbing on plastic and drilling out the path improved things a good deal.
   <li>This version of the driver software both, compensates for, and exploits the spring that is inherently built when homing to the extruder.  The `ERCF_CALIBRATE_SINGLE TOOL=0` (which calibrates the *ercf_calib_ref* length) averages the measurement of multiple passes, measures the spring rebound and considers the configuration options when recommending and setting the ercf_calib_ref length.  If you change basic configuration options it is advisable to rerun this calibration step again.
-  <li>The dreaded "Timer too close" can occur but I believe I have worked around these cases.  The problem is not always an overloaded mcu as often cited -- there are a couple of bugs in Klipper that will delay messages between mcu and host and thus provoke this problem.
+  <li>The dreaded "Timer too close" can occur but I believe I have worked around most of these cases.  The problem is not always an overloaded mcu as often cited -- there are a couple of bugs in Klipper that will delay messages between mcu and host and thus provoke this problem.  To minimize you hitting these, I recommend you use a step size of 8 for the gear motor. You don't need high fidelity and this greatly reduces the chance of this error. Also, increasing 'num_moves' also is a workaround.  I'm not experiencing this and have a high speed (200 mm/s) single move load with a step size of 8.
   <li>The servo problem where a servo with move to end position and then jump back can occur due to bug in Klipper just like the original software. The workaroud is increase the same servo "dwell" config options in small increments until the servo works reliably. Note that this driver will retry the initial servo down movement if it detects slippage thus working around this issue to some extent.
-  <li>I also added a 'apply_bowden_correction' config option that dictates whether the driver "believes" the encoder or not for long moves.  If enabled, the driver will make correction moves to get the encoder reading correct.  If disabled the gear stepper movement will be applied without slippage detection.  Details on when this is useful is documented in 'ercf_parameters'
+  <li>I also added a 'apply_bowden_correction' config option that dictates whether the driver "believes" the encoder or not for long moves.  If enabled, the driver will make correction moves to get the encoder reading correct.  If disabled the gear stepper movement will be applied without slippage detection.  Details on when this is useful is documented in 'ercf_parameters'.  If enabled, the options 'load_bowden_tolerance' and 'unload_bowden_tolerance' will set the threshold at which correction is applied.
   <li>I highly recommend Ette's "sensorless selector" option -- it works well and provides for additional recovery abilities if filment gets stuck in encoder preventing selection of a different gate.
 </ul>
 

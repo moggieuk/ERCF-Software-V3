@@ -29,10 +29,11 @@ copy_config_files() {
     for file in `cd ${SRCDIR} ; ls *.cfg`; do
         dest=${KLIPPER_CONFIG_HOME}/${file}
         if test -f $dest; then
-            echo "Config file ${dest} already exists - moving to ${file}.orig"
-            mv ${dest} ${dest}.orig
+            echo "Config file ${dest} already exists - creating ${file}.template"
+	    cp ${SRCDIR}/${file} ${dest}.template
+        else
+	    cp ${SRCDIR}/${file} ${dest}
         fi
-	cp ${SRCDIR}/${file} ${dest}
     done
 }
 
@@ -73,7 +74,7 @@ verify_not_root
 check_klipper
 link_ercf_plugin
 copy_config_files
-# Waiting to validate repo
+# Waiting to validate repo before enabling
 #install_update_manager
 restart_klipper
 
