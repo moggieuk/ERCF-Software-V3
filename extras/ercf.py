@@ -1267,7 +1267,8 @@ class Ercf:
             self._servo_down()
             self._log_debug("Moving the gear and extruder motors in sync for %.1fmm" % self.sync_load_length) 
             delta = self._trace_filament_move("Sync load move", self.sync_load_length, speed=10, motor="both")
-            if delta > 2.0:
+            tolerance = max(self.sync_load_length * 0.3, 4.0) # Allow around 30% of slippage because of possible spring in filament
+            if delta > tolerance:
                 raise ErcfError("Too much slippage detected during the sync load to nozzle")
             length -= (self.sync_load_length - delta)
         elif self.home_to_extruder and self.delay_servo_release > 0:
