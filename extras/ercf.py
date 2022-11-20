@@ -294,6 +294,12 @@ class Ercf:
         self.gcode.register_command('ERCF_RESET_TTG_MAP',
                     self.cmd_ERCF_RESET_TTG_MAP,
                     desc = self.cmd_ERCF_RESET_TTG_MAP_help)
+        self.gcode.register_command('ERCF_CHECK_GATES',
+                    self.cmd_ERCF_CHECK_GATES,
+                    desc = self.cmd_ERCF_CHECK_GATES_help)
+        self.gcode.register_command('ERCF_PRELOAD',
+                    self.cmd_ERCF_PRELOAD,
+                    desc = self.cmd_ERCF_PRELOAD_help)
 
 
     def handle_connect(self):
@@ -407,23 +413,23 @@ class Ercf:
             self._log_info(self._statistics_to_human_string())
 
     def _log_always(self, message):
-        self.gcode.respond_info(message)        
+        self.gcode.respond_info(message)
 
     def _log_info(self, message):
         if self.log_level > 0:
-            self.gcode.respond_info(message)        
+            self.gcode.respond_info(message)
 
     def _log_debug(self, message):
         if self.log_level > 1:
-            self.gcode.respond_info("-- DEBUG: %s" % message)        
+            self.gcode.respond_info("-- DEBUG: %s" % message)
 
     def _log_trace(self, message):
         if self.log_level > 2:
-            self.gcode.respond_info("- --- TRACE: %s" % message)      
+            self.gcode.respond_info("- --- TRACE: %s" % message)
 
     def _log_stepper(self, message):
         if self.log_level > 3:
-            self.gcode.respond_info("- - --- STEPPER: %s" % message)      
+            self.gcode.respond_info("- - --- STEPPER: %s" % message)
 
     # Fun visual display of ERCF state
     def _display_visual_state(self, direction=None):
@@ -1109,19 +1115,22 @@ class Ercf:
             self._track_load_end()
 
     # Load filament past encoder and return the actual measured distance detected by encoder
-    def _load_encoder(self):
+    def _load_encoder(self, retry=True):
         self._servo_down()
         self.filament_direction = self.DIRECTION_LOAD
         initial_encoder_position = self._counter.get_distance()
         delta = self._trace_filament_move("Initial load into encoder", self.LONG_MOVE_THRESHOLD)
         if (self.LONG_MOVE_THRESHOLD - delta) <= 6.0:
-            self._log_always("Error unloading filament - not enough detected at encoder. Retrying...")
-            self._servo_up()
-            self._servo_down()
-            delta = self._trace_filament_move("Retry load into encoder", self.LONG_MOVE_THRESHOLD)
-            if (self.LONG_MOVE_THRESHOLD - delta) <= 6.0:
-                self._set_loaded_status(self.LOADED_STATUS_PARTIAL_BEFORE_ENCODER)
-                raise ErcfError("Error loading filament - not enough movement detected at encoder after retry")
+            if retry:
+                self._log_always("Error unloading filament - not enough detected at encoder. Retrying...")
+                self._servo_up()
+                self._servo_down()
+                delta = self._trace_filament_move("Retry load into encoder", self.LONG_MOVE_THRESHOLD)
+                if (self.LONG_MOVE_THRESHOLD - delta) <= 6.0:
+                    self._set_loaded_status(self.LOADED_STATUS_PARTIAL_BEFORE_ENCODER)
+                    raise ErcfError("Error loading filament - not enough movement detected at encoder after retry")
+            else:
+                raise ErcfError("Error loading filament - not enough movement detected at encoder")
 
         self._set_loaded_status(self.LOADED_STATUS_PARTIAL_PAST_ENCODER)
         return self._counter.get_distance() - initial_encoder_position
@@ -1658,14 +1667,17 @@ class Ercf:
             return
 
         self._log_debug("Selecting tool T%d on gate #%d..." % (tool, self._tool_to_gate(tool)))
+        self._select_gate(self._tool_to_gate(tool))
+        self._set_tool_selected(tool, silent=True)
+        self._log_info("Tool T%d enabled" % tool)
+
+    def _select_gate(self, gate):
         self._servo_up()
-        offset = self.selector_offsets[self._tool_to_gate(tool)]
+        offset = self.selector_offsets[gate]
         if self.sensorless_selector == 1:
             self._move_selector_sensorless(offset)
         else:
             self._selector_stepper_move_wait(offset)
-        self._set_tool_selected(tool, silent=True)
-        self._log_info("Tool T%d enabled" % tool)
 
     def _select_bypass(self):
         if self.tool_selected == self.TOOL_BYPASS: return
@@ -1927,9 +1939,9 @@ class Ercf:
         self._log_info(msg)
 
 
-#####################################
-# RUNOUT AND ENDLESS SPOOL HANDLING #
-#####################################
+###########################################
+# RUNOUT, ENDLESS SPOOL and GATE HANDLING #
+###########################################
 
     def _handle_runout(self):
         if self._check_is_paused(): return
@@ -1951,7 +1963,7 @@ class Ercf:
         # We have a filament runout
         self._log_always("A runout has been detected")
         if self.enable_endless_spool:
-            # Need to capture PA because tip forming will reset it
+            # Need to capture PA just in case user's tip forming resets it
             initial_pa = self.printer.lookup_object("extruder").get_status(0)['pressure_advance']
             group = self.endless_spool_groups[self.tool_selected]
             self._log_info("EndlessSpool checking for additional spools in group %d..." % group)
@@ -2022,7 +2034,7 @@ class Ercf:
         self.tool_to_gate_map[tool] = gate
         self.gate_status[gate] = available
 
-### GOCDE COMMMANDS FOR RUNOUT LOGIC ##################################
+### GOCDE COMMMANDS FOR RUNOUT and GATE LOGIC ##################################
 
     cmd_ERCF_ENCODER_RUNOUT_help = "Encoder runout handler"
     def cmd_ERCF_ENCODER_RUNOUT(self, gcmd):
@@ -2052,6 +2064,63 @@ class Ercf:
             self.gate_status[i] = self.GATE_AVAILABLE
         self._unselect_tool()
         self._log_info(self._tool_to_gate_map_to_human_string())
+
+    cmd_ERCF_CHECK_GATES_help = "Inspects gates and marks availability"
+    def cmd_ERCF_CHECK_GATES(self, gcmd):
+        if self._check_not_homed(): return
+        gate = gcmd.get_int('GATE', -1, minval=0, maxval=len(self.selector_offsets)-1)
+        if gate == -1:
+            gates = range(0, len(self.selector_offsets))
+        else:
+            gates = [gate]
+
+        self._unselect_tool()
+        for i in range(len(gates)):
+            self._select_gate(gates[i])
+            self._counter.reset_counts()    # Encoder 0000
+            try:
+                self._load_encoder(retry=False)
+                self._log_info("Gate #%d - filament detected. Marked available" % i)
+                self.gate_status[i] = self.GATE_AVAILABLE
+                try:
+                    self._unload_encoder(self.unload_buffer)
+                except ErcfError as ee:
+                    self._servo_up()
+                    self._log_always("Failure during gate check: %s" % ee.message)
+                    return
+            except ErcfError as ee:
+                self._log_info("Gate #%d - filament not detected. Marked empty" % i)
+                self.gate_status[i] = self.GATE_EMPTY
+        self._select_tool(0)
+        self._log_info(self._tool_to_gate_map_to_human_string(True))
+
+    cmd_ERCF_PRELOAD_help = "Preloads filament at specified or current gate"
+    def cmd_ERCF_PRELOAD(self, gcmd):
+        if self._check_not_homed(): return
+        if self._check_is_loaded(): return
+        gate = gcmd.get_int('GATE', -1, minval=0, maxval=len(self.selector_offsets)-1)
+        try:
+            # If gate not specified assume current gate
+            if not gate == -1:
+                self._select_gate(gate)
+            self._counter.reset_counts()    # Encoder 0000
+            for i in range(5):
+                try:
+                    encoder_moved = self._load_encoder(retry=False)
+                    # Caught the filament, so now park it in the gate
+                    self._unload_encoder(self.unload_buffer)
+                    self.gate_status[gate] = self.GATE_AVAILABLE
+                    return
+                except ErcfError as ee:
+                    # Exception just means filament is not loaded yet, so continue
+                    pass
+            self.gate_status[i] = self.GATE_EMPTY
+            self._log_always("Filament not detected")
+        except ErcfError as ee:
+            self._log_always("Filamanet preload failed: %s" % ee.message)
+        finally:
+            self._servo_up()
+
 
 def load_config(config):
     return Ercf(config)
