@@ -55,13 +55,15 @@ or you can save your old configuration and then take the supplied `ercf_paramete
 ## Summary of new commands:
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
-  | ERCF_STATUS | Report on ERCF state, cababilities and Tool-to-Gate map | DETAIL=\[0\|1\] Displays TTG map and gate status (automatic if EndlessSpool is  configured) |
+  | ERCF_STATUS | Report on ERCF state, cababilities and Tool-to-Gate map | None |
   | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime | Many. Best to run ERCF_TEST_CONFIG without options to report all parameters that can be specified |
-  | ERCF_DISPLAY_TTG_MAP | Displays the current Tool - to - Gate mapping (can be used all the time but generally designed for EndlessSpool  | DETAIL=\[0\|1\] Whether to also show the gate availability |
+  | ERCF_DISPLAY_TTG_MAP | Displays the current Tool - to - Gate mapping (can be used all the time but generally designed for EndlessSpool  | None |
   | ERCF_REMAP_TTG | Reconfiguration of the Tool - to - Gate (TTG) map.  Can also set gates as empty! | TOOL=\[0..n\] <br>GATE=\[0..n\] Maps specified tool to this gate (multiple tools can point to same gate) <br>AVAILABLE=\[0\|1\]  Marks gate as available or empty |
   | ERCF_SELECT_BYPASS | Unload and select the bypass selector position if configured | None |
   | ERCF_LOAD_BYPASS | Does the extruder loading part of the load sequence - designed for bypass filament loading | None |
   | ERCF_TEST_HOME_TO_EXTRUDER | For calibrating extruder homing - TMC current setting, etc. | RETURN=\[0\|1\] Whether to return the filament to the approximate starting position after homing - good for repeated testing |
+  | ERCF_PRELOAD | Preloads filament at the specified gate| GATE=\[0..n\] The specific gate to preload. If ommitted the currently selected gate can be loaded |
+  | ERCF_CHECK_GATES | Inspect the gate(s) and mark availability | GATE=\[0..n\] The specific gate to check. If ommitted all gates will be checked (the default) |
   
   Note that some existing commands have been enhanced a little.  See the [command reference](#ercf-command-reference) at the end of this page.
   
@@ -135,7 +137,7 @@ When changing a tool with the `Tx` command the ERCF would by default select the 
 
   on a 9-gate ERCF would mark gates 2, 3, 5, 6 & 7 as empty
  
-To view the current mapping you can use either `ERCF_STATUS DETAIL=1` or `ERCF_DISPLAY_TTG_MAP`
+To view the current mapping you can use either `ERCF_STATUS` or `ERCF_DISPLAY_TTG_MAP`
   
 ![ERCF_STATUS](doc/ercf_status.png "ERCF_STATUS")
 
@@ -212,7 +214,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_RESET_STATS | Reset the ERCF statistics | None |
   | ERCF_DUMP_STATS | Dump the ERCF statistics | None |
   | ERCF_SET_LOG_LEVEL | Sets the logging level and turning on/off of visual loading/unloading sequence | LEVEL=\[1..4\] <br>VISUAL=\[0\|1\] Whether to also show visual representation |
-  | ERCF_STATUS | Report on ERCF state, cababilities and Tool-to-Gate map | DETAIL=\[0\|\1] Displays TTG map and gate status (automatic if EndlessSpool is  configured) |
+  | ERCF_STATUS | Report on ERCF state, cababilities and Tool-to-Gate map | None |
   | ERCF_DISPLAY_ENCODER_POS | Displays the current value of the ERCF encoder | None |
   <br>
 
@@ -237,6 +239,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   ## Core ERCF functionality
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
+  | ERCF_PRELOAD | Preloads filament at the specified gate| GATE=\[0..n\] The specific gate to preload. If ommitted the currently selected gate can be loaded |
   | ERCF_UNLOCK | Unlock ERCF operations | None |
   | ERCF_HOME | Home the ERCF selector and optionally selects gate associated with the specified tool | TOOL=\[0..n\] |
   | ERCF_SELECT_TOOL | Selects the gate associated with the specified tool | TOOL=\[0..n\] The tool to be selected (technically the gate associated with this tool will be selected) |
@@ -262,11 +265,12 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime | Many. Best to run ERCF_TEST_CONFIG without options to report all parameters than can be specified |
   <br>
 
-  ## Tool to Gate map  and Endless spool
+  ## Tool to Gate map and Endless spool
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
   | ERCF_ENCODER_RUNOUT | Filament runout handler that will also implement EndlessSpool if enabled | None |
-  | ERCF_DISPLAY_TTG_MAP | Displays the current Tool -> Gate mapping (can be used all the time but generally designed for EndlessSpool  | DETAIL=\[0\|1\] Whether to also show the gate availability |
+  | ERCF_DISPLAY_TTG_MAP | Displays the current Tool -> Gate mapping (can be used all the time but generally designed for EndlessSpool  | None |
   | ERCF_REMAP_TTG | Reconfiguration of the Tool - to - Gate (TTG) map.  Can also set gates as empty! | TOOL=\[0..n\] <br>GATE=\[0..n\] Maps specified tool to this gate (multiple tools can point to same gate) <br>AVAILABLE=\[0\|1\]  Marks gate as available or empty |
   | ERCF_RESET_TTG_MAP | Reset the Tool-to-Gate map back to default | None |
+  | ERCF_CHECK_GATES | Inspect the gate(s) and mark availability | GATE=\[0..n\] The specific gate to check. If ommitted all gates will be checked (the default) |
   
