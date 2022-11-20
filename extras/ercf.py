@@ -2101,7 +2101,9 @@ class Ercf:
         gate = gcmd.get_int('GATE', -1, minval=0, maxval=len(self.selector_offsets)-1)
         try:
             # If gate not specified assume current gate
-            if not gate == -1:
+            if gate == -1:
+                gate = self.gate_selected
+            else:
                 self._select_gate(gate)
             self._counter.reset_counts()    # Encoder 0000
             for i in range(5):
@@ -2113,11 +2115,12 @@ class Ercf:
                     return
                 except ErcfError as ee:
                     # Exception just means filament is not loaded yet, so continue
+                    self._log_debug("Exception on encoder load move: %s" % ee.message)
                     pass
-            self.gate_status[i] = self.GATE_EMPTY
-            self._log_always("Filament not detected")
+            self.gate_status[gate] = self.GATE_EMPTY
+            self._log_always("Filament not detected in gate #%d" % gate)
         except ErcfError as ee:
-            self._log_always("Filamanet preload failed: %s" % ee.message)
+            self._log_always("Filament preload for gate #%d failed: %s" % (gate, ee.message))
         finally:
             self._servo_up()
 
