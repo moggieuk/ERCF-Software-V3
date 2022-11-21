@@ -32,22 +32,25 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 <li>Renewed load and unload sequences (to support all build configurations) and effectively combine the sensor and sensorless logic
 </ul>
  
+<br>
 ## Installation
-The module can be installed into a existing Klipper installation with an install script. If existing ercf*.cfg files are found the new versions will be copied with .template extension
+The module can be installed into a existing Klipper installation with the install script.
 
     cd ~
     git clone https://github.com/moggieuk/ERCF-Software-V3.git
     cd ERCF-Software-V3
-    ./install.sh
+
+    ./install.sh -i
 
 <br>
-or you can save your old configuration and then take the supplied `ercf_parameters.cfg` and `ercf_hardware.cfg` files as a starting point and edit back your known settings.  Then replace ercf.py in the Klipper extras folder and restart Klipper. 
-<br>
+The `-i` option will bring up some interactive prompts to aid setting some confusing parameters on EASY-BRD (like sensorless selector homing setup). If not run with the `-i` flag the new template .cfg files will not be installed.  Note that if existing ercf*.cfg files are found the old versions will be moved to <file>.00 extension instead so as not to overwrite an existing configuration.  If you still choose not to install the new ercf*.cfg files automatically be sure to examine them closely and compare to the supplied templates - some options have changed!
 
+<br>
 ## Revision History
 <ul>
 <li> v1.0.0 - Initial Release
 <li> v1.0.3 - Bug fixes from community: Better logging on toolchange (for manual recovery); Advanced config parameters for adjust tolerance used in 'apply_bowden_correction' move; Fixed a couple of silly (non serious) bugs
+<li> v1.1.0 - New commands: ERCF_PRELOAD & ERCF_CHECK_GATES ; Automatic setting of clog detection distance in calibration routine ; Eliminated DETAIL flags for status reporting (detail always present); New interactive install script to help EASY-BRD setup; Bug fixes
 </ul>
 
 <br>
