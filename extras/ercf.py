@@ -2,7 +2,7 @@
 #
 # Copyright (C) 2021  Ette
 #
-# Major rewrite and feature updates 2022  moggieuk#6538 (discord)
+# Major rewrite and feature updates Nov 2022  moggieuk#6538 (discord)
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
@@ -228,18 +228,18 @@ class Ercf:
                     desc=self.cmd_ERCF_BUZZ_GEAR_MOTOR_help)
 
 	# Core ERCF functionality
-        self.gcode.register_command('ERCF_UNLOCK',
-                    self.cmd_ERCF_UNLOCK,
-                    desc = self.cmd_ERCF_UNLOCK_help)
         self.gcode.register_command('ERCF_HOME',
                     self.cmd_ERCF_HOME,
                     desc = self.cmd_ERCF_HOME_help)
         self.gcode.register_command('ERCF_SELECT_TOOL',
                     self.cmd_ERCF_SELECT_TOOL,
-                    desc = self.cmd_ERCF_SELECT_TOOL_help)    
+                    desc = self.cmd_ERCF_SELECT_TOOL_help)
+        self.gcode.register_command('ERCF_PRELOAD',
+                    self.cmd_ERCF_PRELOAD,
+                    desc = self.cmd_ERCF_PRELOAD_help)
         self.gcode.register_command('ERCF_SELECT_BYPASS',
                     self.cmd_ERCF_SELECT_BYPASS,
-                    desc = self.cmd_ERCF_SELECT_BYPASS_help)    
+                    desc = self.cmd_ERCF_SELECT_BYPASS_help)
         self.gcode.register_command('ERCF_LOAD_BYPASS',
                     self.cmd_ERCF_LOAD_BYPASS,
                     desc=self.cmd_ERCF_LOAD_BYPASS_help)
@@ -249,6 +249,9 @@ class Ercf:
         self.gcode.register_command('ERCF_EJECT',
                     self.cmd_ERCF_EJECT,
                     desc = self.cmd_ERCF_EJECT_help)
+        self.gcode.register_command('ERCF_UNLOCK',
+                    self.cmd_ERCF_UNLOCK,
+                    desc = self.cmd_ERCF_UNLOCK_help)
         self.gcode.register_command('ERCF_PAUSE',
                     self.cmd_ERCF_PAUSE,
                     desc = self.cmd_ERCF_PAUSE_help)
@@ -256,7 +259,7 @@ class Ercf:
 	# User Testing
         self.gcode.register_command('ERCF_TEST_GRIP', 
                     self.cmd_ERCF_TEST_GRIP,
-                    desc = self.cmd_ERCF_TEST_GRIP_help)      
+                    desc = self.cmd_ERCF_TEST_GRIP_help)
         self.gcode.register_command('ERCF_TEST_SERVO',
                     self.cmd_ERCF_TEST_SERVO,
                     desc = self.cmd_ERCF_TEST_SERVO_help)                          
@@ -271,7 +274,7 @@ class Ercf:
                     desc=self.cmd_ERCF_TEST_LOAD_help)
         self.gcode.register_command('ERCF_LOAD',
                     self.cmd_ERCF_TEST_LOAD,
-                    desc=self.cmd_ERCF_TEST_LOAD_help) # For backwards compatability
+                    desc=self.cmd_ERCF_TEST_LOAD_help) # For backwards compatability because it's mentioned in manual, but prefer to remove
         self.gcode.register_command('ERCF_TEST_UNLOAD',
                     self.cmd_ERCF_TEST_UNLOAD,
                     desc=self.cmd_ERCF_TEST_UNLOAD_help)
@@ -298,9 +301,6 @@ class Ercf:
         self.gcode.register_command('ERCF_CHECK_GATES',
                     self.cmd_ERCF_CHECK_GATES,
                     desc = self.cmd_ERCF_CHECK_GATES_help)
-        self.gcode.register_command('ERCF_PRELOAD',
-                    self.cmd_ERCF_PRELOAD,
-                    desc = self.cmd_ERCF_PRELOAD_help)
 
 
     def handle_connect(self):
@@ -322,6 +322,9 @@ class Ercf:
             self.toolhead_sensor = self.printer.lookup_object("filament_switch_sensor toolhead_sensor")
         except:
             self.toolhead_sensor = None
+            if not self.home_to_extruder:
+                self.home_to_extruder = 1
+                self._log_debug("No toolhead sensor detected, forcing home_to_extruder")
 
         # Get endstops
         self.query_endstops = self.printer.lookup_object('query_endstops')
@@ -351,15 +354,16 @@ class Ercf:
         # Override motion sensor runout detection_length based on calibration
         self.encoder_sensor.detection_length = self._get_calibration_clog_length()
 
-
-    def get_status(self, eventtime):
-        encoder_pos = float(self._counter.get_distance())
-        return {'encoder_pos': encoder_pos, 'is_paused': self.is_paused, 'tool': self.tool_selected, 'gate': self.gate_selected, 'clog_detection': self.enable_clog_detection}
+        self._log_always('(\_/)\n( *,*)\n(")_(") ERCF Ready\n')
 
 
 ####################################
 # LOGGING AND STATISTICS FUNCTIONS #
 ####################################
+
+    def get_status(self, eventtime):
+        encoder_pos = float(self._counter.get_distance())
+        return {'encoder_pos': encoder_pos, 'is_paused': self.is_paused, 'tool': self.tool_selected, 'gate': self.gate_selected, 'clog_detection': self.enable_clog_detection}
 
     def _reset_statistics(self):
         self.total_swaps = 0
@@ -521,7 +525,6 @@ class Ercf:
                 msg += " and then"
         msg += " to TOOLHEAD SENSOR" if self.toolhead_sensor != None else ""
         msg += " after a %.1fmm calibration reference length" % self._get_calibration_ref()
-        msg += "\nSelector homing is %s. Blocked gate detection and recovery %s possible" % (("sensorless", "may be") if self.sensorless_selector else ("microswitch", "is not"))
         msg += "\nGear and Extruder steppers are synchronized during "
         load = False
         if self.toolhead_sensor != None and self.sync_load_length > 0:
@@ -533,8 +536,9 @@ class Ercf:
         if self.sync_unload_length > 0:
             msg += " and " if load else ""
             msg += "unload (%.1fmm)" % (self.sync_unload_length)
+        msg += "\nSelector homing is %s - blocked gate detection and recovery %s possible" % (("sensorless", "may be") if self.sensorless_selector else ("microswitch", "is not"))
         msg += "\nClog detection is %s" % ("ENABLED" if self.enable_clog_detection else "DISABLED")
-        msg += " and EndlessSpool is ENABLED" if self.enable_endless_spool else ""
+        msg += " and EndlessSpool is %s" % ("ENABLED" if self.enable_endless_spool else "DISABLED")
         log = "ESSENTIAL MESSAGES"
         if self.log_level > 3:
             log = "STEPPER"
@@ -942,7 +946,7 @@ class Ercf:
         status = self.printer.lookup_object("idle_timeout").get_status(self.printer.get_reactor().monotonic())
         if self.printer.lookup_object("pause_resume").is_paused:
             status["state"] = "Paused"
-        return status["state"] == "Printing" and status["printing_time"] > 3.0
+        return status["state"] == "Printing" and status["printing_time"] > 2.0
 
     def _set_above_min_temp(self):
         if not self.printer.lookup_object("extruder").heater.can_extrude :
@@ -968,7 +972,7 @@ class Ercf:
         elif self.gate_selected == self.GATE_UNKNOWN:
             return "unknown"
         else:
-            return "#%d" % self.tool_selected
+            return "#%d" % self.gate_selected
 
 
 ####################################################################################
@@ -1930,6 +1934,7 @@ class Ercf:
         self.unload_bowden_tolerance = gcmd.get_float('UNLOAD_BOWDEN_TOLERANCE', self.unload_bowden_tolerance, minval=1., maxval=50.)
         self.home_position_to_nozzle = gcmd.get_float('HOME_POSITION_TO_NOZZLE', self.home_position_to_nozzle, minval=25.)
         self.variables['ercf_calib_ref'] = gcmd.get_float('ERCF_CALIB_REF', self.variables['ercf_calib_ref'], minval=10.)
+        self.variables['ercf_calib_clog_length'] = gcmd.get_float('ERCF_CALIB_CLOG_LENGTH', self.variables['ercf_calib_clog_length'], minval=1., maxval=50.)
         msg = "long_moves_speed = %.1f" % self.long_moves_speed
         msg += "\nshort_moves_speed = %.1f" % self.short_moves_speed
         msg += "\nhome_to_extruder = %d" % self.home_to_extruder
@@ -1947,6 +1952,7 @@ class Ercf:
         msg += "\nunload_bowden_tolerance = %d" % self.unload_bowden_tolerance
         msg += "\nhome_position_to_nozzle = %.1f" % self.home_position_to_nozzle
         msg += "\nercf_calib_ref = %.1f" % self.variables['ercf_calib_ref']
+        msg += "\nercf_calib_clog_length = %.1f" % self.variables['ercf_calib_clog_length']
         self._log_info(msg)
 
 
