@@ -826,7 +826,7 @@ class Ercf:
         try:
             self.calibrating = True
             self._servo_up()
-            move_length = 15. + tool*21 + (tool//3)*5 + (self.bypass_offset > 0)
+            move_length = 10. + tool*21 + (tool//3)*5 + (self.bypass_offset > 0)
             self._log_always("Measuring the selector position for tool %d" % tool)
             self.selector_stepper.do_set_position(0.)
             init_position = self.selector_stepper.steppers[0].get_mcu_position()
