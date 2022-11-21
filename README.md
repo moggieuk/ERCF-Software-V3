@@ -33,6 +33,7 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 </ul>
  
 <br>
+  
 ## Installation
 The module can be installed into a existing Klipper installation with the install script.
 
@@ -46,6 +47,7 @@ The module can be installed into a existing Klipper installation with the instal
 The `-i` option will bring up some interactive prompts to aid setting some confusing parameters on EASY-BRD (like sensorless selector homing setup). If not run with the `-i` flag the new template .cfg files will not be installed.  Note that if existing ercf*.cfg files are found the old versions will be moved to <file>.00 extension instead so as not to overwrite an existing configuration.  If you still choose not to install the new ercf*.cfg files automatically be sure to examine them closely and compare to the supplied templates - some options have changed!
 
 <br>
+  
 ## Revision History
 <ul>
 <li> v1.0.0 - Initial Release
