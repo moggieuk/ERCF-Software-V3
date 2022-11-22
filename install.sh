@@ -130,7 +130,7 @@ if [ "${INSTALL_TEMPLATES}" -eq 1 ]; then
             echo
             case $yn in
                 y)
-	            echo "IMPORTANT: Set the J6 jumper pins to 1-2 and 3-4, i.e. [..][..].  MAKE A NOTE NOW!!"
+	            echo "IMPORTANT: Set the J6 jumper pins to 2-3 and 4-5, i.e. .[..][..]  MAKE A NOTE NOW!!"
 	            sensorless_selector=1
                     ;;
                 n)
@@ -165,6 +165,7 @@ if [ "${INSTALL_TEMPLATES}" -eq 1 ]; then
 	    echo " What still needs to be done:"
 	    echo " * Find and set your serial_id for EASY-BRD mcu"
 	    echo " * Adjust motor speeds and current if using NEMA 17 motors"
+	    echo " * Adjust motor direction with ! on pin if necessary"
 	    echo " * Adjust your config for loading and unloading preferences"
 	    echo " * Adjust distances (bowden length & extruder) for you particular setup"
 	    echo 

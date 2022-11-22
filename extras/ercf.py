@@ -82,6 +82,8 @@ class Ercf:
         self.printer = config.get_printer()
         self.reactor = self.printer.get_reactor()
         self.printer.register_event_handler("klippy:connect", self.handle_connect)
+        self.printer.register_event_handler("klippy:ready", self.handle_ready)
+        self.printer.register_event_handler("klippy:shutdown", self.handle_shutdown)
 
         # Manual steppers
         self.selector_stepper = self.gear_stepper = None
@@ -354,8 +356,13 @@ class Ercf:
         # Override motion sensor runout detection_length based on calibration
         self.encoder_sensor.detection_length = self._get_calibration_clog_length()
 
+    def handle_ready(self):
+        # Welcome message (before klipper)
         self._log_always('(\_/)\n( *,*)\n(")_(") ERCF Ready\n')
+        self._servo_up()
 
+    def handle_shutdown(self):
+        self._servo_up()
 
 ####################################
 # LOGGING AND STATISTICS FUNCTIONS #
@@ -507,6 +514,7 @@ class Ercf:
 
     cmd_ERCF_STATUS_help = "Complete dump of current ERCF state and important configuration"
     def cmd_ERCF_STATUS(self, gcmd):
+        config = gcmd.get_int('SHOWCONFIG', 1, minval=0, maxval=1)
         msg = "ERCF with %d gates" % (len(self.selector_offsets))
         msg += " is %s" % ("PAUSED/LOCKED" if self.is_paused else "OPERATIONAL")
         msg += " with the servo in a %s position" % ("UP" if self.servo_state == self.SERVO_UP_STATE else "DOWN" if self.servo_state == self.SERVO_DOWN_STATE else "unknown")
@@ -515,42 +523,43 @@ class Ercf:
         msg += " on gate %s" % self._selected_gate_string()
         msg += "\nFilament position: %s" % self._state_to_human_string()
         
-        msg += "\n\nConfiguration:\nFilament homes "
-        if self.home_to_extruder:
-            if self.homing_method == self.EXTRUDER_COLLISION:
-                msg += "to EXTRUDER using COLLISION DETECTION (current %d%%)" % self.extruder_homing_current
-            else:
-                msg += "to EXTRUDER using STALLGUARD"
-            if self.toolhead_sensor != None:
-                msg += " and then"
-        msg += " to TOOLHEAD SENSOR" if self.toolhead_sensor != None else ""
-        msg += " after a %.1fmm calibration reference length" % self._get_calibration_ref()
-        msg += "\nGear and Extruder steppers are synchronized during "
-        load = False
-        if self.toolhead_sensor != None and self.sync_load_length > 0:
-            msg += "load (up to %.1fmm)" % (self.toolhead_homing_max)
-            load = True
-        elif self.sync_load_length > 0:
-            msg += "load (%.1fmm)" % (self.sync_load_length)
-            load = True
-        if self.sync_unload_length > 0:
-            msg += " and " if load else ""
-            msg += "unload (%.1fmm)" % (self.sync_unload_length)
-        msg += "\nSelector homing is %s - blocked gate detection and recovery %s possible" % (("sensorless", "may be") if self.sensorless_selector else ("microswitch", "is not"))
-        msg += "\nClog detection is %s" % ("ENABLED" if self.enable_clog_detection else "DISABLED")
-        msg += " and EndlessSpool is %s" % ("ENABLED" if self.enable_endless_spool else "DISABLED")
-        log = "ESSENTIAL MESSAGES"
-        if self.log_level > 3:
-            log = "STEPPER"
-        elif self.log_level > 2:
-            log = "TRACE"
-        elif self.log_level > 1:
-            log = "DEBUG"
-        elif self.log_level > 0:
-            log = "INFO"
-        msg += "\nLogging level is %d (%s)" % (self.log_level, log)
-        msg += "%s" % " and statistics are being logged" if self.log_statistics else ""
-        msg += "\n\nTool/gate mapping and EndlessSpool groups:"
+        if config:
+            msg += "\n\nConfiguration:\nFilament homes "
+            if self.home_to_extruder:
+                if self.homing_method == self.EXTRUDER_COLLISION:
+                    msg += "to EXTRUDER using COLLISION DETECTION (current %d%%)" % self.extruder_homing_current
+                else:
+                    msg += "to EXTRUDER using STALLGUARD"
+                if self.toolhead_sensor != None:
+                    msg += " and then"
+            msg += " to TOOLHEAD SENSOR" if self.toolhead_sensor != None else ""
+            msg += " after a %.1fmm calibration reference length" % self._get_calibration_ref()
+            msg += "\nGear and Extruder steppers are synchronized during "
+            load = False
+            if self.toolhead_sensor != None and self.sync_load_length > 0:
+                msg += "load (up to %.1fmm)" % (self.toolhead_homing_max)
+                load = True
+            elif self.sync_load_length > 0:
+                msg += "load (%.1fmm)" % (self.sync_load_length)
+                load = True
+            if self.sync_unload_length > 0:
+                msg += " and " if load else ""
+                msg += "unload (%.1fmm)" % (self.sync_unload_length)
+            msg += "\nSelector homing is %s - blocked gate detection and recovery %s possible" % (("sensorless", "may be") if self.sensorless_selector else ("microswitch", "is not"))
+            msg += "\nClog detection is %s" % ("ENABLED" if self.enable_clog_detection else "DISABLED")
+            msg += " and EndlessSpool is %s" % ("ENABLED" if self.enable_endless_spool else "DISABLED")
+            log = "ESSENTIAL MESSAGES"
+            if self.log_level > 3:
+                log = "STEPPER"
+            elif self.log_level > 2:
+                log = "TRACE"
+            elif self.log_level > 1:
+                log = "DEBUG"
+            elif self.log_level > 0:
+                log = "INFO"
+            msg += "\nLogging level is %d (%s)" % (self.log_level, log)
+            msg += "%s" % " and statistics are being logged" if self.log_statistics else ""
+        msg += "\n\nTool/gate mapping%s" % (" and EndlessSpool groups:" if self.enable_endless_spool else ":")
         msg += "\n%s" % self._tool_to_gate_map_to_human_string()
         msg += "\n\n%s" % self._statistics_to_human_string()
         self._log_always(msg)
