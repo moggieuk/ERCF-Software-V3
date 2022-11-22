@@ -1,4 +1,4 @@
-# Notes on building the best ERCF encoder (the heart of ERCF)
+# Notes on building the best heart for ERCF - the Encoder
 The encoder in the ERCF is one of the most vital components and has to work correctly. It is used to measure the length of filament that moves through ERCF for loading and unloading and optionally is used as a filament runout sensor for clog detection and Endless Spool functionality.  Whilst it doesn't have to be mm accurate, it does need to be approximately correct and consistent.  Whilst this has always been true it is even more important if you opt not to use a toolhead sensor. If the encoder is not the best it can be it will cause you will encounter all sorts of problems that will lead you to chase things that aren't really problems at all, and you will undoubtedly become an ENRAGED rabbit :-)
 
 I've spent a little more time than I should have on this component and wanted to pull all my findings into one place.
@@ -20,7 +20,7 @@ Ok, with that context out of the way let's look at the possible problems.  One o
 
 <img src="gear_differences.jpg" width="800" alt="BMG gear differences">
 
-Both are clones, but the one on the left is a more expensive and clearly a more accurately machined gear whilst the one on the right is a cheap clone (which I received with a ERCF kit of parts .. I won't mention their name because I know their sourcing changes over time).  The left (higher quality) has much smoother meshing of gears, a smooth surface and well formed filament gripping teeth. The one on the right is different in all respects!  The other slight variation is in the actual dimensions of the gears - more on than later.
+Both are clones, but the one on the left is a more expensive and clearly a more accurately machined gear whilst the one on the right is a cheap clone which I received with a ERCF kit of parts .. I won't mention their name because I know their sourcing changes over time.  The left (higher quality) has much smoother meshing of gears (much better for filament gates too, but that's another story), a smooth surface and well formed filament gripping teeth. The one on the right is different in all respects!  The other slight variation is in the actual dimensions of the gears - more on than later.
 
 ### Optical sensor not getting reliable reflections
 Firstly it is important to stress the need to adjust the height of the sensor from the gear wheel regardless.  Ette has created an adjustment screw with the latest STL's and if you are using a high quality gear and adjust correctly that might be all you need -- clearly many have success with just this.
