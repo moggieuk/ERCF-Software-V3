@@ -25,7 +25,7 @@ Both are clones, but the one on the left is a more expensive and clearly a more 
 ### Optical sensor not getting reliable reflections
 Firstly it is important to stress the need to adjust the height of the sensor from the gear wheel regardless.  Ette has created an adjustment screw with the latest STL's and if you are using a high quality gear and adjust correctly that might be all you need -- clearly many have success with just this.
 
-I proposed a method of improving the reliability of reflections by blacking surfaces that could be creating additional unwanted reflections with the following modification, previously posted on discord:
+I proposed a method of improving the reliability of reflections by blacking surfaces that could be creating additional unwanted reflections with the following modification, previously posted on discord (https://discord.com/channels/460117602945990666/909743915475816458/1023873076095615036):
 
 <img src="blackened_gear.jpg"  width="800" alt="Blackended gear">
     

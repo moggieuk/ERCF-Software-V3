@@ -193,7 +193,7 @@ If you have installed the optional filament bypass block your can configure its 
 
 ### Some setup notes based on my learnings:
 <ul>
-  <li>Firstly the importance of a reliable and fairly accurate encoder should not be under estimated. If you cannot get very reliable results from `ERCF_CALIBRATE_ENCODER` then don't proceed with setup - address the encoder problem first. Note that I had really good luck with this https://discord.com/channels/460117602945990666/909743915475816458/1023873076095615036 approach of blackening the encoder wheel and then adjusting the sensor is little *further* away from the gear.
+  <li>Firstly the importance of a reliable and fairly accurate encoder should not be under estimated. If you cannot get very reliable results from `ERCF_CALIBRATE_ENCODER` then don't proceed with setup - address the encoder problem first. Because the encoder is the HEART of ERCF I [created a how-to](/doc/ENCODER.md) on fixing many possible problems with encoder.
   <li>If using a toolhead sensor, that must be reliable too.  The hall effect based switch is very awkward to get right because of so many variables: strength of magnet, amount of iron in washer, even temperature, therefore I strongly recommend a simple microswitch based detection.  They work first time, every time.
   <li>The longer the bowden length the more important it is to calibrate correctly (do a couple of times to check for consistency).  Small errors multiply with longer moves!
   <li>Eliminate all points of friction in the filament path.  There is lots written about this already but I found some unusual places where filament was rubbing on plastic and drilling out the path improved things a good deal.
