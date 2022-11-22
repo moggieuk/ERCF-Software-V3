@@ -49,7 +49,7 @@ The correct fix will be through a pull request to alter the encoder STL, but as 
 
 This ensures the gear does not bind when tightened but also allows for sligth side to side movement so that the gear can align naturally with the filament path.
 
-Here is a reworked [Encoder_Cart_Right.stl](/doc/Encoder_Cart_Right_0_6mm.stl) for the right side of the encoder. This simply makes the gear cutout 0.6mm deeper. This gives the gear room to float and to align perfectly with the filament path.  If you want to offset the gear but feel the gear is too loose you can always had a plain metal washer in the left side part.
+Here is a reworked [Encoder_Cart_Right.stl](Encoder_Cart_Right_0_6mm.stl) for the right side of the encoder. This simply makes the gear cutout 0.6mm deeper. This gives the gear room to float and to align perfectly with the filament path.  If you want to offset the gear but feel the gear is too loose you can always had a plain metal washer in the left side part.
 
 ### Friction in filament path
 Whilst not an encoder problem per se I think it is worth mentioning.  Slippage will occur in the gear motor if the drag on the filament is too great.  Remember the first step of calibrating the 'rotation_distance' for the gear stepper?  You have to be sure that the gear is moving the correct amount of filament when testing and calibrating the encoder else you won't be sure if it is filamenet slippage or the encoder causing the problem.
