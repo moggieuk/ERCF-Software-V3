@@ -51,9 +51,15 @@ This ensures the gear does not bind when tightened but also allows for sligth si
 
 Here is a reworked [Encoder_Cart_Right.stl](/doc/Encoder_Cart_Right_0_6mm.stl) for the right side of the encoder. This simply makes the gear cutout 0.6mm deeper. This gives the gear room to float and to align perfectly with the filament path.  If you want to offset the gear but feel the gear is too loose you can always had a plain metal washer in the left side part.
 
-With careful attention you should be able to get accurate encoder readings. I usually get a standard deviation of 0 when running `ERCF_CALIBRATE_ENCODER`
+### Friction in filament path
+Whilst not an encoder problem per se I think it is worth mentioning.  Slippage will occur in the gear motor if the drag on the filament is too great.  Remember the first step of calibrating the 'rotation_distance' for the gear stepper?  You have to be sure that the gear is moving the correct amount of filament when testing and calibrating the encoder else you won't be sure if it is filamenet slippage or the encoder causing the problem.
+
+### To sum up
+I was experiementing with a (larger) encoder wheel believing the current design couldn't get the accuracy I wanted.  That was a mistake. With careful attention to detail you should be able to get accurate encoder readings. I usually get a standard deviation of 0 when running `ERCF_CALIBRATE_ENCODER`
+<br>
 
 <img src="calibrate_sd0.png"  width="500" alt="Reilable calibration">
+
 
     (\_/)
     ( *,*)
