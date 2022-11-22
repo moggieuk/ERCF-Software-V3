@@ -21,7 +21,7 @@ This is why the sequence to calibrate is in this order:
 Ok, with that context out of the way let's look at the possible problems.  One of the biggest issues is the differences in the many BMG gear clones that are available on AliExpress or elsewhere. Take a look at these two example gears:
 
 <br>
-<img src="doc/gear_differences.jpg" alt="BMG gear differences">
+<img src="gear_differences.jpg" width="800" alt="BMG gear differences">
 
 <br>
 Both are clones, but the one on the left is a more expensive and clearly a more accurately machined gear whilst the one on the right is a cheap clone (which I received with a ERCF kit of parts .. I won't mention their name because I know their sourcing changes over time).  The left (higher quality) has much smoother meshing of gears, a smooth surface and well formed filament gripping teeth. The one on the right is different in all respects!  The other slight variation is in the actual dimensions of the gears - more on than later.
@@ -33,7 +33,7 @@ Firstly it is important to stress the need to adjust the height of the sensor fr
 I proposed a method of improving the reliability of reflections by blacking surfaces that could be creating additional unwanted reflections with the following modification, previously posted on discord:
 
 <br>
-<img src="doc/blackened_gear.jpg" alt="Blackended gear">
+<img src="blackened_gear.jpg"  width="800" alt="Blackended gear">
 Blacken the gear with a couple of applications of black felt tip pen or matt black paint, then when dry, polish of the tops of the gear with 2000 grit sandpaper - this can be done by hand but attaching to a drill and spinning is faster.   Make sure that **all** gear tops are shiny!
 <br>
 By blackening the gear troughs and polishing the top surfaces of the gears you are establishing a consistent set of surfaces for reflections. This method works well when the adjustment of the sensor is HIGHER than originally intended i.e. further away from gear.  This is because if it is too close the plastic separator between the IR led and phototransistor will impede reflections.
@@ -42,10 +42,10 @@ By blackening the gear troughs and polishing the top surfaces of the gears you a
 It has been pointed out to me that blacking the tips of the teeth and leaving the troughs to reflect would also work and maybe even more reliable with the sensor adjusted **close** to the gear wheel.  I have not verified this combination but it is logical.
 
 ### Offset filament cutout on cloned BMG gears
-I have noticed that gears differ slightly in the location of the filament cutout.  You can see from the picture where mine sits relative to the filamenet path.  Whilst a little misalignment may be ok, if it is not centered the filament will cause sideways pressure on the gear wheel causing it to rub against one side of encoder housing and that friction can cause misreading through binding.
+I have noticed that gears differ slightly in the location of the filament cutout.  You can see from the picture where mine sits relative to the filament path.  Whilst a little misalignment may be ok, if it is not centered the filament will cause sideways pressure on the gear wheel causing it to rub against one side of encoder housing and that friction can cause misreading through binding.
 
 <br>
-<img src="doc/offset_filament_path.jpg" alt="Offset filament path">
+<img src="offset_filament_path.jpg"  width="800" alt="Offset filament path">
 
 ### Gear wheel in encoder getting pinched and binding
 This one, if you experience it, is significant.  I belive that there is insufficient tolerance in the cutout for the gear idler and many gears bind in place when the encoder is screwed together.  This tight fit also exacerbate the misalignment of cutout described above because the gear cannot center on its own.
@@ -53,7 +53,7 @@ This one, if you experience it, is significant.  I belive that there is insuffic
 <br>
 The correct fit will be through a pull request to alter the encoder STL, but as a short term solution, I added 0.8mm of extra clearance on the right encoder half as illustrated here:
 
-<img src="doc/encoder_right_side.png" width="400" alt="Encoder right side">
+<img src="encoder_right_side.png" width="500" alt="Encoder right side">
 
 <br>
 This ensures the gear does not bind when tightened but also allows for sligth side to side movement so that the gear can align naturally with the filament path.
@@ -67,9 +67,8 @@ TODO -- add STL
 With careful attention you should be able to get accurate encoder readings. I often get a standard deviation of 0 when running `ERCF_CALIBRATE_ENCODER`
 
 
-<img src="doc/calibrate_sd0.png" alt="Reilable calibration">
+<img src="calibrate_sd0.png"  width="500" alt="Reilable calibration">
 
-<br>
     (\_/)
     ( *,*)
     (")_(") ERCF Ready
