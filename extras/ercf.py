@@ -82,7 +82,6 @@ class Ercf:
         self.printer = config.get_printer()
         self.reactor = self.printer.get_reactor()
         self.printer.register_event_handler("klippy:connect", self.handle_connect)
-        self.printer.register_event_handler("klippy:ready", self.handle_ready)
 
         # Manual steppers
         self.selector_stepper = self.gear_stepper = None
@@ -107,8 +106,8 @@ class Ercf:
         self.extra_servo_dwell_up = config.getint('extra_servo_dwell_up', 0)
         self.num_moves = config.getint('num_moves', 2, minval=1)
         self.apply_bowden_correction = config.getint('apply_bowden_correction', 1, minval=0, maxval=1)
-        self.load_bowden_tolerance = config.getfloat('load_bowden_tolerance', 4., minval=1., maxval=50.)
-        self.unload_bowden_tolerance = config.getfloat('unload_bowden_tolerance', 4., minval=1., maxval=50.)
+        self.load_bowden_tolerance = config.getfloat('load_bowden_tolerance', 8., minval=1., maxval=50.)
+        self.unload_bowden_tolerance = config.getfloat('unload_bowden_tolerance', 8., minval=1., maxval=50.)
         self.parking_distance = config.getfloat('parking_distance', 23., above=15., below=30.)
         self.encoder_move_step_size = config.getfloat('encoder_move_step_size', 15., above=5., below=25.)
         self.selector_offsets = config.getfloatlist('colorselector')
@@ -349,14 +348,14 @@ class Ercf:
 
         self.ref_step_dist=self.gear_stepper.steppers[0].get_step_dist()
         self.variables = self.printer.lookup_object('save_variables').allVariables
-        self.printer.register_event_handler("klippy:ready", self._setup_heater_off_reactor)
+        self.printer.register_event_handler("klippy:ready", self.handle_ready)
         self._reset_statistics()
 
         # Override motion sensor runout detection_length based on calibration
         self.encoder_sensor.detection_length = self._get_calibration_clog_length()
 
     def handle_ready(self):
-        # Welcome message (before klipper)
+        self._setup_heater_off_reactor()
         self._log_always('(\_/)\n( *,*)\n(")_(") ERCF Ready\n')
 
 
@@ -1024,6 +1023,7 @@ class Ercf:
 
         end = self._counter.get_distance()
         measured = end - start
+        # delta: +ve means measured less than moved, -ve means measured more than moved
         delta = abs(distance) - measured
         trace_str += ". Counter: @%.1fmm" % end
         self._log_trace(trace_str % (distance, measured, delta))
@@ -1161,10 +1161,12 @@ class Ercf:
         tolerance = self.load_bowden_tolerance
         self.filament_direction = self.DIRECTION_LOAD
         self._servo_down()
+
+        # Fast load
         moves = 1 if length < (self._get_calibration_ref() / self.num_moves) else self.num_moves
         delta = 0
         for i in range(moves):
-            msg = "Course load move #%d into bowden" % (i+1)
+            msg = "Course loading move #%d into bowden" % (i+1)
             delta += self._trace_filament_move(msg, length / moves)
             if i < moves:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
@@ -1178,9 +1180,9 @@ class Ercf:
                     self._log_debug("Correction load move was necessary, encoder now measures %.1fmm" % self._counter.get_distance())
                 else:
                     break
-                if delta >= tolerance:
-                    self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
-                    raise ErcfError("Too much slippage detected during the load of bowden. Possible causes:\nCalibration ref length is too long\nERCF gears are not properly gripping filament\nEncoder reading is inaccurate\nFaulty servo")
+            if delta > tolerance:
+                self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
+                raise ErcfError("Too much slippage (%.1fmm) detected during the load of bowden. Possible causes:\nCalibration ref length is too long\nERCF gears are not properly gripping filament\nEncoder reading is inaccurate\nFaulty servo" % delta)
         else:
             if delta >= tolerance:
                 self._log_info("Warning: Excess slippage was detected in bowden tube load but 'apply_bowden_correction' is disabled. Moved %.1fmm, Encoder delta %.1fmm" % (length, delta))
@@ -1222,7 +1224,7 @@ class Ercf:
                 # Not enough measured movement means we've hit the extruder
                 homed = True
                 break
-        self._log_debug("Extruder %s found after %.1fmm move (%d steps), encoder measured %.1fmm (delta %.1fmm)"
+        self._log_debug("Extruder %s found after %.1fmm move (%d steps), encoder measured %.1fmm (total_delta %.1fmm)"
                 % ("not" if not homed else "", step*(i+1), i+1, measured_movement, total_delta))
         if self.tmc and self.extruder_homing_current < 100:
             self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=gear_stepper CURRENT=%.1f" % gear_stepper_run_current)
@@ -1471,7 +1473,6 @@ class Ercf:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
                 raise ErcfError("Too much slippage (%.1fmm) detected during the sync unload from extruder" % delta)
             length -= (initial_move - delta)
-
         
         # Continue fast unload
         moves = 1 if length < (self._get_calibration_ref() / self.num_moves) else self.num_moves
@@ -1493,7 +1494,7 @@ class Ercf:
                     break
             if delta > tolerance:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
-                raise ErcfError("Too much slippage detected during the unload")
+                raise ErcfError("Too much slippage (%.1fmm) detected during the unload from bowden" % delta)
         else:
             if delta >= tolerance:
                 self._log_info("Warning: Excess slippage was detected in bowden tube unload but 'apply_bowden_correction' is disabled. Moved %.1fmm, Encoder delta %.1fmm" % (length, delta))
@@ -1599,7 +1600,7 @@ class Ercf:
                 if not found:
                     # Try to engage filament to the encoder
                     delta = self._trace_filament_move("Trying to re-enguage encoder", 45.)
-                    if delta == 45.:
+                    if delta == 45.:    # No movement
                         # Could not reach encoder
                         raise ErcfError("Selector recovery failed. Path is probably internally blocked and unable to move filament to clear")
 
