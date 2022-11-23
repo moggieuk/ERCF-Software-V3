@@ -83,7 +83,6 @@ class Ercf:
         self.reactor = self.printer.get_reactor()
         self.printer.register_event_handler("klippy:connect", self.handle_connect)
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
-        self.printer.register_event_handler("klippy:shutdown", self.handle_shutdown)
 
         # Manual steppers
         self.selector_stepper = self.gear_stepper = None
@@ -359,10 +358,7 @@ class Ercf:
     def handle_ready(self):
         # Welcome message (before klipper)
         self._log_always('(\_/)\n( *,*)\n(")_(") ERCF Ready\n')
-        self._servo_up()
 
-    def handle_shutdown(self):
-        self._servo_up()
 
 ####################################
 # LOGGING AND STATISTICS FUNCTIONS #
