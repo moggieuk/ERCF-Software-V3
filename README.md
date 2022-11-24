@@ -56,7 +56,7 @@ Be sure to read my [notes on Encoder problems](doc/ENCODER.md) - the better the 
 <li> v1.0.0 - Initial Release
 <li> v1.0.3 - Bug fixes from community: Better logging on toolchange (for manual recovery); Advanced config parameters for adjust tolerance used in 'apply_bowden_correction' move; Fixed a couple of silly (non serious) bugs
 <li> v1.1.0 - New commands: ERCF_PRELOAD & ERCF_CHECK_GATES ; Automatic setting of clog detection distance in calibration routine ; Eliminated DETAIL flags for status reporting (detail always present); New interactive install script to help EASY-BRD setup; Bug fixes
-<li> v1.1.1 - New test command: ERCF_TEST_TRACING ; Fixes for over zealous tolerance checks on bowen loading; Fix for unloading to far if apply_bowden_correction is active
+<li> v1.1.1 - Fixes for over zealous tolerance checks on bowen loading; Fix for unloading to far if apply_bowden_correction is active; new test command: ERCF_TEST_TRACKING
 </ul>
 
 <br>
