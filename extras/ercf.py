@@ -107,7 +107,7 @@ class Ercf:
         self.num_moves = config.getint('num_moves', 2, minval=1)
         self.apply_bowden_correction = config.getint('apply_bowden_correction', 1, minval=0, maxval=1)
         self.load_bowden_tolerance = config.getfloat('load_bowden_tolerance', 8., minval=1., maxval=50.)
-        self.unload_bowden_tolerance = config.getfloat('unload_bowden_tolerance', 8., minval=1., maxval=50.)
+        self.unload_bowden_tolerance = config.getfloat('unload_bowden_tolerance', self.load_bowden_tolerance, minval=1., maxval=50.)
         self.parking_distance = config.getfloat('parking_distance', 23., above=15., below=30.)
         self.encoder_move_step_size = config.getfloat('encoder_move_step_size', 15., above=5., below=25.)
         self.selector_offsets = config.getfloatlist('colorselector')
@@ -275,6 +275,9 @@ class Ercf:
         self.gcode.register_command('ERCF_LOAD',
                     self.cmd_ERCF_TEST_LOAD,
                     desc=self.cmd_ERCF_TEST_LOAD_help) # For backwards compatability because it's mentioned in manual, but prefer to remove
+        self.gcode.register_command('ERCF_TEST_TRACKING',
+                    self.cmd_ERCF_TEST_TRACKING,
+                    desc=self.cmd_ERCF_TEST_TRACKING_help)
         self.gcode.register_command('ERCF_TEST_UNLOAD',
                     self.cmd_ERCF_TEST_UNLOAD,
                     desc=self.cmd_ERCF_TEST_UNLOAD_help)
@@ -693,7 +696,8 @@ class Ercf:
                     # No spring means we haven't reliably homed
                     self._log_always("Failed to detect a reliable home position on this attempt")
 
-                self._unload_bowden(reference - self.unload_buffer, True)
+                self._counter.reset_counts()    # Encoder 0000
+                self._unload_bowden(reference - self.unload_buffer)
                 self._unload_encoder(self.unload_buffer)
                 self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
     
@@ -708,7 +712,7 @@ class Ercf:
                 if self.enable_clog_detection:
                     self._log_always("Recommended setting for 'detection_length' in the encoder_sensor config is: %.1f" % average_spring_detection_length)
                 else:
-                    self._log_always("If you choose to enable the clog detection option the Recommended setting for 'detection_length' is: %.1f" % average_spring_detection_length)
+                    self._log_always("If you choose to enable the clog detection option the recommended setting for 'detection_length' is: %.1f" % average_spring_detection_length)
             else:
                 self._log_always("All %d attempts at homing failed. ERCF needs some adjustments!" % repeats)
         except ErcfError as ee:
@@ -978,6 +982,11 @@ class Ercf:
         else:
             return "#%d" % self.gate_selected
 
+    def _is_filament_in_bowden(self):
+        if self.loaded_status == self.LOADED_STATUS_PARTIAL_PAST_ENCODER or self.loaded_status == self.LOADED_STATUS_PARTIAL_IN_BOWDEN:
+            return True
+        return False
+
 
 ####################################################################################
 # GENERAL MOTOR HELPERS - All stepper movements should go through here for tracing #
@@ -1182,7 +1191,8 @@ class Ercf:
                     break
             if delta > tolerance:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
-                raise ErcfError("Too much slippage (%.1fmm) detected during the load of bowden. Possible causes:\nCalibration ref length is too long\nERCF gears are not properly gripping filament\nEncoder reading is inaccurate\nFaulty servo" % delta)
+                self._log_info("Warning: Excess slippage was detected in bowden tube load afer correction moves. Moved %.1fmm, Encoder delta %.1fmm. Possible causes:\nCalibration ref length too long (hitting extruder gear before homing) \nERCF gears are not properly gripping filament\nEncoder reading is inaccurate\nFaulty servo" % (length, delta))
+                #raise ErcfError("Too much slippage (%.1fmm) detected during the load of bowden. Possible causes:\nCalibration ref length is too long\nERCF gears are not properly gripping filament\nEncoder reading is inaccurate\nFaulty servo" % delta)
         else:
             if delta >= tolerance:
                 self._log_info("Warning: Excess slippage was detected in bowden tube load but 'apply_bowden_correction' is disabled. Moved %.1fmm, Encoder delta %.1fmm" % (length, delta))
@@ -1220,7 +1230,7 @@ class Ercf:
             delta = self._trace_filament_move(msg, step, speed=5, accel=self.gear_homing_accel)
             measured_movement = self._counter.get_distance() - initial_encoder_position
             total_delta = step*(i+1) - measured_movement
-            if delta >= step / 2. and total_delta > step:
+            if delta >= step / 2. and total_delta >= step / 2.:
                 # Not enough measured movement means we've hit the extruder
                 homed = True
                 break
@@ -1334,64 +1344,115 @@ class Ercf:
             return
         self._log_debug("Unloading tool %s" % self._selected_tool_string())
         self._disable_encoder_sensor()
-        self._unload_sequence(self._get_calibration_ref(), unknown_state=(not in_print or self.tool_selected < 0))
+        self._unload_sequence(self._get_calibration_ref(), skip_tip=in_print)
 
-    def _unload_sequence(self, length, unknown_state=False, no_extruder=False, skip_sync_move=False):
+#    def _unload_sequence_old(self, length, unknown_state=False, no_extruder=False, skip_sync_move=False):
+#        try:
+#            self._log_info("Unloading filament...")
+#            self.filament_direction = self.DIRECTION_UNLOAD
+#            self.toolhead.wait_moves()
+#            self._counter.reset_counts()    # Encoder 0000
+#            self._track_unload_start()
+#            if unknown_state:
+#                toolhead_sensor_state = self._check_toolhead_sensor()
+#                if toolhead_sensor_state == -1:     # Not installed
+#                    if self._check_filament_in_encoder():
+#                        # Always form a tip before any moves. This may be a waste if there is no filament
+#                        # in the extruder but checking for filament before tip forming will cause stringing
+#                        if self._form_tip_standalone():
+#                            unknown_state = False
+#                    else:
+#                        # If we are in the unknown state, and there is no filament in
+#                        # the encoder, we are already ejected
+#                        self._log_info("Filament already ejected")
+#                        self._servo_up()
+#                        self._set_loaded_status(self.LOADED_STATUS_UNLOADED, silent=True)
+#                        return
+#    
+#                elif toolhead_sensor_state == 1:    # Filament detected in toolhead
+#                    if self._form_tip_standalone():
+#                        unknown_state = False
+#    
+#                else:                               # Filament not detected in toolhead
+#                    if not self._check_filament_in_encoder():
+#                        # If we are in the unknown extract state, and there is no filament in
+#                        # the encoder, we are already ejected
+#                        self._log_info("Filament already ejected")
+#                        self._servo_up()
+#                        self._set_loaded_status(self.LOADED_STATUS_UNLOADED, silent=True)
+#                        return
+#                    if not no_extruder:
+#                        if self._check_filament_stuck_in_extruder():
+#                            # Possible that filament is caught in extruder gears
+#                            unknown_state = False
+#                            no_extruder = True
+#    
+#            if unknown_state:
+#                # If we are still in unknown state mode (but know filament is
+#                # not in the extruder), we do a slow extract until free of encoder
+#                self._unload_encoder(length)
+#            else:
+#                # We know we are in the extruder we can now do an extruder extract followed by a
+#                # full  bowden unload and an encoder unload. This is the path for slicer tool change
+#                # or after we have formed tip in logic above
+#                self._set_loaded_status(self.LOADED_STATUS_FULL)
+#                if not no_extruder:
+#                    self._unload_extruder()
+#                self._unload_bowden(length - self.unload_buffer, skip_sync_move=skip_sync_move)
+#                self._unload_encoder(self.unload_buffer)
+#    
+#            self._servo_up()
+#            self.toolhead.wait_moves()
+#            self._log_info("Unloaded %.1fmm of filament" % self._counter.get_distance())
+#            self._counter.reset_counts()    # Encoder 0000
+#
+#        finally:
+#            self._track_unload_end()
+
+    def _unload_sequence(self, length, check_state=False, skip_sync_move=False, skip_tip=False):
         try:
             self._log_info("Unloading filament...")
             self.filament_direction = self.DIRECTION_UNLOAD
             self.toolhead.wait_moves()
             self._counter.reset_counts()    # Encoder 0000
             self._track_unload_start()
-            if unknown_state:
-                toolhead_sensor_state = self._check_toolhead_sensor()
-                if toolhead_sensor_state == -1:     # Not installed
-                    if self._check_filament_in_encoder():
-                        # if we are doing a slow extract, always form a tip before any moves
-                        # this may be a waste if there is no filament in the extruder
-                        # but checking for filament before tip forming will cause stringing
-                        if self._form_tip_standalone():
-                            unknown_state = False
-                    else:
-                        # if we are in the slow extract state, and there is no filament in
-                        # the encoder, we are already ejected
-                        self._log_info("Filament already ejected")
-                        self._servo_up()
-                        self._set_loaded_status(self.LOADED_STATUS_UNLOADED, silent=True)
-                        return
-    
-                elif toolhead_sensor_state == 1:    # Filament detected in toolhead
-                    if self._form_tip_standalone():
-                        unknown_state = False
-    
-                else:                               # Filament not detected in toolhead
-                    if not self._check_filament_in_encoder():
-                        # If we are in the slow extract state, and there is no filament in
-                        # the encoder, we are already ejected
-                        self._log_info("Filament already ejected")
-                        self._servo_up()
-                        self._set_loaded_status(self.LOADED_STATUS_UNLOADED, silent=True)
-                        return
-                    if not no_extruder:
-                        if self._check_filament_stuck_in_extruder():
-                            # Possible that filament is caught in extruder gears
-                            unknown_state = False
-                            no_extruder = True
-    
-            if unknown_state:
-                # If we are still in unknown state mode (but know filament is
-                # not in the extruder), we do a slow extract until free of encoder
-                self._unload_encoder(length)
+
+            if check_state or self.loaded_status == self.LOADED_STATUS_UNKNOWN:
+                # Let's determine where filament is and reset state before continuing
+                self._recover_loaded_state()
             else:
-                # We know we are in the extruder we can now do an extruder extract followed by a
-                # full  bowden unload and an encoder unload. This is the path for slicer tool change
-                # or after we have formed tip in logic above
-                self._set_loaded_status(self.LOADED_STATUS_FULL)
-                if not no_extruder:
-                    self._unload_extruder()
+                self._display_visual_state()
+
+            if self.loaded_status == self.LOADED_STATUS_UNLOADED:
+                self._log_info("Filament already ejected")
+                self._servo_up()
+                return
+
+            # Check for cases where we must form tip
+            if not skip_tip and self.loaded_status >= self.LOADED_STATUS_PARTIAL_IN_EXTRUDER:
+                if self._form_tip_standalone():
+                    # Definitely now just in extruder
+                    self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
+                else:
+                    # No movement means we can safely assume we are somewhere in the bowden
+                    self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
+     
+            if self.loaded_status == self.LOADED_STATUS_PARTIAL_IN_EXTRUDER:
+                # Unload extruder, then fast unload of bowden
+                self._unload_extruder()
                 self._unload_bowden(length - self.unload_buffer, skip_sync_move=skip_sync_move)
                 self._unload_encoder(self.unload_buffer)
-    
+            elif self.loaded_status == self.LOADED_STATUS_PARTIAL_END_OF_BOWDEN:
+                # Fast unload of bowden
+                self._unload_bowden(length - self.unload_buffer, skip_sync_move=skip_sync_move)
+                self._unload_encoder(self.unload_buffer)
+            elif self.loaded_status == self.LOADED_STATUS_PARTIAL_IN_BOWDEN:
+                # Have to do slow unload because we don't know exactly where we are
+                self._unload_encoder(length)
+            else:
+                self._log_debug("Assertion failure - unexpected state %d in _unload_sequence()" % self.loaded_status)
+                raise ErcfError("Unexpected state during unload sequence")
+
             self._servo_up()
             self.toolhead.wait_moves()
             self._log_info("Unloaded %.1fmm of filament" % self._counter.get_distance())
@@ -1399,6 +1460,26 @@ class Ercf:
 
         finally:
             self._track_unload_end()
+
+    # This is a recovery routine to determine the most conservate location of the filament for unload purposes
+    def _recover_loaded_state(self):
+        self._log_debug("Unknown filament postion, recovering state...")
+        toolhead_sensor_state = self._check_toolhead_sensor()
+        if toolhead_sensor_state == -1:     # Not installed
+            if self._check_filament_in_encoder():
+                self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
+            else:
+                self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
+        elif toolhead_sensor_state == 1:    # Filament detected in toolhead
+            self._set_loaded_status(self.LOADED_STATUS_FULL)
+        else:                               # Filament not detected in toolhead
+            if self._check_filament_in_encoder():
+                if not self._check_filament_stuck_in_extruder():
+                    self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN) # This prevents fast unload move
+                else:
+                    self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
+            else:
+                self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
 
     # Extract filament past extruder gear (end of bowden)
     # Assume that tip has already been formed and we are parked somewhere in the encoder either by
@@ -1451,28 +1532,29 @@ class Ercf:
         self._servo_down()
 
         # Initial short move allows for dealing with (servo) errors. If synchronized it can help with hair pull
-        sync = not skip_sync_move and self.sync_unload_length > 0
-        initial_move = 10. if not sync else self.sync_unload_length
-        if sync:
-            self._log_debug("Moving the gear and extruder motors in sync for %.1fmm" % -initial_move) 
-            delta = self._trace_filament_move("Sync unload", -initial_move, speed=10, motor="both")
-        else:
-            self._log_debug("Moving the gear motor for %.1fmm" % -initial_move) 
-            delta = self._trace_filament_move("Unload", -initial_move, speed=10, motor="gear")
-        if delta > initial_move / 2:
-            self._log_always("Error unloading filament - not enough detected at encoder. Suspect servo not properly down")
-            self._log_always("Adjusting 'extra_servo_dwell_down' may help. Retrying...")
-            self._servo_up()
-            self._servo_down()
+        if not self.calibrating:
+            sync = not skip_sync_move and self.sync_unload_length > 0
+            initial_move = 10. if not sync else self.sync_unload_length
             if sync:
-                delta = self._trace_filament_move("Retrying sync unload move after servo reset", -delta, speed=10, motor="both")
+                self._log_debug("Moving the gear and extruder motors in sync for %.1fmm" % -initial_move) 
+                delta = self._trace_filament_move("Sync unload", -initial_move, speed=10, motor="both")
             else:
-                delta = self._trace_filament_move("Retrying unload move after servo reset", -delta, speed=10, motor="gear")
-            if delta > 2.0:
-                # Actually we are likely still stuck in extruder
-                self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
-                raise ErcfError("Too much slippage (%.1fmm) detected during the sync unload from extruder" % delta)
-            length -= (initial_move - delta)
+                self._log_debug("Moving the gear motor for %.1fmm" % -initial_move) 
+                delta = self._trace_filament_move("Unload", -initial_move, speed=10, motor="gear")
+            if delta > initial_move / 2:
+                self._log_always("Error unloading filament - not enough detected at encoder. Suspect servo not properly down")
+                self._log_always("Adjusting 'extra_servo_dwell_down' may help. Retrying...")
+                self._servo_up()
+                self._servo_down()
+                if sync:
+                    delta = self._trace_filament_move("Retrying sync unload move after servo reset", -delta, speed=10, motor="both")
+                else:
+                    delta = self._trace_filament_move("Retrying unload move after servo reset", -delta, speed=10, motor="gear")
+                if delta > 2.0:
+                    # Actually we are likely still stuck in extruder
+                    self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
+                    raise ErcfError("Too much slippage (%.1fmm) detected during the sync unload from extruder" % delta)
+                length -= (initial_move - delta)
         
         # Continue fast unload
         moves = 1 if length < (self._get_calibration_ref() / self.num_moves) else self.num_moves
@@ -1483,21 +1565,9 @@ class Ercf:
             if i < moves:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
 
-        # Correction attempts to unload the filament according to encoder reporting
-        if self.apply_bowden_correction and not self.calibrating:
-            for i in range(2):
-                if delta >= tolerance:
-                    msg = "Correction unload move #%d from bowden" % (i+1)
-                    delta = self._trace_filament_move(msg, -delta)
-                    self._log_debug("Correction unload move was necessary, encoder now measures %.1fmm" % self._counter.get_distance())
-                else:
-                    break
-            if delta > tolerance:
-                self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
-                raise ErcfError("Too much slippage (%.1fmm) detected during the unload from bowden" % delta)
-        else:
-            if delta >= tolerance:
-                self._log_info("Warning: Excess slippage was detected in bowden tube unload but 'apply_bowden_correction' is disabled. Moved %.1fmm, Encoder delta %.1fmm" % (length, delta))
+        if delta >= tolerance:
+            # Only a warning because _unload_encoder() will deal with it
+            self._log_info("Warning: Excess slippage was detected in bowden tube unload. Moved %.1fmm, Encoder delta %.1fmm" % (length, delta))
 
         self._set_loaded_status(self.LOADED_STATUS_PARTIAL_PAST_ENCODER)
 
@@ -1522,6 +1592,7 @@ class Ercf:
 
     # Form tip and return True if encoder movement occured
     def _form_tip_standalone(self):
+        park_pos = 35.  # TODO bring in from tip forming (parking postion in extruder)
         self._log_info("Forming tip...")
         self._set_above_min_temp()
         self._servo_up()
@@ -1529,7 +1600,7 @@ class Ercf:
         self.gcode.run_script_from_command("_ERCF_FORM_TIP_STANDALONE")
         delta = self._counter.get_distance() - initial_encoder_position
         self._log_trace("After tip formation, encoder moved %.2f" % delta)
-        self._counter.set_distance(initial_encoder_position)
+        self._counter.set_distance(initial_encoder_position + park_pos)
         return delta > 0.0
 
 
@@ -1548,7 +1619,7 @@ class Ercf:
 
         self._disable_encoder_sensor()
         if not self.loaded_status == self.LOADED_STATUS_UNLOADED:
-            self._unload_sequence(self._get_calibration_ref(), unknown_state=True)
+            self._unload_sequence(self._get_calibration_ref(), check_state=True)
         self._unselect_tool()
         if self._home_selector():
             if tool >= 0:
@@ -1606,7 +1677,7 @@ class Ercf:
 
                 # Now try a full unload sequence
                 try:
-                    self._unload_sequence(self._get_calibration_ref(), unknown_state=True)
+                    self._unload_sequence(self._get_calibration_ref(), check_state=True)
                 except ErcfError as ee:
                     # Add some more context to the error and re-raise
                     raise ErcfError("Selector recovery failed because: %s" % (tool, ee.message))
@@ -1869,7 +1940,7 @@ class Ercf:
                         if not to_nozzle:
                             self._select_tool(tool)
                             self._load_sequence(100, no_extruder=True)
-                            self._unload_sequence(100, unknown_state=False, no_extruder=True, skip_sync_move=True)
+                            self._unload_sequence(100, skip_sync_move=True)
                         else:
                             self._select_and_load_tool(tool)
                             self._unload_tool()
@@ -1888,6 +1959,35 @@ class Ercf:
             self._load_sequence(length, no_extruder=True)
         except ErcfError as ee:
             self._log_always("Load test failed: %s" % ee.message)
+
+    cmd_ERCF_TEST_TRACKING_help = "Test the tracking of gear feed and encoder sensing"
+    def cmd_ERCF_TEST_TRACKING(self, gcmd):
+        if self._check_is_paused(): return
+        if self._check_in_bypass(): return
+        direction = gcmd.get_int('DIRECTION', 1, minval=-1, maxval=1)
+        step = gcmd.get_float('STEP', 1, minval=0.5, maxval=20)
+        if direction == 0: return
+        self._disable_encoder_sensor()
+        try:
+            if not self._is_filament_in_bowden():
+                # Ready ERCF for test if not already setup
+                self._unload_tool()
+                self._load_sequence(100 if direction == 1 else 200, no_extruder=True)
+            self._counter.reset_counts()    # Encoder 0000
+            for i in range(1, int(100 / step)):
+                delta = self._trace_filament_move("Test move", direction * step)
+                measured = self._counter.get_distance()
+                moved = i * step
+                if (moved - measured) >= 1.0:
+                    drift = "+++++!!"[0:int(moved - measured)]
+                elif (moved - measured) <= -1.0:
+                    drift = "-----!!"[0:int(measured - moved)]
+                else:
+                    drift = ""
+                self._log_info("Gear/Encoder : %05.2f / %05.2f mm %s" % (moved, measured, drift))
+            self._unload_tool()
+        except ErcfError as ee:
+            self._log_always("Tracking test failed: %s" % ee.message)
     
     cmd_ERCF_TEST_UNLOAD_help = "For testing for fine control of filament unloading and parking it in the ERCF"
     def cmd_ERCF_TEST_UNLOAD(self, gcmd):
@@ -1896,7 +1996,7 @@ class Ercf:
         unknown_state = gcmd.get_int('UNKNOWN', 0, minval=0, maxval=1)
         length = gcmd.get_float('LENGTH', self._get_calibration_ref())
         try:
-            self._unload_sequence(length, unknown_state=unknown_state, skip_sync_move=True)
+            self._unload_sequence(length, check_state=unknown_state, skip_sync_move=True)
         except ErcfError as ee:
             self._log_always("Unload test failed: %s" % ee.message)
 
@@ -1926,18 +2026,17 @@ class Ercf:
         self.short_moves_speed = gcmd.get_float('SHORT_MOVES_SPEED', self.short_moves_speed, above=20.)
         self.home_to_extruder = gcmd.get_int('HOME_TO_EXTRUDER', self.home_to_extruder, minval=0, maxval=1)
         self.extruder_homing_max = gcmd.get_float('EXTRUDER_HOMING_MAX', self.extruder_homing_max, above=20.)
-        self.extruder_homing_step = gcmd.get_float('EXTRUDER_HOMING_STEP', self.extruder_homing_step, above=0.5, maxval=5.)
+        self.extruder_homing_step = gcmd.get_float('EXTRUDER_HOMING_STEP', self.extruder_homing_step, minval=1., maxval=5.)
         self.extruder_homing_current = gcmd.get_int('EXTRUDER_HOMING_CURRENT', self.extruder_homing_current, minval=0, maxval=100)
         if self.extruder_homing_current == 0: self.extruder_homing_current = 100
         self.toolhead_homing_max = gcmd.get_float('TOOLHEAD_HOMING_MAX', self.toolhead_homing_max, minval=0.)
-        self.toolhead_homing_step = gcmd.get_float('TOOLHEAD_HOMING_STEP', self.toolhead_homing_step, above=0.5, maxval=5.)
+        self.toolhead_homing_step = gcmd.get_float('TOOLHEAD_HOMING_STEP', self.toolhead_homing_step, minval=0.5, maxval=5.)
         self.delay_servo_release = gcmd.get_float('DELAY_SERVO_RELEASE', self.delay_servo_release, minval=0., maxval=5.)
         self.sync_load_length = gcmd.get_float('SYNC_LOAD_LENGTH', self.sync_load_length, minval=0., maxval=100.)
         self.sync_unload_length = gcmd.get_float('SYNC_UNLOAD_LENGTH', self.sync_unload_length, minval=0., maxval=100.)
         self.num_moves = gcmd.get_int('NUM_MOVES', self.num_moves, minval=1)
         self.apply_bowden_correction = gcmd.get_int('APPLY_BOWDEN_CORRECTION', self.apply_bowden_correction, minval=0, maxval=1)
         self.load_bowden_tolerance = gcmd.get_float('LOAD_BOWDEN_TOLERANCE', self.load_bowden_tolerance, minval=1., maxval=50.)
-        self.unload_bowden_tolerance = gcmd.get_float('UNLOAD_BOWDEN_TOLERANCE', self.unload_bowden_tolerance, minval=1., maxval=50.)
         self.home_position_to_nozzle = gcmd.get_float('HOME_POSITION_TO_NOZZLE', self.home_position_to_nozzle, minval=25.)
         self.variables['ercf_calib_ref'] = gcmd.get_float('ERCF_CALIB_REF', self.variables['ercf_calib_ref'], minval=10.)
         self.variables['ercf_calib_clog_length'] = gcmd.get_float('ERCF_CALIB_CLOG_LENGTH', self.variables['ercf_calib_clog_length'], minval=1., maxval=50.)
@@ -1955,7 +2054,6 @@ class Ercf:
         msg += "\nnum_moves = %d" % self.num_moves
         msg += "\napply_bowden_correction = %d" % self.apply_bowden_correction
         msg += "\nload_bowden_tolerance = %d" % self.load_bowden_tolerance
-        msg += "\nunload_bowden_tolerance = %d" % self.unload_bowden_tolerance
         msg += "\nhome_position_to_nozzle = %.1f" % self.home_position_to_nozzle
         msg += "\nercf_calib_ref = %.1f" % self.variables['ercf_calib_ref']
         msg += "\nercf_calib_clog_length = %.1f" % self.variables['ercf_calib_clog_length']
@@ -2009,8 +2107,8 @@ class Ercf:
 
             self.gcode.run_script_from_command("SAVE_GCODE_STATE NAME=ERCF_PRE_UNLOAD")
             self.gcode.run_script_from_command("_ERCF_ENDLESS_SPOOL_PRE_UNLOAD")
-            if self._form_tip_standalone():
-                in_print = False
+            if not self._form_tip_standalone():
+                self._log_debug("Didn't detect filamanet during tip forming move!")
             self._unload_tool(in_print=True)
             self._remap_tool(self.tool_selected, next_gate, 1)
             self.gate_selected = next_gate
