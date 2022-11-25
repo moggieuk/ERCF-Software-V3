@@ -1437,7 +1437,7 @@ class Ercf:
                     # No movement means we can safely assume we are somewhere in the bowden
                     self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
      
-            if self.loaded_status == self.LOADED_STATUS_PARTIAL_IN_EXTRUDER:
+            if self.loaded_status >= self.LOADED_STATUS_PARTIAL_IN_EXTRUDER:
                 # Unload extruder, then fast unload of bowden
                 self._unload_extruder()
                 self._unload_bowden(length - self.unload_buffer, skip_sync_move=skip_sync_move)
