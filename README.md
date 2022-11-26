@@ -11,7 +11,7 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 <li>Ability to specify empty or disabled tools (gates).
 <li>Formal support for the filament bypass block with associated new commands and state if using it.
 <li>Ability to reduce gear current (currently TMC2209 only) during “collision” homing procedure to prevent grinding, etc.
-<li>Convenience filamanet preload and check gate features
+<li>Convenience filament preload function and check gate feature to ensure filaments are all ready before print
 </ul>
 
 ## Other features:
@@ -22,6 +22,7 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 <li>Workarond to some of the ways to provoke Klipper “Timer too close” errors (although there are definitely bugs in the Klipper firmware)
 <li>More reliable “in-print” detection so tool change command “Tx” g-code can be used anytime and the user does not need to resort to “ERCF_CHANGE_TOOL_STANDALONE”
 <li>New LOG_LEVEL=4 for developer use.  BTW This is useful in seeing the exact stepper movements
+<li>New "TEST" commands to help diagnose issues with encoder
 <li>Experimental logic to use stallguard filament homing (Caveat: not easy to setup using EASY-BRD and not compatible with sensorless selector homing option)
 </ul>
   
@@ -36,7 +37,7 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 <br>
   
 ## Installation
-The module can be installed into a existing Klipper installation with the install script.
+The module can be installed into a existing Klipper installation with the install script. Once installed it will be added to Moonraker update-manager to easy updates like other Klipper plugins:
 
     cd ~
     git clone https://github.com/moggieuk/ERCF-Software-V3.git
@@ -53,10 +54,11 @@ Be sure to read my [notes on Encoder problems](doc/ENCODER.md) - the better the 
   
 ## Revision History
 <ul>
-<li> v1.0.0 - Initial Release
+<li> v1.0.0 - Initial Beta Release
 <li> v1.0.3 - Bug fixes from community: Better logging on toolchange (for manual recovery); Advanced config parameters for adjust tolerance used in 'apply_bowden_correction' move; Fixed a couple of silly (non serious) bugs
 <li> v1.1.0 - New commands: ERCF_PRELOAD & ERCF_CHECK_GATES ; Automatic setting of clog detection distance in calibration routine ; Eliminated DETAIL flags for status reporting (detail always present); New interactive install script to help EASY-BRD setup; Bug fixes
-<li> v1.1.1 - Fixes for over zealous tolerance checks on bowen loading; Fix for unloading to far if apply_bowden_correction is active; new test command: ERCF_TEST_TRACKING
+<li> v1.1.1 - Fixes for over zealous tolerance checks on bowen loading; Fix for unloading to far if apply_bowden_correction is active; new test command: ERCF_TEST_TRACKING; Fixed slicer based tool load issue; Improved install.sh -i to include servo and calib bowden length
+<li> v1.1.2 - Fixes for over zealous tolerance checks on bowen loading; Fix for unloading to far if apply_bowden_correction is active; new test command: ERCF_TEST_TRACKING; Fixed slicer based tool load issue; Improved install.sh -i to include servo and calib bowden length; Better detection of malfunctioning toolhead sensor
 </ul>
 
 <br>
@@ -272,6 +274,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | (ERCF_LOAD) | Identical to ERCF_TEST_LOAD | |
   | ERCF_TEST_UNLOAD | Move the ERCF gear | LENGTH=..[100] Lenght of filament to be unloaded <br>UNKNOWN=\[0\|1\] Whether the state of the extruder is known. Generally 0 for standalone use, 1 simulates call as if it was from slicer when tip has already been formed |
   | ERCF_TEST_HOME_TO_EXTRUDER | For calibrating extruder homing - TMC current setting, etc. | RETURN=\[0\|1\] Whether to return the filament to the approximate starting position after homing - good for repeated testing |
+  | ERCF_TEST_TRACKING | Simple visual test to see how encoder tracks with gear motor | DIRECTION=\[-1\|1\] Direction to perform the test <br>STEP=\[0.5..20\] Size of individual steps<br>Defaults to load direction and 1mm step size |
   | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime | Many. Best to run ERCF_TEST_CONFIG without options to report all parameters than can be specified |
   <br>
 

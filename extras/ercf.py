@@ -649,7 +649,7 @@ class Ercf:
         return self.variables.get('ercf_calib_%d' % gate, 1.)
 
     def _get_calibration_clog_length(self):
-        return self.variables.get('ercf_calib_clog_length', 8.)
+        return max(self.variables.get('ercf_calib_clog_length', 7.), 5.)
 
     def _calculate_calibration_ref(self, extruder_homing_length=400, repeats=3):
         self._log_always("Calibrating reference tool T0")
@@ -751,7 +751,7 @@ class Ercf:
         if values:
             mean = sum(values) / len(values)
             diff2 = [( v - mean )**2 for v in values]
-            stdev = math.sqrt( sum(diff2) / ( len(values) - 1 ))
+            stdev = math.sqrt( sum(diff2) / max((len(values) - 1), 1))
             vmin = min(values)
             vmax = max(values)
         return {'mean': mean, 'stdev': stdev, 'min': vmin, 'max': vmax, 'range': vmax - vmin}        
@@ -819,6 +819,8 @@ class Ercf:
                 min_values.append(self._counter.get_counts())
                 self._log_always("- counts =  %.3f"
                             % (self._counter.get_counts()))
+                if self._counter.get_counts() == 0:
+                    break
     
             self._log_always("Load direction: mean=%(mean).2f stdev=%(stdev).2f"
                               " min=%(min)d max=%(max)d range=%(range)d"
@@ -832,7 +834,7 @@ class Ercf:
             half_mean = (float(mean_plus) + float(mean_minus)) / 4
     
             if half_mean == 0:
-                self._log_always("No counts measured. Ensure a tool was selected " +
+                self._log_always("No counts measured. Ensure a tool was selected with servo down " +
                                   "before running calibration and that your encoder " +
                                   "is working properly")
                 return
@@ -846,6 +848,7 @@ class Ercf:
         except ErcfError as ee:
             self._pause(ee.message)
         finally:
+            self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
             self.calibrating = False
 
     cmd_ERCF_CALIB_SELECTOR_help = "Calibration of the selector position for a defined Tool"
@@ -954,7 +957,7 @@ class Ercf:
         status = self.printer.lookup_object("idle_timeout").get_status(self.printer.get_reactor().monotonic())
         if self.printer.lookup_object("pause_resume").is_paused:
             status["state"] = "Paused"
-        return status["state"] == "Printing" and status["printing_time"] > 2.0
+        return status["state"] == "Printing" and status["printing_time"] > 3.0
 
     def _set_above_min_temp(self):
         if not self.printer.lookup_object("extruder").heater.can_extrude :
@@ -1263,10 +1266,8 @@ class Ercf:
         sync = self.sync_load_length > 0
         step = self.toolhead_homing_step
         if self.toolhead_sensor.runout_helper.filament_present:
-            # We shouldn't be here but let's see if we can retract out of the problem
-            self._log_debug("Sensor already detecting filament during homing operation. Trying to recover by retracting...")
-            step = -step
-            sync = False    # Don't really need sync on retraction move
+            # We shouldn't be here and probably means the toolhead sensor is malfunctioning/blocked
+            raise ErcfError("Toolhead sensor malfunction - filament detected before it entered extruder!")
         if sync:
             self._set_above_min_temp()
             self._servo_down()
@@ -1345,69 +1346,6 @@ class Ercf:
         self._log_debug("Unloading tool %s" % self._selected_tool_string())
         self._disable_encoder_sensor()
         self._unload_sequence(self._get_calibration_ref(), skip_tip=in_print)
-
-#    def _unload_sequence_old(self, length, unknown_state=False, no_extruder=False, skip_sync_move=False):
-#        try:
-#            self._log_info("Unloading filament...")
-#            self.filament_direction = self.DIRECTION_UNLOAD
-#            self.toolhead.wait_moves()
-#            self._counter.reset_counts()    # Encoder 0000
-#            self._track_unload_start()
-#            if unknown_state:
-#                toolhead_sensor_state = self._check_toolhead_sensor()
-#                if toolhead_sensor_state == -1:     # Not installed
-#                    if self._check_filament_in_encoder():
-#                        # Always form a tip before any moves. This may be a waste if there is no filament
-#                        # in the extruder but checking for filament before tip forming will cause stringing
-#                        if self._form_tip_standalone():
-#                            unknown_state = False
-#                    else:
-#                        # If we are in the unknown state, and there is no filament in
-#                        # the encoder, we are already ejected
-#                        self._log_info("Filament already ejected")
-#                        self._servo_up()
-#                        self._set_loaded_status(self.LOADED_STATUS_UNLOADED, silent=True)
-#                        return
-#    
-#                elif toolhead_sensor_state == 1:    # Filament detected in toolhead
-#                    if self._form_tip_standalone():
-#                        unknown_state = False
-#    
-#                else:                               # Filament not detected in toolhead
-#                    if not self._check_filament_in_encoder():
-#                        # If we are in the unknown extract state, and there is no filament in
-#                        # the encoder, we are already ejected
-#                        self._log_info("Filament already ejected")
-#                        self._servo_up()
-#                        self._set_loaded_status(self.LOADED_STATUS_UNLOADED, silent=True)
-#                        return
-#                    if not no_extruder:
-#                        if self._check_filament_stuck_in_extruder():
-#                            # Possible that filament is caught in extruder gears
-#                            unknown_state = False
-#                            no_extruder = True
-#    
-#            if unknown_state:
-#                # If we are still in unknown state mode (but know filament is
-#                # not in the extruder), we do a slow extract until free of encoder
-#                self._unload_encoder(length)
-#            else:
-#                # We know we are in the extruder we can now do an extruder extract followed by a
-#                # full  bowden unload and an encoder unload. This is the path for slicer tool change
-#                # or after we have formed tip in logic above
-#                self._set_loaded_status(self.LOADED_STATUS_FULL)
-#                if not no_extruder:
-#                    self._unload_extruder()
-#                self._unload_bowden(length - self.unload_buffer, skip_sync_move=skip_sync_move)
-#                self._unload_encoder(self.unload_buffer)
-#    
-#            self._servo_up()
-#            self.toolhead.wait_moves()
-#            self._log_info("Unloaded %.1fmm of filament" % self._counter.get_distance())
-#            self._counter.reset_counts()    # Encoder 0000
-#
-#        finally:
-#            self._track_unload_end()
 
     def _unload_sequence(self, length, check_state=False, skip_sync_move=False, skip_tip=False):
         try:
@@ -1585,6 +1523,7 @@ class Ercf:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_BEFORE_ENCODER)
                 park = self.parking_distance - delta
                 delta = self._trace_filament_move("Final parking", -park)
+                # We don't expect any movement of the encoder, but a hair may cause a slight reading
                 if (park - delta) < 5.0:
                     self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
                     return
@@ -2039,7 +1978,7 @@ class Ercf:
         self.load_bowden_tolerance = gcmd.get_float('LOAD_BOWDEN_TOLERANCE', self.load_bowden_tolerance, minval=1., maxval=50.)
         self.home_position_to_nozzle = gcmd.get_float('HOME_POSITION_TO_NOZZLE', self.home_position_to_nozzle, minval=25.)
         self.variables['ercf_calib_ref'] = gcmd.get_float('ERCF_CALIB_REF', self.variables['ercf_calib_ref'], minval=10.)
-        self.variables['ercf_calib_clog_length'] = gcmd.get_float('ERCF_CALIB_CLOG_LENGTH', self.variables['ercf_calib_clog_length'], minval=1., maxval=50.)
+        self.variables['ercf_calib_clog_length'] = gcmd.get_float('ERCF_CALIB_CLOG_LENGTH', self.variables['ercf_calib_clog_length'], minval=1., maxval=100.)
         msg = "long_moves_speed = %.1f" % self.long_moves_speed
         msg += "\nshort_moves_speed = %.1f" % self.short_moves_speed
         msg += "\nhome_to_extruder = %d" % self.home_to_extruder
@@ -2074,7 +2013,7 @@ class Ercf:
         self._disable_encoder_sensor()
         self._counter.reset_counts()    # Encoder 0000
 
-        # Check for clog by looking for filamenet in the encoder
+        # Check for clog by looking for filament in the encoder
         self._servo_down()
         found = self._buzz_gear_motor()
         self._servo_up()
