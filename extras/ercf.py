@@ -246,6 +246,9 @@ class Ercf:
         self.gcode.register_command('ERCF_CHANGE_TOOL',
                     self.cmd_ERCF_CHANGE_TOOL,
                     desc = self.cmd_ERCF_CHANGE_TOOL_help)
+        self.gcode.register_command('ERCF_CHANGE_TOOL_STANDALONE',
+                    self.cmd_ERCF_CHANGE_TOOL_STANDALONE,
+                    desc = self.cmd_ERCF_CHANGE_TOOL_STANDALONE_help) # For backwards compatability because it's mentioned in manual
         self.gcode.register_command('ERCF_EJECT',
                     self.cmd_ERCF_EJECT,
                     desc = self.cmd_ERCF_EJECT_help)
