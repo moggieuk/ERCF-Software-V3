@@ -302,5 +302,5 @@ if [ "${INSTALL_TEMPLATES}" -eq 1 ]; then
 fi
 
 install_update_manager
-#PAULrestart_klipper
+restart_klipper
 
