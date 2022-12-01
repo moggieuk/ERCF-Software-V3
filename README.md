@@ -48,7 +48,10 @@ The module can be installed into a existing Klipper installation with the instal
 The `-i` option will bring up some interactive prompts to aid setting some confusing parameters on EASY-BRD (like sensorless selector homing setup). If not run with the `-i` flag the new template .cfg files will not be installed.  Note that if existing ercf*.cfg files are found the old versions will be moved to <file>.00 extension instead so as not to overwrite an existing configuration.  If you still choose not to install the new ercf*.cfg files automatically be sure to examine them closely and compare to the supplied templates - some options have changed!
 <br>
 
-Be sure to read my [notes on Encoder problems](doc/ENCODER.md) - the better the encoder the better this software will work.
+_REMEMBER that ercf_hardware.cfg; ercf_software.cfg & ercf_parameters.cfg must all be referenced by your printer.cfg master config file and your PAUSE/RESUME macros may need to be updated -- see the reference client_macros.cfg for additions_
+<br>
+
+Also be sure to read my [notes on Encoder problems](doc/ENCODER.md) - the better the encoder the better this software will work.
 
 <br>
   
