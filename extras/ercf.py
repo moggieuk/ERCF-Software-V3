@@ -1718,13 +1718,16 @@ class Ercf:
         self._set_tool_selected(self.TOOL_UNKNOWN, silent=True)
 
     def _select_tool(self, tool):
-        if tool == self.tool_selected: return
         if tool < 0 or tool >= len(self.selector_offsets):
             self._log_always("Tool %d does not exist" % tool)
             return
 
-        self._log_debug("Selecting tool T%d on gate #%d..." % (tool, self._tool_to_gate(tool)))
-        self._select_gate(self._tool_to_gate(tool))
+        gate = self._tool_to_gate(tool)
+        if tool == self.tool_selected and gate == self.gate_selected:
+            return
+
+        self._log_debug("Selecting tool T%d on gate #%d..." % (tool, gate))
+        self._select_gate(gate)
         self._set_tool_selected(tool, silent=True)
         self._log_info("Tool T%d enabled" % tool)
 
@@ -1735,6 +1738,7 @@ class Ercf:
             self._move_selector_sensorless(offset)
         else:
             self._selector_stepper_move_wait(offset)
+        self.gate_selected = gate
 
     def _select_bypass(self):
         if self.tool_selected == self.TOOL_BYPASS: return
@@ -1758,7 +1762,7 @@ class Ercf:
                 self.gate_selected = self.GATE_UNKNOWN
                 self._set_steps(1.)
             else:
-                self.gate_selected = self._tool_to_gate(tool)
+                self.gate_selected = self._tool_to_gate(tool) # PAUL?
                 self._set_steps(self._get_gate_ratio(self.gate_selected))
             if not silent:
                 self._display_visual_state()
@@ -2077,8 +2081,7 @@ class Ercf:
                 self._log_debug("Didn't detect filamanet during tip forming move!")
             self._unload_tool(in_print=True)
             self._remap_tool(self.tool_selected, next_gate, 1)
-            self.gate_selected = next_gate
-            self._select_and_load_tool(tool)
+            self._select_and_load_tool(self.tool_selected)
             self.gcode.run_script_from_command("SET_PRESSURE_ADVANCE ADVANCE=%.6f" % initial_pa)
             self.gcode.run_script_from_command("_ERCF_ENDLESS_SPOOL_POST_LOAD")
             self.gcode.run_script_from_command("RESTORE_GCODE_STATE NAME=ERCF_PRE_UNLOAD")
