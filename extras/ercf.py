@@ -6,12 +6,11 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
-import copy
 import logging
 import math
 import time
 from random import randint
-from . import force_move, pulse_counter
+from . import pulse_counter
 
 class EncoderCounter:
     def __init__(self, printer, pin, sample_time, poll_time, encoder_steps):
@@ -367,12 +366,16 @@ class Ercf:
         # Override motion sensor runout detection_length based on calibration
         self.encoder_sensor.detection_length = self._get_calibration_clog_length()
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
+        self.printer.register_event_handler("klippy:shutdown", self.handle_shutdown)
         self._reset_statistics()
 
 
     def handle_ready(self):
         self._setup_heater_off_reactor()
         self._log_always('(\_/)\n( *,*)\n(")_(") ERCF Ready\n')
+
+    def handle_shutdown(self):
+        self._log_always('ERCF Shutdown')
 
 
 ####################################
@@ -665,12 +668,12 @@ class Ercf:
         return max(self.variables.get('ercf_calib_clog_length', 7.), 5.)
 
     def _calculate_calibration_ref(self, extruder_homing_length=400, repeats=3):
-        self._log_always("Calibrating reference tool T0")
-        self._select_tool(0)
-        self._set_steps(1.)
-        reference_sum = spring_max = 0.
-        successes = 0
         try:
+            self._log_always("Calibrating reference tool T0")
+            self._select_tool(0)
+            self._set_steps(1.)
+            reference_sum = spring_max = 0.
+            successes = 0
             for i in range(repeats):
                 self._servo_down()
                 self._counter.reset_counts()    # Encoder 0000
@@ -735,10 +738,10 @@ class Ercf:
             self._servo_up()
 
     def _calculate_calibration_ratio(self, tool):
-        load_length = self.calibration_bowden_length - 100.
-        self._select_tool(tool)
-        self._set_steps(1.)
         try:
+            load_length = self.calibration_bowden_length - 100.
+            self._select_tool(tool)
+            self._set_steps(1.)
             self._servo_down()
             self._counter.reset_counts()    # Encoder 0000
             encoder_moved = self._load_encoder()
@@ -880,16 +883,12 @@ class Ercf:
             self._log_always("Measuring the selector position for gate %d" % gate)
             self.selector_stepper.do_set_position(0.)
             init_position = self.selector_stepper.steppers[0].get_mcu_position()
-            self._selector_stepper_move_wait(-move_length, speed=60, homing_move=1)
+            self._selector_stepper_move_wait(-move_length, speed=80, homing_move=1)
             current_position = self.selector_stepper.steppers[0].get_mcu_position()
             traveled_position = abs(current_position - init_position) * self.selector_stepper.steppers[0].get_step_dist()
 
             # Test we actually homed, if not we didn't move far enough
-            if self.sensorless_selector == 1:
-                homed = self.gear_endstop.query_endstop(self.toolhead.get_last_move_time())
-            else:
-                homed = self.selector_endstop.query_endstop(self.toolhead.get_last_move_time())
-            if not homed:
+            if not self._check_selector_endstop():
                 self._log_always("Selector didn't find home position. Are you sure you selected the correct gate?")
             else:
                 self._log_always("Selector position = %.1fmm" % traveled_position)
@@ -897,6 +896,7 @@ class Ercf:
             self._pause(str(ee))
         finally:
             self.calibrating = False
+            self.is_homed = False
 
 
 ########################
@@ -914,19 +914,26 @@ class Ercf:
 
     def _pause(self, reason):
         if self.is_paused: return
-        self.is_paused = True
-        self._track_pause_start()
-        self.paused_extruder_temp = self.printer.lookup_object("extruder").heater.target_temp
-        self.gcode.run_script_from_command("SET_IDLE_TIMEOUT TIMEOUT=%d" % self.timeout_pause)
-        self.reactor.update_timer(self.heater_off_handler, self.reactor.monotonic() + self.disable_heater)
-        msg = "An issue with the ERCF has been detected and the ERCF has been PAUSED"
-        msg += "\nReason: %s" % reason
-        msg += "\nWhen you intervene to fix the issue, first call \"ERCF_UNLOCK\""
-        msg += "\nRefer to the manual before resuming the print"
-        self.gcode.respond_raw("!! %s" % msg)   # non highlighted alternative self._log_always(msg)
-        self.gcode.run_script_from_command("SAVE_GCODE_STATE NAME=ERCF_state")
-        self._disable_encoder_sensor()
-        self.gcode.run_script_from_command("PAUSE")
+        if self._is_in_print():
+            self.is_paused = True
+            self._track_pause_start()
+            self.paused_extruder_temp = self.printer.lookup_object("extruder").heater.target_temp
+            self.gcode.run_script_from_command("SET_IDLE_TIMEOUT TIMEOUT=%d" % self.timeout_pause)
+            self.reactor.update_timer(self.heater_off_handler, self.reactor.monotonic() + self.disable_heater)
+            msg = "An issue with the ERCF has been detected and the ERCF has been PAUSED"
+            self.gcode.respond_raw("!! %s" % msg)   # non highlighted alternative self._log_always(msg)
+            msg = "\nReason: %s" % reason
+            msg += "\nWhen you intervene to fix the issue, first call \"ERCF_UNLOCK\""
+            msg += "\nRefer to the manual before resuming the print"
+            self._log_always(msg)
+            self.gcode.run_script_from_command("SAVE_GCODE_STATE NAME=ERCF_state")
+            self._disable_encoder_sensor()
+            self.gcode.run_script_from_command("PAUSE")
+        else:
+            msg = "An issue with the ERCF has been detected outside of a print"
+            self.gcode.respond_raw("!! %s" % msg)   # non highlighted alternative self._log_always(msg)
+            msg = "\nReason: %s" % reason
+            self._log_always(msg)
 
     def _unlock(self):
         if not self.is_paused: return
@@ -1073,8 +1080,10 @@ class Ercf:
             accel = self.selector_stepper.accel
         if homing_move:
             self.toolhead.wait_moves() # Necessary before homing move
+            self._log_stepper("SELECTOR: dist=%.1f, speed=%d, accel=%d homing=%d" % (dist, speed, accel, homing_move))
             self.selector_stepper.do_homing_move(dist, speed, accel, homing_move > 0, abs(homing_move) == 1)
         else:
+            self._log_stepper("SELECTOR: dist=%.1f, speed=%d, accel=%d" % (dist, speed, accel))
             self.selector_stepper.do_move(dist, speed, accel)
         if wait:
             self.toolhead.wait_moves()
@@ -1582,13 +1591,17 @@ class Ercf:
             self._log_debug("ERCF is locked, unlocking it before continuing...")
             self._unlock()
 
+# TODO would this help useability after PAUSE/UNLOCK..?
+#        if self._is_in_print() and self.need_to_recover_state:
+#            self._recover_loaded_state()
+
         self._disable_encoder_sensor()
         if not self.loaded_status == self.LOADED_STATUS_UNLOADED:
             self._unload_sequence(self._get_calibration_ref(), check_state=True)
         self._unselect_tool()
-        if self._home_selector():
-            if tool >= 0:
-                self._select_tool(tool)
+        self._home_selector()
+        if tool >= 0:
+            self._select_tool(tool)
 
     def _home_selector(self):
         self.is_homed = False
@@ -1599,26 +1612,38 @@ class Ercf:
         self.toolhead.wait_moves()
         if self.sensorless_selector == 1:
             self.selector_stepper.do_set_position(0.)
-            self._selector_stepper_move_wait(5, False)  # Ensure some bump space
+            self._selector_stepper_move_wait(2, False)  # Ensure some bump space
             self.selector_stepper.do_set_position(0.)
-            self._selector_stepper_move_wait(-selector_length, speed=60, homing_move=1)
-            # Did we actually hit the physical endstop (configured on gear_stepper!)
-            self.is_homed = self.gear_endstop.query_endstop(self.toolhead.get_last_move_time())
+            self._selector_stepper_move_wait(-selector_length, speed=80, homing_move=1)
         else:
             self.selector_stepper.do_set_position(0.)
             self._selector_stepper_move_wait(-selector_length, speed=100, homing_move=1)   # Fast homing move
             self.selector_stepper.do_set_position(0.)
             self._selector_stepper_move_wait(5, False)                      # Ensure some bump space
-            self._selector_stepper_move_wait(-10, speed=10, homing_move=1)  # Slower more accurate  homing move
-            self.is_homed = self.selector_endstop.query_endstop(self.toolhead.get_last_move_time())
+            self._selector_stepper_move_wait(-10, speed=10, homing_move=1)  # Slower more accurate homing move
 
+        self.is_homed = self._check_selector_endstop()
         if not self.is_homed:
             self._set_tool_selected(self.TOOL_UNKNOWN)
-            raise ErcfError("Homing selector failed because of blockage")
-        else:
-            self.selector_stepper.do_set_position(0.)     
+            raise ErcfError("Homing selector failed because of blockage or error")
+        self.selector_stepper.do_set_position(0.)
 
-        return self.is_homed
+    # Give Klipper several chances to give the right answer
+    # No idea what's going on with Klipper but it can give erroneous not TRIGGERED readings
+    # (perhaps because of bounce in switch or message delays) so this is a workaround
+    def _check_selector_endstop(self):
+        homed = False
+        for i in range(4):
+            last_move_time = self.toolhead.get_last_move_time()
+            if self.sensorless_selector == 1:
+                homed = bool(self.gear_endstop.query_endstop(last_move_time))
+            else:
+                homed = bool(self.selector_endstop.query_endstop(last_move_time))
+            self._log_debug("Check #%d of %s_endstop: %s" % (i+1, ("gear" if self.sensorless_selector == 1 else "selector"), homed))
+            if homed:
+                break
+            self.toolhead.dwell(0.1)
+        return homed
 
     def _move_selector_sensorless(self, target):
         successful, travel = self._attempt_selector_move(target)
@@ -1665,7 +1690,7 @@ class Ercf:
         init_position = self.selector_stepper.get_position()[0]
         init_mcu_pos = self.selector_stepper.steppers[0].get_mcu_position()
         target_move = target - init_position
-        self._selector_stepper_move_wait(target, homing_move=2)  # Home sensing move
+        self._selector_stepper_move_wait(target, homing_move=1)
         mcu_position = self.selector_stepper.steppers[0].get_mcu_position()
         travel = (mcu_position - init_mcu_pos) * selector_steps
         delta = abs(target_move - travel)
@@ -1762,7 +1787,7 @@ class Ercf:
                 self.gate_selected = self.GATE_UNKNOWN
                 self._set_steps(1.)
             else:
-                self.gate_selected = self._tool_to_gate(tool) # PAUL?
+                self.gate_selected = self._tool_to_gate(tool) # TODO probably shouldn't happen here, only when gate is really selected
                 self._set_steps(self._get_gate_ratio(self.gate_selected))
             if not silent:
                 self._display_visual_state()
@@ -2183,7 +2208,12 @@ class Ercf:
             except ErcfError as ee:
                 self._log_info("Gate #%d - filament not detected. Marked empty" % i)
                 self.gate_status[i] = self.GATE_EMPTY
-        self._select_tool(0)
+
+        try:
+            self._select_tool(0)
+        except ErcfError as ee:
+            self._log_always("Failure selecting tool 0: %s" % str(ee))
+
         self._log_info(self._tool_to_gate_map_to_human_string())
 
     cmd_ERCF_PRELOAD_help = "Preloads filament at specified or current gate"
