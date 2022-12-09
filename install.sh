@@ -52,11 +52,6 @@ copy_template_files() {
                 else
                     magic_str1="NO TOOLHEAD"
 		fi
-#                if [ "${clog_detection}" -eq 1 ]; then
-#                    magic_str2="## ERCF Clog detection"
-#                else
-#                    magic_str2="NO CLOG"
-#		fi
 
                 if [ "${sensorless_selector}" -eq 1 ]; then
                     cat ${SRCDIR}/${file} | sed -e "\
@@ -69,7 +64,6 @@ copy_template_files() {
                         s%{serial}%${serial}%; \
                         s/{toolhead_sensor_pin}/${toolhead_sensor_pin}/; \
                         /^${magic_str1} START/,/${magic_str1} END/ s/^#//; \
-                        /^${magic_str2} START/,/${magic_str2} END/ s/^#//; \
                             " > ${dest}
                 else
                     # This is the default template config
@@ -77,7 +71,6 @@ copy_template_files() {
                         s%{serial}%${serial}%; \
                         s/{toolhead_sensor_pin}/${toolhead_sensor_pin}/; \
                         /^${magic_str1} START/,/${magic_str1} END/ s/^#//; \
-                        /^${magic_str2} START/,/${magic_str2} END/ s/^#//; \
                             " > ${dest}
                 fi
             elif [ "${file}" = "ercf_software.cfg" ]; then

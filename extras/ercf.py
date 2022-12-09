@@ -127,8 +127,8 @@ class Ercf:
         self.printer = config.get_printer()
         self.reactor = self.printer.get_reactor()
         self.printer.register_event_handler('klippy:connect', self.handle_connect)
+        self.printer.register_event_handler("klippy:disconnect", self.handle_disconnect)
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
-        self.printer.register_event_handler("klippy:shutdown", self.handle_shutdown)
 
         # Manual steppers
         self.selector_stepper = self.gear_stepper = None
@@ -221,6 +221,7 @@ class Ercf:
         self.loaded_status = self.LOADED_STATUS_UNKNOWN
         self.filament_direction = self.DIRECTION_LOAD
         self.calibrating = False
+        self.done_connect = False
 
         # Logging
         self.queue_listener = None
@@ -232,6 +233,7 @@ class Ercf:
         self.time_spent_unloading = 0
         self.time_spent_paused = 0
         self.total_pauses = 0
+        self.gate_statistics = []
 
         # Register GCODE commands
         self.gcode = self.printer.lookup_object('gcode')
@@ -414,9 +416,10 @@ class Ercf:
 
         self.ref_step_dist=self.gear_stepper.steppers[0].get_step_dist()
         self.variables = self.printer.lookup_object('save_variables').allVariables
+        self._reset_statistics()
+
         # Override motion sensor runout detection_length based on calibration
         self.encoder_sensor.detection_length = self._get_calibration_clog_length()
-        self._reset_statistics()
 
         # Setup background file based logging
         if self.logfile_level >= 0:
@@ -435,17 +438,15 @@ class Ercf:
             self.ercf_logger.addHandler(queue_handler)
 
         # Setup gate statistics
-        self.gate_statistics = []
         for gate in range(len(self.selector_offsets)):
             self.gate_statistics.append(gate)
             self.gate_statistics[gate] = self._get_gate_statistics(gate)
-
 
     def handle_ready(self):
         self._setup_heater_off_reactor()
         self._log_always('(\_/)\n( *,*)\n(")_(") ERCF Ready')
 
-    def handle_shutdown(self):
+    def handle_disconnect(self):
         self._log_always('ERCF Shutdown')
         if self.queue_listener != None:
             self.queue_listener.stop()
