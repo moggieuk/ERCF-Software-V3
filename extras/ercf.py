@@ -529,7 +529,8 @@ class Ercf:
     def _dump_gate_statistics(self):
         msg = "Gate Statistics:"
         for gate in range(len(self.selector_offsets)):
-            rounded = {k:round(v,1) if isinstance(v,float) else v for k,v in self.gate_statistics[gate].iteritems()}
+            #rounded = {k:round(v,1) if isinstance(v,float) else v for k,v in self.gate_statistics[gate].iteritems()}
+            rounded = self.gate_statistics[gate]
             load_slip_percent = (rounded['load_delta'] / rounded['load_distance']) * 100 if rounded['load_distance'] != 0. else 0.
             unload_slip_percent = (rounded['unload_delta'] / rounded['unload_distance']) * 100 if rounded['unload_distance'] != 0. else 0.
             msg += "\nGate #%d: " % gate
