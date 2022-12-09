@@ -233,7 +233,6 @@ class Ercf:
         self.time_spent_unloading = 0
         self.time_spent_paused = 0
         self.total_pauses = 0
-        self.gate_statistics = []
 
         # Register GCODE commands
         self.gcode = self.printer.lookup_object('gcode')
@@ -438,6 +437,7 @@ class Ercf:
             self.ercf_logger.addHandler(queue_handler)
 
         # Setup gate statistics
+        self.gate_statistics = []
         for gate in range(len(self.selector_offsets)):
             self.gate_statistics.append(gate)
             self.gate_statistics[gate] = self._get_gate_statistics(gate)
