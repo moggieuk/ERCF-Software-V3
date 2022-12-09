@@ -52,11 +52,11 @@ copy_template_files() {
                 else
                     magic_str1="NO TOOLHEAD"
 		fi
-                if [ "${clog_detection}" -eq 1 ]; then
-                    magic_str2="## ERCF Clog detection"
-                else
-                    magic_str2="NO CLOG"
-		fi
+#                if [ "${clog_detection}" -eq 1 ]; then
+#                    magic_str2="## ERCF Clog detection"
+#                else
+#                    magic_str2="NO CLOG"
+#		fi
 
                 if [ "${sensorless_selector}" -eq 1 ]; then
                     cat ${SRCDIR}/${file} | sed -e "\
