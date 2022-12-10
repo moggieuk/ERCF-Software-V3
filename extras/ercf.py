@@ -130,7 +130,7 @@ class Ercf:
         self.printer.register_event_handler("klippy:disconnect", self.handle_disconnect)
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
 
-        # Manual steppers
+        # Manual steppers & Encoder
         self.selector_stepper = self.gear_stepper = None
         self.encoder_pin = config.get('encoder_pin')
         self.encoder_resolution = config.getfloat('encoder_resolution', 0.5, above=0.)
@@ -166,7 +166,6 @@ class Ercf:
         self.calibration_bowden_length = config.getfloat('calibration_bowden_length')
         self.unload_buffer = config.getfloat('unload_buffer', 30., above=15.)
         self.home_to_extruder = config.getint('home_to_extruder', 0, minval=0, maxval=1)
-        self.homing_method = config.getint('homing_method', 0, minval=0, maxval=1)
         self.extruder_homing_max = config.getfloat('extruder_homing_max', 50., above=20.)
         self.extruder_homing_step = config.getfloat('extruder_homing_step', 2., above=0.5, maxval=5.)
         self.extruder_homing_current = config.getint('extruder_homing_current', 50, minval=20, maxval=100)
@@ -178,11 +177,13 @@ class Ercf:
         self.home_position_to_nozzle = config.getfloat('home_position_to_nozzle', above=20.)
 
         # Options
+        self.homing_method = config.getint('homing_method', 0, minval=0, maxval=1)
         self.sensorless_selector = config.getint('sensorless_selector', 0, minval=0, maxval=1)
         self.enable_clog_detection = config.getint('enable_clog_detection', 1, minval=0, maxval=1)
         self.enable_endless_spool = config.getint('enable_endless_spool', 0, minval=0, maxval=1)
         self.endless_spool_groups = list(config.getintlist('endless_spool_groups', []))
 
+        # Logging
         self.log_level = config.getint('log_level', 1, minval=0, maxval=4)
         self.logfile_level = config.getint('logfile_level', 3, minval=-1, maxval=4)
         self.log_statistics = config.getint('log_statistics', 0, minval=0, maxval=1)
@@ -216,7 +217,7 @@ class Ercf:
         self.need_to_recover_state = False
         self.paused_extruder_temp = 0.
         self.tool_selected = self.TOOL_UNKNOWN
-        self.gate_selected = self.GATE_UNKNOWN  # We keep record of gate selected incase user messes with mapping in print
+        self.gate_selected = self.GATE_UNKNOWN  # We keep record of gate selected in case user messes with mapping in print
         self.servo_state = self.SERVO_UNKNOWN_STATE
         self.loaded_status = self.LOADED_STATUS_UNKNOWN
         self.filament_direction = self.DIRECTION_LOAD
@@ -415,10 +416,10 @@ class Ercf:
 
         self.ref_step_dist=self.gear_stepper.steppers[0].get_step_dist()
         self.variables = self.printer.lookup_object('save_variables').allVariables
-        self._reset_statistics()
 
         # Override motion sensor runout detection_length based on calibration
-        self.encoder_sensor.detection_length = self._get_calibration_clog_length()
+        if self.encoder_sensor != None:
+            self.encoder_sensor.detection_length = self._get_calibration_clog_length()
 
         # Setup background file based logging
         if self.logfile_level >= 0:
@@ -436,20 +437,24 @@ class Ercf:
             self.ercf_logger.setLevel(logging.INFO)
             self.ercf_logger.addHandler(queue_handler)
 
-        # Setup gate statistics
-        self.gate_statistics = []
-        for gate in range(len(self.selector_offsets)):
-            self.gate_statistics.append(gate)
-            self.gate_statistics[gate] = self._get_gate_statistics(gate)
+        # Setup statistics
+        if not self.done_connect:
+            self._reset_statistics()
+            self.gate_statistics = []
+            for gate in range(len(self.selector_offsets)):
+                self.gate_statistics.append(gate)
+                self.gate_statistics[gate] = self._get_gate_statistics(gate)
 
-    def handle_ready(self):
-        self._setup_heater_off_reactor()
-        self._log_always('(\_/)\n( *,*)\n(")_(") ERCF Ready')
+        self.done_connect = True
 
     def handle_disconnect(self):
         self._log_always('ERCF Shutdown')
         if self.queue_listener != None:
             self.queue_listener.stop()
+
+    def handle_ready(self):
+        self._setup_heater_off_reactor()
+        self._log_always('(\_/)\n( *,*)\n(")_(") ERCF Ready')
 
 
 ####################################
@@ -1359,7 +1364,6 @@ class Ercf:
             if delta > tolerance:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
                 self._log_info("Warning: Excess slippage was detected in bowden tube load afer correction moves. Moved %.1fmm, Encoder delta %.1fmm. Possible causes:\nCalibration ref length too long (hitting extruder gear before homing) \nERCF gears are not properly gripping filament\nEncoder reading is inaccurate\nFaulty servo" % (length, delta))
-                #raise ErcfError("Too much slippage (%.1fmm) detected during the load of bowden. Possible causes:\nCalibration ref length is too long\nERCF gears are not properly gripping filament\nEncoder reading is inaccurate\nFaulty servo" % delta)
         else:
             if delta >= tolerance:
                 self._log_info("Warning: Excess slippage was detected in bowden tube load but 'apply_bowden_correction' is disabled. Moved %.1fmm, Encoder delta %.1fmm" % (length, delta))
@@ -1706,7 +1710,9 @@ class Ercf:
         self._set_above_min_temp()
         self._servo_up()
         initial_encoder_position = self._counter.get_distance()
+        initial_pa = self.printer.lookup_object("extruder").get_status(0)['pressure_advance'] # Capture PA in case user's tip forming resets it
         self.gcode.run_script_from_command("_ERCF_FORM_TIP_STANDALONE")
+        self.gcode.run_script_from_command("SET_PRESSURE_ADVANCE ADVANCE=%.4f" % initial_pa) # Restore PA
         delta = self._counter.get_distance() - initial_encoder_position
         self._log_trace("After tip formation, encoder moved %.2f" % delta)
         self._counter.set_distance(initial_encoder_position + park_pos)
@@ -1918,7 +1924,6 @@ class Ercf:
                 self.gate_selected = self.GATE_UNKNOWN
                 self._set_steps(1.)
             else:
-                #self.gate_selected = self._tool_to_gate(tool) # TODO probably shouldn't happen here, only when gate is really selected
                 self._set_steps(self._get_gate_ratio(self.gate_selected))
             if not silent:
                 self._display_visual_state()
@@ -2192,7 +2197,7 @@ class Ercf:
 # RUNOUT, ENDLESS SPOOL and GATE HANDLING #
 ###########################################
 
-    def _handle_runout(self):
+    def _handle_runout(self, force_runout):
         if self._check_is_paused(): return
         if self.tool_selected < 0:
             raise ErcfError("Filament runout or movement issue on an unknown or bypass tool - manual intervention is required")
@@ -2206,14 +2211,12 @@ class Ercf:
         self._servo_down()
         found = self._buzz_gear_motor()
         self._servo_up()
-        if found:
+        if found and not force_runout:
             raise ErcfError("A clog has been detected and requires manual intervention")
 
         # We have a filament runout
         self._log_always("A runout has been detected")
         if self.enable_endless_spool:
-            # Need to capture PA just in case user's tip forming resets it
-            initial_pa = self.printer.lookup_object("extruder").get_status(0)['pressure_advance']
             group = self.endless_spool_groups[self.tool_selected]
             self._log_info("EndlessSpool checking for additional spools in group %d..." % group)
             num_tools = len(self.selector_offsets)
@@ -2233,19 +2236,19 @@ class Ercf:
                 raise ErcfError("No more available EndlessSpool spools available")
             self._log_info("Remapping T%d to gate #%d" % (self.tool_selected, next_gate))
 
-            self.gcode.run_script_from_command("SAVE_GCODE_STATE NAME=ERCF_PRE_UNLOAD")
+            self.gcode.run_script_from_command("SAVE_GCODE_STATE NAME=ERCF_endless_spool")
             self.gcode.run_script_from_command("_ERCF_ENDLESS_SPOOL_PRE_UNLOAD")
+            self.toolhead.wait_moves()
             if not self._form_tip_standalone():
-                self._log_debug("Didn't detect filamanet during tip forming move!")
+                self._log_info("Didn't detect filament during tip forming move!")
             self._unload_tool(in_print=True)
             self._remap_tool(self.tool_selected, next_gate, 1)
             self._select_and_load_tool(self.tool_selected)
-            self.gcode.run_script_from_command("SET_PRESSURE_ADVANCE ADVANCE=%.6f" % initial_pa)
             self.gcode.run_script_from_command("_ERCF_ENDLESS_SPOOL_POST_LOAD")
-            self.gcode.run_script_from_command("RESTORE_GCODE_STATE NAME=ERCF_PRE_UNLOAD")
-            self.gcode.run_script_from_command("RESUME")
-
+            self.toolhead.wait_moves()
+            self.gcode.run_script_from_command("RESTORE_GCODE_STATE NAME=ERCF_endless_spool")
             self._enable_encoder_sensor()
+            # Continue printing...
         else:
             raise ErcfError("EndlessSpool mode is off - manual intervention is required")
 
@@ -2292,8 +2295,9 @@ class Ercf:
 
     cmd_ERCF_ENCODER_RUNOUT_help = "Encoder runout handler"
     def cmd_ERCF_ENCODER_RUNOUT(self, gcmd):
+        force_runout = bool(gcmd.get_int('RUNOUT', 0, minval=0, maxval=1))
         try:
-            self._handle_runout()
+            self._handle_runout(force_runout)
         except ErcfError as ee:
             self._pause(str(ee))
 
