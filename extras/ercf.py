@@ -234,6 +234,7 @@ class Ercf:
         self.time_spent_unloading = 0
         self.time_spent_paused = 0
         self.total_pauses = 0
+        self.gate_statistics = []
 
         # Register GCODE commands
         self.gcode = self.printer.lookup_object('gcode')
@@ -440,10 +441,6 @@ class Ercf:
         # Setup statistics
         if not self.done_connect:
             self._reset_statistics()
-            self.gate_statistics = []
-            for gate in range(len(self.selector_offsets)):
-                self.gate_statistics.append(gate)
-                self.gate_statistics[gate] = self._get_gate_statistics(gate)
 
         self.done_connect = True
 
@@ -471,9 +468,13 @@ class Ercf:
         self.time_spent_unloading = 0
         self.total_pauses = 0
         self.time_spent_paused = 0
-
         self.tracked_start_time = 0
         self.pause_start_time = 0
+
+        self.gate_statistics = []
+        for gate in range(len(self.selector_offsets)):
+            self.gate_statistics.append(gate)
+            self.gate_statistics[gate] = self._get_gate_statistics(gate)
 
     def _track_swap_completed(self):
         self.total_swaps += 1
@@ -533,17 +534,33 @@ class Ercf:
             self._dump_gate_statistics()
 
     def _dump_gate_statistics(self):
-        msg = "Gate Statistics:"
+        msg = "Gate Statistics:\n"
+        dbg = ""
         for gate in range(len(self.selector_offsets)):
             #rounded = {k:round(v,1) if isinstance(v,float) else v for k,v in self.gate_statistics[gate].items()}
             rounded = self.gate_statistics[gate]
             load_slip_percent = (rounded['load_delta'] / rounded['load_distance']) * 100 if rounded['load_distance'] != 0. else 0.
             unload_slip_percent = (rounded['unload_delta'] / rounded['unload_distance']) * 100 if rounded['unload_distance'] != 0. else 0.
-            msg += "\nGate #%d: " % gate
-            msg += "Load: (monitored: %.1fmm slippage: %.1f%%)" % (rounded['load_distance'], load_slip_percent)
-            msg += "; Unload: (monitored: %.1fmm slippage: %.1f%%)" % (rounded['unload_distance'], unload_slip_percent)
-            msg += "; Failures: (servo: %d load: %d unload: %d pauses: %d)" % (rounded['servo_retries'], rounded['load_failures'], rounded['unload_failures'], rounded['pauses'])
-        self._log_debug(msg)
+            # Give the gate a reliabilty grading based on slippage
+            grade = load_slip_percent + unload_slip_percent
+            if grade < 2.:
+                status = "Good"
+            elif grade < 4.:
+                status = "Marginal"
+            elif grade < 6.:
+                status = "Degraded"
+            elif grade < 10.:
+                status = "Poor"
+            else:
+                status = "Terrible"
+            msg += "#%d: %s" % (gate, status)
+            msg += ", " if gate < (len(self.selector_offsets) - 1) else ""
+            dbg += "\nGate #%d: " % gate
+            dbg += "Load: (monitored: %.1fmm slippage: %.1f%%)" % (rounded['load_distance'], load_slip_percent)
+            dbg += "; Unload: (monitored: %.1fmm slippage: %.1f%%)" % (rounded['unload_distance'], unload_slip_percent)
+            dbg += "; Failures: (servo: %d load: %d unload: %d pauses: %d)" % (rounded['servo_retries'], rounded['load_failures'], rounded['unload_failures'], rounded['pauses'])
+        self._log_always(msg)
+        self._log_debug(dbg)
 
     def _log_always(self, message):
         if self.ercf_logger:
