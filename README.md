@@ -199,6 +199,7 @@ If you have installed the optional filament bypass block your can configure its 
 
 ### Logging
 There are four configuration options that control logging:
+
     log_level & logfile_level can be set to one of (0 = essential, 1 = info, 2 = debug, 3 = trace, 4 = developer)
     Generally you can keep console logging to a minimal whilst still sending debug output to the ercf.log file
     Increasing the console log level is only really useful during initial setup to save having to constantly open the log file
