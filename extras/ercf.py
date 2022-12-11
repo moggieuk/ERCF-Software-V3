@@ -1494,7 +1494,7 @@ class Ercf:
             self._servo_down()
             self._log_debug("Moving the gear and extruder motors in sync for %.1fmm" % self.sync_load_length) 
             delta = self._trace_filament_move("Sync load move", self.sync_load_length, speed=10, motor="both")
-            tolerance = max(self.sync_load_length * 0.3, 4.0) # Allow around 30% of slippage because of possible spring in filament
+            tolerance = max(self.sync_load_length * 0.5, 5.0) # Allow around 50% of slippage because of possible spring in filament
             if delta > tolerance:
                 raise ErcfError("Too much slippage detected during the sync load to nozzle")
             length -= (self.sync_load_length - delta)
@@ -1679,7 +1679,7 @@ class Ercf:
                     delta = self._trace_filament_move("Retrying sync unload move after servo reset", -delta, speed=10, motor="both")
                 else:
                     delta = self._trace_filament_move("Retrying unload move after servo reset", -delta, speed=10, motor="gear", track=True)
-                if delta > 2.0:
+                if delta > 3.0:
                     # Actually we are likely still stuck in extruder
                     self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
                     raise ErcfError("Too much slippage (%.1fmm) detected during the sync unload from extruder" % delta)
