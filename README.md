@@ -21,9 +21,11 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 <li>Runtime configuration via new command (ERCF_TEST_CONFIG) for most options which avoids constantly restarting klipper or recalibrating during setup
 <li>Workarond to some of the ways to provoke Klipper “Timer too close” errors (although there are definitely bugs in the Klipper firmware)
 <li>More reliable “in-print” detection so tool change command “Tx” g-code can be used anytime and the user does not need to resort to “ERCF_CHANGE_TOOL STANDALONE=1”
-<li>New LOG_LEVEL=4 for developer use.  BTW This is useful in seeing the exact stepper movements
+<li>New log to file functionality. You can keep the console log to a minimum and send debugging information to `ercf.log` located in the same directory as Klipper logs
 <li>New "TEST" commands to help diagnose issues with encoder
 <li>Experimental logic to use stallguard filament homing (Caveat: not easy to setup using EASY-BRD and not compatible with sensorless selector homing option)
+<li>The clog detection runout distance is now set based on measurements of the filament "spring" i.e. the maximum the extruder can move before encoder sees it.
+<li>The install will add to the moonraker update-manager so you can manage this like any other Klipper plugin in Mainsail/Fluidd
 </ul>
   
 ## Other benefits of the code cleanup / rewrite:
@@ -93,40 +95,37 @@ Also be sure to read my [notes on Encoder problems](doc/ENCODER.md) - the better
 ### Config Loading and Unload sequences explained
 Note that if a toolhead sensor is configured it will become the default filament homing method and home to extruder an optional but unecessary step. Also note the home to extruder step will always be performed during calibration of tool 0 (to accurately set `ercf_calib_ref`) regardless of the `home_to_extruder` setting. For accurate homing and to avoid grinding, tune the gear stepper current reduction `extruder_homing_current` as a % of the default run current.
 
-#### Possible loading options (ercf_parameters.cfg configuration) WITH toolhead sensor:
+#### Possible loading options (explained in ercf_parameters.cfg template):
+     If you have a toolhead sensor for filament homing:
+        toolhead_homing_max: 35            # Maximum distance to advance in order to attempt to home to toolhead sensor (default 20)
+        toolhead_homing_step: 1.0          # Step size to use when homing to the toolhead sensor (default 1)
 
-    Extruder homing config          Toolhead homing config     Notes
-    ----------------------          ----------------------     -----
-    
-    1. home_to_extruder=0           toolhead_homing_max=20     This is probably the BEST option and can work with FLEX
-                                    toolhead_homing_step=1     Filament. Filament loaded close to extruder gear, then is pulled
-                                    sync_load_length=1         through to home on toolhead sensor by synchronized gear
-                                                               and extruder motors
-    
-    2. home_to_extruder=0           toolhead_homing_max=20     Not recommended but can avoid problems with sync move.  The
-                                    toolhead_homing_step=1     initial load to end of bowden must press the filament to
-                                    sync_load_length=0         create spring so that extruder will pick up the filament
-    
-    3. home_to_extruder=1           toolhead_homing_max=20     Not recommended. The filament will be rammed against extruder
-       extruder_homing_max=50       toolhead_homing_step=1     to home and then synchronously pulled through to home again on
-       extruder_homing_step=2       sync_load_length=1         toolhead sensor (no more than 20mm away in this example)
-       extruder_homing_current=50
-    
-    4. home_to_extruder=1           toolhead_homing_max=20     A bit redundant to home twice but allows for reliable filament
-       extruder_homing_max=50       toolhead_homing_step=1     pickup by extruder, accurate toolhead homing and avoids 
-       extruder_homing_step=2       sync_load_length=0         possible problems with sync move (like Timer too close)
-       extruder_homing_current=50
+    Options without toolhead sensor (but still needed for calibration with toolhead sensor)
 
-#### Possible loading options WITHOUT toolhead sensor:
-    5. home_to_extruder=1          sync_load_length=10         BEST option without a toolhead sensor.  Filament is homed to
-       extruder_homing_max=50                                  extruder gear and then the initial move into the extruder is
-       extruder_homing_step=2                                  synchronised for accurate pickup
-       extruder_homing_current=50
-  
-    6. home_to_extruder=1          sync_load_length=0          Same as above but avoids the synchronous move.  Can be
-       extruder_homing_max=50                                  reliable with accurate calibration reference length and
-       extruder_homing_step=2                                  accurate encoder. Use of 'delay_servo_release' recommended
-       extruder_homing_current=50.                             to keep pressure on the extruder gears for initial load
+        extruder_homing_max: 50            # Maximum distance to advance in order to attempt to home the extruder
+        extruder_homing_step: 2.0          # Step size to use when homing to the extruder with collision detection (default 2)
+    
+    For accurate homing and to avoid grinding, tune the gear stepper current reduction
+
+        extruder_homing_current: 40        # Percentage of gear stepper current to use when extruder homing (TMC2209 only, 100 to disable)
+    
+    How far (mm) to run gear_stepper and extruder together in sync on load and unload. This will make loading and unloading
+    more reliable and will act as a "hair pulling" step on unload.  These settings are optional - use 0 to disable
+    Non zero value for 'sync_load_length' will synchronize the whole homing distance if toolhead sensor is installed
+
+        sync_load_length: 10               # mm of synchronized extruder loading at entry to extruder
+        sync_unload_length: 10             # mm of synchronized movement at start of bowden unloading
+    
+    This is the distance of the final filament load from the homing point to the nozzle
+    If homing to toolhead sensor this will be the distance from the toolhead sensor to the nozzle
+    If extruder homing it will be the distance from the extruder gears (end of bowden) to the nozzle
+    
+    This value can be determined by manually inserting filament to your homing point (extruder gears or toolhead sensor)
+    and advancing it 1-2mm at a time until it starts to extrude from the nozzle.  Subtract 1-2mm from that distance distance
+    to get this value.  If you have large gaps in your purge tower, increase this value.  If you have blobs, reduce this value.
+    This value will depend on your extruder, hotend and nozzle setup.
+
+        home_position_to_nozzle: 72        # E.g. Revo Voron with CW2 extruder using extruder homing
 
 *Obviously the actual distances shown above may be customized*
   
@@ -192,6 +191,24 @@ If you have installed the optional filament bypass block your can configure its 
   
   <img src="doc/Calibration Ref.png" width="500" alt="ERCF_CALIBRATION_SINGLE TOOL=0">
   
+### Useful pre-print functionality
+  The `ERCF_PRELOAD` command works a bit like the Prusa MMU and spins gear with servo depressed until filament is fed in.  Then parks the filament nicely.  Similarly the `ERCF_CHECK_GATES` command will run through all the gates (or those specified), checks that filament is loaded, correctly parks and updates the "gate status" map of empty gates. Could be a really useful pre-print check...
+
+### Gate statistics
+  Per-gate statistics that aggregate servo/load/unload failures and slippage are recorded throughout a session and can be logged at each toolchange.  An augmented ERCF_DUMP_STATS command will display these stats and will give a rating on the quality of functionality of the gate (more info is sent to debug level typically found in the `ercf.log`).  The per-gate statistics will record important data about possible problems with individual gates.  Since the software will try to recover for many of this conditions you might not know you have a problem.  One particularly useful feature is being able to spot gates that are prone to slippage.  If slippage occurs on all gates equally, it is likely an encoder problem.  If on one gate if might be incorrect calibration of that gate or friction in the filament path.  Note that ERCF_DUMP_STATS will display this data but it is sent to the DEBUG log level so you will only see it in the ercf.log file if you setup as I suggest.
+
+### Logging
+There are four configuration options that control logging:
+    log_level & logfile_level can be set to one of (0 = essential, 1 = info, 2 = debug, 3 = trace, 4 = developer)
+    Generally you can keep console logging to a minimal whilst still sending debug output to the ercf.log file
+    Increasing the console log level is only really useful during initial setup to save having to constantly open the log file
+      log_level: 1
+      logfile_level: 3            # Can also be set to -1 to disable log file completely
+      log_statistics: 1           # 1 to log statistics on every toolchange, 0 to disable (still recorded)
+      log_visual: 1               # 1 to log a fun visual representation of ERCF state showing filament position, 0 disable
+
+The logfile will be placed in the same directory as other log files and is called ercf.log.  It will rotate and keep the last 5 versions (just like klipper).  The default log level for ercf.log is "3" but can be set by adding "logfile_level" in you ercf_parameters.cfg.  With this available my suggestion is to reset the console logging level "log_level: 1" for an uncluttered experience knowing that you can always access ercf.log for debugging at a later time.  Oh, and if you don't want the logfile, no problem, just set "logfile_level: -1"
+
 <br>
 
 ## My Testing:
@@ -290,9 +307,17 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   ## Tool to Gate map and Endless spool
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
-  | ERCF_ENCODER_RUNOUT | Filament runout handler that will also implement EndlessSpool if enabled | None |
+  | ERCF_ENCODER_RUNOUT | Filament runout handler that will also implement EndlessSpool if enabled | RUNOUT=1 is useful for testing to validate your _ERCF_ENDLESS_SPOOL\*\* macros |
   | ERCF_DISPLAY_TTG_MAP | Displays the current Tool -> Gate mapping (can be used all the time but generally designed for EndlessSpool  | None |
   | ERCF_REMAP_TTG | Reconfiguration of the Tool - to - Gate (TTG) map.  Can also set gates as empty! | TOOL=\[0..n\] <br>GATE=\[0..n\] Maps specified tool to this gate (multiple tools can point to same gate) <br>AVAILABLE=\[0\|1\]  Marks gate as available or empty |
   | ERCF_RESET_TTG_MAP | Reset the Tool-to-Gate map back to default | None |
   | ERCF_CHECK_GATES | Inspect the gate(s) and mark availability | GATE=\[0..n\] The specific gate to check. If ommitted all gates will be checked (the default) |
-  
+  <br>
+
+  ## User defined macros
+  | Commmand | Description | Parameters |
+  | -------- | ----------- | ---------- |
+  | _ERCF_ENDLESS_SPOOL_PRE_UNLOAD | Called prior to unloading the remains of the current filament |
+  | _ERCF_ENDLESS_SPOOL_POST_LOAD | Called subsequent to loading filament in the new gate in the sequence |
+  | _ERCF_FORM_TIP_STANDALONE | Called to create tip on filament when not in print (and under the control of the slicer) |
+

@@ -1122,11 +1122,24 @@ class Ercf:
         return False
 
     def _is_in_print(self):
-        status = self.printer.lookup_object("idle_timeout").get_status(self.printer.get_reactor().monotonic())
-        if self.printer.lookup_object("pause_resume").is_paused:
-            status["state"] = "Paused"
-        self._log_debug("Is in print reported: %s" % status)
-        return status["state"] == "Printing" and status["printing_time"] > 1.0
+        try:
+            # If using virtual sdcard this is the most reliable method
+            source = "print_stats"
+            print_status = self.printer.lookup_object("print_stats").get_status(self.printer.get_reactor().monotonic())['state']
+        except:
+            # Otherwise we fallback to idle_timeout
+            source = "idle_timeout"
+            if self.printer.lookup_object("pause_resume").is_paused:
+                print_status = "paused"
+            else:
+                idle_timeout = self.printer.lookup_object("idle_timeout").get_status(self.printer.get_reactor().monotonic())
+                if idle_timeout["printing_time"] < 1.0:
+                    print_status = "standby"
+                else:
+                    print_status = idle_timeout['state'].lower()
+        finally:
+            self._log_debug("Is in print reported state as: %s from %s" % (print_status, source))
+            return print_status == "printing"
 
     def _set_above_min_temp(self):
         if not self.printer.lookup_object("extruder").heater.can_extrude :
@@ -1572,7 +1585,7 @@ class Ercf:
                 # Fast unload of bowden
                 self._unload_bowden(length - self.unload_buffer, skip_sync_move=skip_sync_move)
                 self._unload_encoder(self.unload_buffer)
-            elif self.loaded_status == self.LOADED_STATUS_PARTIAL_IN_BOWDEN:
+            elif self.loaded_status >= self.LOADED_STATUS_PARTIAL_BEFORE_ENCODER and self.loaded_status <= self.LOADED_STATUS_PARTIAL_IN_BOWDEN:
                 # Have to do slow unload because we don't know exactly where we are
                 self._unload_encoder(length)
             else:
