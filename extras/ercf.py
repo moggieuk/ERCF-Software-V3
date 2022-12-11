@@ -1493,13 +1493,15 @@ class Ercf:
         if not skip_sync_move and self.sync_load_length > 0:
             self._servo_down()
             self._log_debug("Moving the gear and extruder motors in sync for %.1fmm" % self.sync_load_length) 
-            delta = self._trace_filament_move("Sync load move", self.sync_load_length, speed=10, motor="both")
-            tolerance = max(self.sync_load_length * 0.5, 5.0) # Allow around 50% of slippage because of possible spring in filament
-            if delta > tolerance:
-                raise ErcfError("Too much slippage detected during the sync load to nozzle")
-            length -= (self.sync_load_length - delta)
+            delta = self._trace_filament_move("Sync load move", self.sync_load_length, speed=10, motor="both") 
+# This is causing problems for users so disable for now
+#            tolerance = self._get_calibration_clog_length() # Course sanity check - not great because of possible spring in filament
+#            if delta > tolerance:
+#                raise ErcfError("Not enough encoder movement (determined from clog detection length) detected during the sync load to nozzle")
+#            length -= (self.sync_load_length - delta)
+            length -= self.sync_load_length
         elif self.home_to_extruder and self.delay_servo_release > 0:
-            # Delay servo release by a few mm to keep filamanet tension for reliable transition
+            # Delay servo release by a few mm to keep filament tension for reliable transition
             delta = self._trace_filament_move("Small extruder move under filament tension before servo release", self.delay_servo_release, speed=20, motor="extruder")
             length -= self.delay_servo_release
 
@@ -1542,7 +1544,7 @@ class Ercf:
 
             if check_state or self.loaded_status == self.LOADED_STATUS_UNKNOWN:
                 # Let's determine where filament is and reset state before continuing
-                self._log_debug("Unknown filament postion, recovering state...")
+                self._log_debug("Unknown filament position, recovering state...")
                 self._recover_loaded_state()
             else:
                 self._display_visual_state()
@@ -1682,7 +1684,7 @@ class Ercf:
                 if delta > 3.0:
                     # Actually we are likely still stuck in extruder
                     self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
-                    raise ErcfError("Too much slippage (%.1fmm) detected during the sync unload from extruder" % delta)
+                    raise ErcfError("Too much slippage (%.1fmm) detected during the sync unload from extruder. Maybe still stuck in extruder" % delta)
                 length -= (initial_move - delta)
         
         # Continue fast unload
@@ -1722,7 +1724,7 @@ class Ercf:
 
     # Form tip and return True if encoder movement occured
     def _form_tip_standalone(self):
-        park_pos = 35.  # TODO cosmetic: bring in from tip forming (parking postion in extruder)
+        park_pos = 35.  # TODO cosmetic: bring in from tip forming (parking position in extruder)
         self._log_info("Forming tip...")
         self._set_above_min_temp()
         self._servo_up()
@@ -1994,7 +1996,7 @@ class Ercf:
         standalone = gcmd.get_int('STANDALONE', 0, minval=0, maxval=1)
         in_print = self._is_in_print() and (standalone == 0)
         if in_print and self.need_to_recover_state:
-            self._log_debug("Unknown filament postion, recovering state...")
+            self._log_debug("Unknown filament position, recovering state...")
             self._recover_loaded_state()
         try:
             self._change_tool(tool, in_print)
