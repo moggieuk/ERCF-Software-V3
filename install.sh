@@ -1,6 +1,7 @@
 #!/bin/bash
 KLIPPER_HOME="${HOME}/klipper"
 KLIPPER_CONFIG_HOME="${HOME}/klipper_config"
+PRINTER_DATA_CONFIG_HOME="${HOME}/printer_data/config"
 
 verify_not_root() {
     if [ "$EUID" -eq 0 ]; then
@@ -25,8 +26,11 @@ verify_home_dirs() {
         exit -1
     fi
     if [ ! -d "${KLIPPER_CONFIG_HOME}" ]; then
-        echo "Klipper config directory (${KLIPPER_CONFIG_HOME}) not found. Use '-c <dir>' option to override"
-        exit -1
+        if [ ! -d "${PRINTER_DATA_CONFIG_HOME}" ]; then
+            echo "Klipper config directory (${KLIPPER_CONFIG_HOME} or ${PRINTER_DATA_CONFIG_HOME}) not found. Use '-c <dir>' option to override"
+            exit -1
+        fi
+        KLIPPER_CONFIG_HOME="${PRINTER_DATA_CONFIG_HOME}"
     fi
 }
 
@@ -36,6 +40,10 @@ link_ercf_plugin() {
 }
 
 copy_template_files() {
+    if [ "${INSTALL_TEMPLATES}" -eq 0 ]; then
+        return
+    fi
+
     echo "Copying configuration files to ${KLIPPER_CONFIG_HOME}"
     for file in `cd ${SRCDIR} ; ls *.cfg`; do
         dest=${KLIPPER_CONFIG_HOME}/${file}
@@ -45,67 +53,74 @@ copy_template_files() {
 	    mv ${dest} ${dest}.00
         fi
 
-        if [ "${easy_brd}" -eq 1 ]; then
-            if [ "${file}" = "ercf_hardware.cfg" ]; then
-                if [ "${toolhead_sensor}" -eq 1 ]; then
-                    magic_str1="## ERCF Toolhead sensor"
-                else
-                    magic_str1="NO TOOLHEAD"
-		fi
-                if [ "${clog_detection}" -eq 1 ]; then
-                    magic_str2="## ERCF Clog detection"
-                else
-                    magic_str2="NO CLOG"
-		fi
-
-                if [ "${sensorless_selector}" -eq 1 ]; then
-                    cat ${SRCDIR}/${file} | sed -e "\
-                        s/^#endstop_pin: \^ercf:PB9/!endstop_pin: \^ercf:PB9/; \
-                        s/^#diag_pin: \^ercf:PA7/diag_pin: \^ercf:PA7/; \
-                        s/^#driver_SGTHRS: 75/driver_SGTHRS: 75/; \
-                        s/^endstop_pin: \^ercf:PB9/#endstop_pin: \^ercf:PB9/; \
-                        s/^!endstop_pin: \^ercf:PB9/endstop_pin: \^ercf:PB9/; \
-                        s/^#endstop_pin: tmc2209_selector_stepper/endstop_pin: tmc2209_selector_stepper/; \
-                        s%{serial}%${serial}%; \
-                        s/{toolhead_sensor_pin}/${toolhead_sensor_pin}/; \
-                        /^${magic_str1} START/,/${magic_str1} END/ s/^#//; \
-                        /^${magic_str2} START/,/${magic_str2} END/ s/^#//; \
-                            " > ${dest}
-                else
-                    # This is the default template config
-                    cat ${SRCDIR}/${file} | sed -e "\
-                        s%{serial}%${serial}%; \
-                        s/{toolhead_sensor_pin}/${toolhead_sensor_pin}/; \
-                        /^${magic_str1} START/,/${magic_str1} END/ s/^#//; \
-                        /^${magic_str2} START/,/${magic_str2} END/ s/^#//; \
-                            " > ${dest}
-                fi
-            elif [ "${file}" = "ercf_software.cfg" ]; then
-                cat ${SRCDIR}/${file} | sed -e "\
-                    s%{klipper_config_home}%${KLIPPER_CONFIG_HOME}%g; \
-                        " > ${dest}
-	    else
-                # Not ercf_hardware.cfg or ercf_software.cfg
-                cat ${SRCDIR}/${file} | sed -e "\
-                    s/{sensorless_selector}/${sensorless_selector}/g; \
-                    s/{clog_detection}/${clog_detection}/g; \
-                    s/{endless_spool}/${endless_spool}/g; \
-                    s/{servo_up_angle}/${servo_up_angle}/g; \
-                    s/{servo_down_angle}/${servo_down_angle}/g; \
-                    s/{calibration_bowden_length}/${calibration_bowden_length}/g; \
-                        " > ${dest}
+        if [ "${file}" = "ercf_hardware.cfg" ]; then
+            if [ "${toolhead_sensor}" -eq 1 ]; then
+                magic_str1="## ERCF Toolhead sensor"
+            else
+                magic_str1="NO TOOLHEAD"
             fi
-        else
-            # Non EASY-BRB just install most of the templates as is
-            if [ "${file}" = "ercf_software.cfg" ]; then
+            if [ "${clog_detection}" -eq 1 ]; then
+                magic_str2="## ERCF Clog detection"
+            else
+                magic_str2="NO CLOG"
+            fi
+
+            if [ "${sensorless_selector}" -eq 1 ]; then
                 cat ${SRCDIR}/${file} | sed -e "\
-                    s%{klipper_config_home}%${KLIPPER_CONFIG_HOME}%g; \
+                    s/^#endstop_pin: \^ercf:PB9/!endstop_pin: \^ercf:PB9/; \
+                    s/^#diag_pin: \^ercf:PA7/diag_pin: \^ercf:PA7/; \
+                    s/^#driver_SGTHRS: 75/driver_SGTHRS: 75/; \
+                    s/^endstop_pin: \^ercf:PB9/#endstop_pin: \^ercf:PB9/; \
+                    s/^!endstop_pin: \^ercf:PB9/endstop_pin: \^ercf:PB9/; \
+                    s/^#endstop_pin: tmc2209_selector_stepper/endstop_pin: tmc2209_selector_stepper/; \
+                    s%{serial}%${serial}%; \
+                    s/{toolhead_sensor_pin}/${toolhead_sensor_pin}/; \
+                    /^${magic_str1} START/,/${magic_str1} END/ s/^#//; \
+                    /^${magic_str2} START/,/${magic_str2} END/ s/^#//; \
                         " > ${dest}
             else
-                cp ${SRCDIR}/${file} ${dest}
+                # This is the default template config
+                cat ${SRCDIR}/${file} | sed -e "\
+                    s%{serial}%${serial}%; \
+                    s/{toolhead_sensor_pin}/${toolhead_sensor_pin}/; \
+                    /^${magic_str1} START/,/${magic_str1} END/ s/^#//; \
+                    /^${magic_str2} START/,/${magic_str2} END/ s/^#//; \
+                        " > ${dest}
             fi
+        elif [ "${file}" = "ercf_software.cfg" ]; then
+            cat ${SRCDIR}/${file} | sed -e "\
+                s%{klipper_config_home}%${KLIPPER_CONFIG_HOME}%g; \
+                    " > ${dest}
+        else
+            # Not ercf_hardware.cfg or ercf_software.cfg
+            cat ${SRCDIR}/${file} | sed -e "\
+                s/{sensorless_selector}/${sensorless_selector}/g; \
+                s/{clog_detection}/${clog_detection}/g; \
+                s/{endless_spool}/${endless_spool}/g; \
+                s/{servo_up_angle}/${servo_up_angle}/g; \
+                s/{servo_down_angle}/${servo_down_angle}/g; \
+                s/{calibration_bowden_length}/${calibration_bowden_length}/g; \
+                    " > ${dest}
         fi
     done
+
+    if [ "${INSTALL_TEMPLATES}" -eq 1 ]; then
+        if [ "${add_includes}" -eq 1 ]; then
+            # Link in all includes if not already present
+            dest=${KLIPPER_CONFIG_HOME}/printer.cfg
+            if test -f $dest; then
+                echo "Copying original printer.cfg file to printer.cfg.00"
+                cp ${dest} ${dest}.00
+                sed -i '1i [include ercf_hardware.cfg]
+                        1i [include ercf_parameters.cfg]
+                        1i [include ercf_software.cfg]
+                        1i [include client_macros.cfg]
+                        1i [include ercf_vars.cfg]' ${dest}
+            else
+                echo "File printer.cfg file not found! Cannot include ERCF configuration files"
+            fi
+        fi
+    fi
 }
 
 install_update_manager() {
@@ -175,7 +190,6 @@ verify_home_dirs
 check_klipper
 link_ercf_plugin
 
-easy_brd=0
 if [ "${INSTALL_TEMPLATES}" -eq 1 ]; then
     echo
     echo "Let me see if I can help you with initial config (you will still have some manual config to perform)..."
@@ -184,6 +198,7 @@ if [ "${INSTALL_TEMPLATES}" -eq 1 ]; then
     case $yn in
         y)
             easy_brd=1
+            echo "Great, I can setup almost everything for you. Let's get started"
             serial=""
             echo
             for line in `ls /dev/serial/by-id | grep "Klipper_samd21"`; do
@@ -204,25 +219,6 @@ if [ "${INSTALL_TEMPLATES}" -eq 1 ]; then
 	    fi
 
             echo
-            echo "Do you have a toolhead sensor you would like to use? If reliable this provides the smoothest and most reliable loading and unloading operation"
-            yn=$(prompt_yn "Enable toolhead sensor")
-            case $yn in
-                y)
-	            toolhead_sensor=1
-	            echo "    What is the mcu pin name that your toolhead sensor is connected too?"
-		    echo "    If you don't know just hit return, I can enter a default and you can change later"
-                    read -p "    Toolhead sensor pin name? " toolhead_sensor_pin
-                    if [ "${toolhead_sensor_pin}" == "" ]; then
-                        toolhead_sensor_pin="<dummy_pin_must_set_me>"
-                    fi
-                    ;;
-                n)
-	            toolhead_sensor=0
-                    toolhead_sensor_pin="<dummy_pin_must_set_me>"
-                    ;;
-	    esac
-
-            echo
             echo "Sensorless selector operation? This allows for additional selector recovery steps but disables the 'extra' input on the EASY-BRD."
             yn=$(prompt_yn "Enable sensorless selector operation")
             case $yn in
@@ -237,68 +233,129 @@ if [ "${INSTALL_TEMPLATES}" -eq 1 ]; then
 	            sensorless_selector=0
                     ;;
 	    esac
-
-            echo
-	    echo "Using default MG-90S servo? (If you answer no, will setup for Savox SH0255MG - you can change later)"
-            yn=$(prompt_yn "MG-90S Servo?")
-            case $yn in
-                y)
-	            servo_up_angle=30
-	            servo_down_angle=140
-                    ;;
-                n)
-	            servo_up_angle=140
-	            servo_down_angle=30
-                    ;;
-	    esac
-
-	    echo
-            echo "Clog detection? This uses the ERCF encoder movement to detect clogs and can call your filament runout logic"
-            yn=$(prompt_yn "Enable clog detection")
-            case $yn in
-                y)
-                    clog_detection=1
-                    ;;
-                n)
-                    clog_detection=0
-                    ;;
-	    esac
-
-	    echo
-            echo "EndlessSpool? This uses filament runout detection to automate switching to new spool without interruption"
-            yn=$(prompt_yn "Enable EndlessSpool")
-            case $yn in
-                y)
-                    endless_spool=1
-                    if [ "${clog_detection}" -eq 0 ]; then
-                        echo
-                        echo "    NOTE: I've re-enabled clog detection which is necessary for EndlessSpool to function"
-                        clog_detection=1
-                    fi
-                    ;;
-                n)
-		endless_spool=0
-                    ;;
-	    esac
-
-	    echo
-	    echo "What is the length of your reverse bowden tube in mm?"
-            echo "(This is just to speed up calibration and needs to be approximately right but not longer than the real length)"
-            while true; do
-                read -p "Reverse bowden length in mm? " calibration_bowden_length
-		if ! [ "${calibration_bowden_length}" -ge 1 ] 2> /dev/null ;then
-                    echo "Positive integer value only"
-                else
-                    break
-                fi
-            done
             ;;
 
         n)
-            echo "Sorry, I only support the EASY-BRD setup at the moment"
+            easy_brd=0
+            echo "Ok, I can only partially setup non EASY-BRD installations, but lets see what I can help with"
+            serial=""
+            echo
+            for line in `ls /dev/serial/by-id`; do
+                echo "Is this the serial port to your ERCF mcu?"
+		yn=$(prompt_yn "/dev/serial/by-id/${line}")
+                case $yn in
+                    y)
+                        serial="/dev/serial/by-id/${line}"
+			break
+                        ;;
+                    n)
+                        ;;
+                esac
+            done
+            if [ "${serial}" = "" ]; then
+                echo "Couldn't find your serial port, but no worries - I'll configure the default and you can manually change later as per the docs"
+                serial='/dev/ttyACM1 # Config guess. Run ls -l /dev/serial/by-id and set manually'
+	    fi
+
+            echo
+            echo "Sensorless selector operation? This allows for additional selector recovery steps"
+            yn=$(prompt_yn "Enable sensorless selector operation")
+            case $yn in
+                y)
+	            sensorless_selector=1
+                    ;;
+                n)
+	            sensorless_selector=0
+                    ;;
+	    esac
 	    ;;
     esac
 
+    echo
+    echo "Do you have a toolhead sensor you would like to use? If reliable this provides the smoothest and most reliable loading and unloading operation"
+    yn=$(prompt_yn "Enable toolhead sensor")
+    case $yn in
+	y)
+	    toolhead_sensor=1
+	    echo "    What is the mcu pin name that your toolhead sensor is connected too?"
+	    echo "    If you don't know just hit return, I can enter a default and you can change later"
+            read -p "    Toolhead sensor pin name? " toolhead_sensor_pin
+            if [ "${toolhead_sensor_pin}" == "" ]; then
+                toolhead_sensor_pin="<dummy_pin_must_set_me>"
+            fi
+            ;;
+        n)
+	    toolhead_sensor=0
+            toolhead_sensor_pin="<dummy_pin_must_set_me>"
+            ;;
+    esac
+
+    echo
+    echo "Using default MG-90S servo? (If you answer no, will setup for Savox SH0255MG - you can change later)"
+    yn=$(prompt_yn "MG-90S Servo?")
+    case $yn in
+        y)
+	    servo_up_angle=30
+	    servo_down_angle=140
+            ;;
+        n)
+	    servo_up_angle=140
+	    servo_down_angle=30
+            ;;
+    esac
+
+    echo
+    echo "Clog detection? This uses the ERCF encoder movement to detect clogs and can call your filament runout logic"
+    yn=$(prompt_yn "Enable clog detection")
+    case $yn in
+        y)
+            clog_detection=1
+            ;;
+        n)
+            clog_detection=0
+            ;;
+    esac
+
+    echo
+    echo "EndlessSpool? This uses filament runout detection to automate switching to new spool without interruption"
+    yn=$(prompt_yn "Enable EndlessSpool")
+    case $yn in
+        y)
+            endless_spool=1
+            if [ "${clog_detection}" -eq 0 ]; then
+                echo
+                echo "    NOTE: I've re-enabled clog detection which is necessary for EndlessSpool to function"
+                clog_detection=1
+            fi
+            ;;
+        n)
+	    endless_spool=0
+           ;;
+    esac
+
+    echo
+    echo "What is the length of your reverse bowden tube in mm?"
+    echo "(This is just to speed up calibration and needs to be approximately right but not longer than the real length)"
+    while true; do
+        read -p "Reverse bowden length in mm? " calibration_bowden_length
+        if ! [ "${calibration_bowden_length}" -ge 1 ] 2> /dev/null ;then
+            echo "Positive integer value only"
+       else
+           break
+       fi
+    done
+
+    echo
+    echo "Finally, would you like me to include all the ERCF config files into your printer.cfg file"
+    yn=$(prompt_yn "Add include?")
+    case $yn in
+        y)
+            add_includes=1
+            ;;
+        n)
+	    add_includes=0
+           ;;
+    esac
 
     echo
     echo
@@ -307,13 +364,17 @@ if [ "${INSTALL_TEMPLATES}" -eq 1 ]; then
     echo "    NOTES:"
     echo "     What still needs to be done:"
     if [ "${easy_brd}" -eq 0 ]; then
-        echo "     * Edit *.cfg files and substitute all \${xxx} tokens to match your setup"
+        echo "     * Edit *.cfg files and substitute all \${xxx} tokens to match or setup"
+        echo "     * Review all pin configuration and change to match your mcu"
     else
         echo "     * Tweak motor speeds and current, especially if using non BOM motors"
         echo "     * Adjust motor direction with '!' on pin if necessary. No way to know here"
     fi
     echo "     * Adjust your config for loading and unloading preferences"
     echo "     * Adjust toolhead distances 'home_to_extruder' for your particular setup"
+    echo 
+    echo "    Advanced:"
+    echo "         * Tweak configurations like speed and distance in ercf_parameter.cfg"
     echo 
     echo "    Good luck! ERCF is complex to setup. Remember Discord is your friend.."
     echo
@@ -325,3 +386,9 @@ fi
 copy_template_files
 install_update_manager
 restart_klipper
+echo "Done.  Enjoy ERCF (and thank you Ette for a wonderful design)..."
+echo
+echo '(\_/)'
+echo '( *,*)'
+echo '(")_(") ERCF Ready'
+echo
