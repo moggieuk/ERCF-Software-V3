@@ -47,10 +47,10 @@ The module can be installed into an existing Klipper installation with the insta
 
     ./install.sh -i
 
-The `-i` option will bring up some interactive prompts to aid setting some confusing parameters (like sensorless selector homing setup). For EASY-BRD installations it will also configure all the pins for you. If not run with the `-i` flag the new template '.cfg' files will not be installed.  Note that if existing ercf*.cfg files are found the old versions will be moved to <file>.00 extension instead so as not to overwrite an existing configuration (don't run twice in a row!).  If you still choose not to install the new `ercf*.cfg` files automatically be sure to examine them closely and compare to the supplied templates - some options have changed!
+The `-i` option will bring up some interactive prompts to aid setting some confusing parameters (like sensorless selector homing setup). For EASY-BRD installations it will also configure all the pins for you. If not run with the `-i` flag the new template `ercf*.cfg` files will not be installed.  Note that if existing `ercf*.cfg` files are found the old versions will be moved to `<file>.00` extension instead so as not to overwrite an existing configuration (don't run twice in a row!).  If you still choose not to install the new `ercf*.cfg` files automatically be sure to examine them closely and compare to the supplied templates - some options have changed!
 <br>
 
-REMEMBER that ercf_hardware.cfg; ercf_software.cfg; ercf_parameters.cfg; ercf_vars.cfg & client_macros.cfg  must all be referenced by your printer.cfg master config file.  These includes can be added automatically for you with the install script.  If you have existing PAUSE/RESUME macros you will likely want to comment out the defaults provided in client_macros.cfg (but be sure to read the section before on macro expectations).
+REMEMBER that `ercf_hardware.cfg`, `ercf_software.cfg` & `ercf_parameters.cfg` must all be referenced by your `printer.cfg` master config file.  `client_macros.cfg` should also be referenced if you don't already have working PAUSE/RESUME/CANCEL_PRINT macros (but be sure to read the section before on macro expectations). These includes can be added automatically for you with the install script.
 
 <br>
 
