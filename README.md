@@ -62,8 +62,8 @@ Also be sure to read my [notes on Encoder problems](doc/ENCODER.md) - the better
 <ul>
 <li> v1.0.0 - Initial Beta Release
 <li> v1.0.3 - Bug fixes from community: Better logging on toolchange (for manual recovery); Advanced config parameters for adjust tolerance used in 'apply_bowden_correction' move; Fixed a couple of silly (non serious) bugs
-<li> v1.1.0 - New commands: ERCF_PRELOAD & ERCF_CHECK_GATES ; Automatic setting of clog detection distance in calibration routine ; Eliminated DETAIL flags for status reporting (detail always present); New interactive install script to help EASY-BRD setup; Bug fixes
-<li> v1.1.1 - Fixes for over zealous tolerance checks on bowen loading; Fix for unloading to far if apply_bowden_correction is active; new test command: ERCF_TEST_TRACKING; Fixed slicer based tool load issue
+<li> v1.1.0 - New commands: ERCF_PRELOAD & ERCF_CHECK_GATES ; Automatic setting of clog detection distance in calibration routine ; New interactive install script to help EASY-BRD setup; Bug fixes
+<li> v1.1.1 - Fixes for over zealous tolerance checks on bowden loading; Fix for unloading to far if apply_bowden_correction is active; new test command: ERCF_TEST_TRACKING; Fixed slicer based tool load issue
 <li> v1.1.2 - Improved install.sh -i to include servo and calib bowden length; Better detection of malfunctioning toolhead sensor
 <li> v1.1.3 - Added ERCF_RECOVER command to re-establish filament position after manual intervention and filament movement. Not necessary if you use ERCF commands to correct problem but useful to call prior to RESUME; Much improved install.sh to cover toolhead sensor and auto restart moonraker on first time install
 <li> v1.1.4 - Change to automatic clog detection length based on community feedback
@@ -189,7 +189,7 @@ This is much simplier than loading. The toolhead sensor, if installed, will auto
 <br>
 
 ### Tool-to-Gate (TTG) mapping and EndlessSpool application
-When changing a tool with the `Tx` command the ERCF will by default select the filament at the gate (spool) of the same number.  The mapping built into this *Angry Hare* driver allows you to modify that.  There are 3 primarly use cases for this feature:
+When changing a tool with the `Tx` command the ERCF will by default select the filament at the gate (spool) of the same number.  The mapping built into this *Happy Hare* driver allows you to modify that.  There are 3 primarly use cases for this feature:
 <ol>
   <li>You have loaded your filaments differently than you sliced gcode file... No problem, just issue the appropriate remapping commands prior to printing
   <li>Some of "tools" don't have filament and you want to mark them as empty to avoid selection.
@@ -309,8 +309,8 @@ Firstly the importance of a reliable and fairly accurate encoder should not be u
   <li>The dreaded "Timer too close" can occur but I believe I have worked around most of these cases.  The problem is not always an overloaded mcu as often cited -- there are a couple of bugs in Klipper that will delay messages between mcu and host and thus provoke this problem.  To minimize you hitting these, I recommend you use a step size of 8 for the gear motor. You don't need high fidelity and this greatly reduces the chance of this error. Also, increasing 'num_moves' also is a workaround.  I'm not experiencing this and have a high speed (200 mm/s) single move load with a step size of 8.
   <li>The servo problem where a servo with move to end position and then jump back can occur due to bug in Klipper just like the original software. The workaroud is increase the same servo "dwell" config options in small increments until the servo works reliably. Note that this driver will retry the initial servo down movement if it detects slippage thus working around this issue to some extent.
   <li>I also added a 'apply_bowden_correction' config option that dictates whether the driver "believes" the encoder or not for long moves.  If enabled, the driver will make correction moves to get the encoder reading correct.  If disabled the gear stepper movement will be applied without slippage detection.  Details on when this is useful is documented in 'ercf_parameters'.  If enabled, the options 'load_bowden_tolerance' and 'unload_bowden_tolerance' will set the threshold at which correction is applied.
-  <li>I recommend Ette's "sensorless selector" option -- it works well and provides for additional recovery abilities if filment gets stuck in encoder preventing selection of a different gate.
-  <li>Speeds.... starting in v1.1.7 I exposed the speed setting for all the various moves made by ERCF.  These are all configurable in the 'ercf_parameters.cfg' file or can be tested without restarting Klipper with the 'ERCF_TEST_CONFIG' command.  If you want to optimise performance you might want to tuning these faster.  If you do, watch for the gear stepper missing steps which will often be reported as slippage.
+  <li>I can recommend the "sensorless selector" option -- it works well and provides for additional recovery abilities if filment gets stuck in encoder preventing selection of a different gate.
+  <li>Speeds.... starting in v1.1.7 the speed setting for all the various moves made by ERCF can be tuned.  These are all configurable in the 'ercf_parameters.cfg' file or can be tested without restarting Klipper with the 'ERCF_TEST_CONFIG' command.  If you want to optimise performance you might want to tuning these faster.  If you do, watch for the gear stepper missing steps which will often be reported as slippage.
 </ul>
 
 Good luck and hopefully a little less *enraged* printing.  You can find me on discord as *moggieuk#6538*
@@ -327,8 +327,8 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | -------- | ----------- | ---------- |
   | ERCF_RESET_STATS | Reset the ERCF statistics | None |
   | ERCF_DUMP_STATS | Dump the ERCF statistics (and Gate statistics to debug level - usually the logfile) | None |
-  | ERCF_SET_LOG_LEVEL | Sets the logging level and turning on/off of visual loading/unloading sequence | LEVEL=\[1..4\] <br>VISUAL=\[0\|1\] Whether to also show visual representation |
-  | ERCF_STATUS | Report on ERCF state, cababilities and Tool-to-Gate map | SHOWCONFIG=\[0|1\] Whether or not to show the machine configuration in status message |
+  | ERCF_SET_LOG_LEVEL | Sets the logging level and turning on/off of visual loading/unloading sequence and stats reporting | LEVEL=\[1..4\] The level of logging to the console (1 recommended)<br>LOGFILE=\[1..4\] The level of logging to the ercf.log file (3 recommended)<br>VISUAL=\[0\|1\] Whether to also show visual representation<br>STATS=\[0\|1\] Whether to log print stats and gate summary on every tool change |
+  | ERCF_STATUS | Report on ERCF state, cababilities and Tool-to-Gate map | SHOWCONFIG=\[0\|1\] Whether or not to describe the machine configuration in status message |
   | ERCF_DISPLAY_ENCODER_POS | Displays the current value of the ERCF encoder | None |
   <br>
 
@@ -338,7 +338,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_CALIBRATE | Complete calibration of all ERCF tools | None |
   | ERCF_CALIBRATE_SINGLE | Calibration of a single ERCF tool | TOOL=\[0..n\] <br>REPEATS=\[1..10\] How many times to repeat the calibration for reference tool T0 (ercf_calib_ref) <br>VALIDATE=\[0\|1\] If True then calibration of tool 0 will simply verify the ratio i.e. another check of encoder accuracy (should result in a ratio of 1.0) |
   | ERCF_CALIB_SELECTOR | Calibration of the selector for the defined tool | TOOL=\[0..n\] |
-  | ERCF_CALIBRATE_ENCODER | Calibration routine for ERCF encoder | DIST=.. Distance to measure over. Longer is better, defaults to calibration default length <br>RANGE=.. Number of times to average over <br>SPEED=.. Speed of gear motor move. Defaults to long move speed <br>ACCEL=.. Accel of gear motor move. Defaults to motor setting in ercf_hardware.cfg |
+  | ERCF_CALIBRATE_ENCODER | Calibration routine for ERCF encoder | DIST=.. Distance (mm) to measure over. Longer is better, defaults to 500mm <br>RANGE=.. Number of times to average over <br>SPEED=.. Speed of gear motor move. Defaults to long move speed <br>ACCEL=.. Accel of gear motor move. Defaults to motor setting in ercf_hardware.cfg |
   <br>
 
   ## Servo and motor control
@@ -391,12 +391,15 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_CHECK_GATES | Inspect the gate(s) and mark availability | GATE=\[0..n\] The specific gate to check. If ommitted all gates will be checked (the default) |
   <br>
 
-  ## User defined macros
+  ## User defined/configurable macros (in ercf_software.cfg)
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
   | _ERCF_ENDLESS_SPOOL_PRE_UNLOAD | Called prior to unloading the remains of the current filament |
   | _ERCF_ENDLESS_SPOOL_POST_LOAD | Called subsequent to loading filament in the new gate in the sequence |
   | _ERCF_FORM_TIP_STANDALONE | Called to create tip on filament when not in print (and under the control of the slicer). You tune this macro by modifying the defaults to the parameters |
+<br>
+
+*Working reference PAUSE / RESUME / CANCEL_PRINT macros are defined in client_macros.cfg*
 
   
     (\_/)

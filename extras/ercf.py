@@ -429,6 +429,9 @@ class Ercf:
 
         self.ref_step_dist=self.gear_stepper.steppers[0].get_step_dist()
         self.variables = self.printer.lookup_object('save_variables').allVariables
+        # Sanity check to see that ercf_vars.cfg is included
+        if self.variables == {}:
+            raise self.config.error("Calibration settings in ercf_vars.cfg not found.  Did you include it in your printer.cfg?")
 
         # Override motion sensor runout detection_length based on calibration
         if self.encoder_sensor != None:
@@ -700,7 +703,9 @@ class Ercf:
     cmd_ERCF_SET_LOG_LEVEL_help = "Set the log level for the ERCF"
     def cmd_ERCF_SET_LOG_LEVEL(self, gcmd):
         self.log_level = gcmd.get_int('LEVEL', 1, minval=0, maxval=4)
+        self.log_logfile_level = gcmd.get_int('LOGFILE', 3, minval=0, maxval=4)
         self.log_visual = gcmd.get_int('VISUAL', 1, minval=0, maxval=1)
+        self.log_statistics = config.getint('STATISTICS', 0, minval=0, maxval=1)
 
     cmd_ERCF_DISPLAY_ENCODER_POS_help = "Display current value of the ERCF encoder"
     def cmd_ERCF_DISPLAY_ENCODER_POS(self, gcmd):
@@ -807,6 +812,7 @@ class Ercf:
     cmd_ERCF_SERVO_DOWN_help = "Engage the ERCF gear"
     def cmd_ERCF_SERVO_DOWN(self, gcmd):
         if self._check_is_paused(): return
+        if self._check_in_bypass(): return
         self._servo_down()
 
     cmd_ERCF_MOTORS_OFF_help = "Turn off both ERCF motors"
@@ -819,6 +825,7 @@ class Ercf:
 
     cmd_ERCF_BUZZ_GEAR_MOTOR_help = "Buzz the ERCF gear motor"
     def cmd_ERCF_BUZZ_GEAR_MOTOR(self, gcmd):
+        if self._check_in_bypass(): return
         found = self._buzz_gear_motor()
         self._log_info("Filament %s by gear motor buzz" % ("detected" if found else "not detected"))
 
@@ -838,7 +845,7 @@ class Ercf:
         return self.variables.get('ercf_calib_%d' % gate, 1.)
 
     def _get_calibration_clog_length(self):
-        return max(self.variables.get('ercf_calib_clog_length', 5.), 5.)
+        return max(self.variables.get('ercf_calib_clog_length', 10.), 10.)
 
     def _get_gate_statistics(self, gate):
         empty_stats_dict = {'pauses': 0, 'loads': 0, 'load_distance': 0.0, 'load_delta': 0.0, 'unloads': 0, 'unload_distance': 0.0, 'unload_delta': 0.0, 'servo_retries': 0, 'load_failures': 0, 'unload_failures': 0}
@@ -954,6 +961,7 @@ class Ercf:
     cmd_ERCF_CALIBRATE_help = "Complete calibration of all ERCF tools"
     def cmd_ERCF_CALIBRATE(self, gcmd):
         if self._check_is_paused(): return
+        if self._check_in_bypass(): return
         try:
             self._reset_ttg_mapping()
             self.calibrating = True
@@ -975,6 +983,7 @@ class Ercf:
     cmd_ERCF_CALIBRATE_SINGLE_help = "Calibration of a single ERCF tool"
     def cmd_ERCF_CALIBRATE_SINGLE(self, gcmd):
         if self._check_is_paused(): return
+        if self._check_in_bypass(): return
         tool = gcmd.get_int('TOOL', 0, minval=0, maxval=len(self.selector_offsets)-1)
         repeats = gcmd.get_int('REPEATS', 3, minval=1, maxval=10)
         validate = gcmd.get_int('VALIDATE', 0, minval=0, maxval=1)
@@ -995,6 +1004,7 @@ class Ercf:
     cmd_ERCF_CALIBRATE_ENCODER_help = "Calibration routine for the ERCF encoder"
     def cmd_ERCF_CALIBRATE_ENCODER(self, gcmd):
         if self._check_is_paused(): return
+        if self._check_in_bypass(): return
         dist = gcmd.get_float('DIST', 500., above=0.)
         repeats = gcmd.get_int('RANGE', 5, minval=1)
         speed = gcmd.get_float('SPEED', self.long_moves_speed, above=0.)
@@ -1051,6 +1061,7 @@ class Ercf:
     cmd_ERCF_CALIB_SELECTOR_help = "Calibration of the selector position for a defined gate"
     def cmd_ERCF_CALIB_SELECTOR(self, gcmd):
         if self._check_is_paused(): return
+        if self._check_in_bypass(): return
         #gate = gcmd.get_int('GATE', 0, minval=0, maxval=len(self.selector_offsets)-1) # This is more descriptively correct
         gate = gcmd.get_int('TOOL', 0, minval=0, maxval=len(self.selector_offsets)-1)
         try:
@@ -2107,6 +2118,7 @@ class Ercf:
     cmd_ERCF_PAUSE_help = "Pause the current print and lock the ERCF operations"
     def cmd_ERCF_PAUSE(self, gcmd):
         if self._check_is_paused(): return
+        if self._check_in_bypass(): return
         force_in_print = bool(gcmd.get_int('FORCE_IN_PRINT', 0, minval=0, maxval=1))
         self._pause("Pause macro was directly called", force_in_print)
 
@@ -2131,6 +2143,7 @@ class Ercf:
     cmd_ERCF_RECOVER_help = "Recover the filament location state after manual intervention/movement"
     def cmd_ERCF_RECOVER(self, gcmd):
         if self._check_is_paused(): return
+        if self._check_in_bypass(): return
         self._log_info("Recovering filament position...")
         self.saved_toolhead_position = False # Precautionary, we don't accidentally want this left in True state
         self._recover_loaded_state()
@@ -2141,12 +2154,14 @@ class Ercf:
     cmd_ERCF_TEST_GRIP_help = "Test the ERCF grip for a Tool"
     def cmd_ERCF_TEST_GRIP(self, gcmd):
         if self._check_is_paused(): return
+        if self._check_in_bypass(): return
         self._servo_down()
         self.cmd_ERCF_MOTORS_OFF(gcmd)
 
     cmd_ERCF_TEST_SERVO_help = "Test the servo angle"
     def cmd_ERCF_TEST_SERVO(self, gcmd):
         if self._check_is_paused(): return
+        if self._check_in_bypass(): return
         angle = gcmd.get_float('VALUE')
         self._log_debug("Setting servo to angle: %d" % angle)
         self._servo_set_angle(angle)
@@ -2156,6 +2171,7 @@ class Ercf:
     cmd_ERCF_TEST_MOVE_GEAR_help = "Move the ERCF gear"
     def cmd_ERCF_TEST_MOVE_GEAR(self, gcmd):
         if self._check_is_paused(): return
+        if self._check_in_bypass(): return
         length = gcmd.get_float('LENGTH', 200.)
         speed = gcmd.get_float('SPEED', 50.)
         accel = gcmd.get_float('ACCEL', 200.)
@@ -2289,7 +2305,7 @@ class Ercf:
         self.nozzle_unload_speed = gcmd.get_float('NOZZLE_UNLOAD_SPEED', self.nozzle_unload_speed, minval=1.)
         self.z_hop_height = gcmd.get_float('Z_HOP_HEIGHT', self.z_hop_height, minval=0.)
         self.z_hop_speed = gcmd.get_float('Z_HOP_SPEED', self.z_hop_speed, minval=1.)
-        self.variables['ercf_calib_ref'] = gcmd.get_float('ERCF_CALIB_REF', self.variables['ercf_calib_ref'], minval=10.)
+        self.variables['ercf_calib_ref'] = gcmd.get_float('ERCF_CALIB_REF', self._get_calibration_ref(), minval=10.)
         self.encoder_sensor.detection_length = self.variables['ercf_calib_clog_length'] = gcmd.get_float('ERCF_CALIB_CLOG_LENGTH', self._get_calibration_clog_length(), minval=1., maxval=100.)
         msg = "long_moves_speed = %.1f" % self.long_moves_speed
         msg += "\nshort_moves_speed = %.1f" % self.short_moves_speed
@@ -2444,6 +2460,7 @@ class Ercf:
     cmd_ERCF_CHECK_GATES_help = "Automatically inspects gate(s), parks filament and marks availability"
     def cmd_ERCF_CHECK_GATES(self, gcmd):
         if self._check_not_homed(): return
+        if self._check_in_bypass(): return
         gate = gcmd.get_int('GATE', -1, minval=0, maxval=len(self.selector_offsets)-1)
         if gate == -1:
             gates = range(0, len(self.selector_offsets))
@@ -2479,6 +2496,7 @@ class Ercf:
     def cmd_ERCF_PRELOAD(self, gcmd):
         if self._check_not_homed(): return
         if self._check_is_loaded(): return
+        if self._check_in_bypass(): return
         gate = gcmd.get_int('GATE', -1, minval=0, maxval=len(self.selector_offsets)-1)
         try:
             # If gate not specified assume current gate

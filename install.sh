@@ -111,11 +111,16 @@ copy_template_files() {
             if test -f $dest; then
                 echo "Copying original printer.cfg file to printer.cfg.00"
                 cp ${dest} ${dest}.00
-                sed -i '1i [include ercf_hardware.cfg]
-                        1i [include ercf_parameters.cfg]
-                        1i [include ercf_software.cfg]
-                        1i [include client_macros.cfg]
-                        1i [include ercf_vars.cfg]' ${dest}
+                for i in \
+                        '\[include client_macros.cfg\]' \
+                        '\[include ercf_software.cfg\]' \
+                        '\[include ercf_parameters.cfg\]' \
+                        '\[include ercf_hardware.cfg\]' ; do
+                    already_included=$(grep -c "${i}" ${dest} || true)
+                    if [ "${already_included}" -eq 0 ]; then
+                        sed -i "1i ${i}" ${dest}
+                    fi
+                done
             else
                 echo "File printer.cfg file not found! Cannot include ERCF configuration files"
             fi
@@ -386,6 +391,7 @@ fi
 copy_template_files
 install_update_manager
 restart_klipper
+echo
 echo "Done.  Enjoy ERCF (and thank you Ette for a wonderful design)..."
 echo
 echo '(\_/)'
