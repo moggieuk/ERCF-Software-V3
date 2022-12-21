@@ -56,6 +56,9 @@ Note that the installer will look for Klipper install and config in standard loc
 REMEMBER that `ercf_hardware.cfg`, `ercf_software.cfg` & `ercf_parameters.cfg` must all be referenced by your `printer.cfg` master config file.  `client_macros.cfg` should also be referenced if you don't already have working PAUSE/RESUME/CANCEL_PRINT macros (but be sure to read the section before on macro expectations). These includes can be added automatically for you with the install script.
 <br>
 
+Pro tip: If you are concerned about running `install.sh -i` then run like this: `install.sh -i -c /tmp -k /tmp` This will build the `*.cfg` files for you but put then in /tmp.  You can then read them, pull out the bits your want to augment existing install or simple see what the answers to the various questions will do...
+<br>
+
 Also be sure to read my [notes on Encoder problems](doc/ENCODER.md) - the better the encoder the better this software will work.
 
 <br>

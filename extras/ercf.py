@@ -159,6 +159,7 @@ class Ercf:
         self.unload_bowden_tolerance = config.getfloat('unload_bowden_tolerance', self.load_bowden_tolerance, minval=1., maxval=50.)
         self.parking_distance = config.getfloat('parking_distance', 23., above=15., below=30.)
         self.encoder_move_step_size = config.getfloat('encoder_move_step_size', 15., above=5., below=25.)
+        self.load_encoder_retries = config.getint('load_encoder_retries', 2, minval=1, maxval=5)
         self.selector_offsets = config.getfloatlist('colorselector')
         self.gate_status = list(config.getintlist('gate_status', []))
         self.bypass_offset = config.getfloat('bypass_selector', 0)
@@ -1417,23 +1418,21 @@ class Ercf:
         self._servo_down()
         self.filament_direction = self.DIRECTION_LOAD
         initial_encoder_position = self._counter.get_distance()
-        delta = self._trace_filament_move("Initial load into encoder", self.LONG_MOVE_THRESHOLD)
-        if (self.LONG_MOVE_THRESHOLD - delta) <= 6.0:
-            if retry:
+        retries = max(self.load_encoder_retries, 5) if retry else 1
+        for i in range(retries):
+            msg = "Initial load into encoder" if i == 0 else ("Retry load into encoder #%d" % i)
+            delta = self._trace_filament_move(msg, self.LONG_MOVE_THRESHOLD)
+            if (self.LONG_MOVE_THRESHOLD - delta) > 6.0:
+                self._set_loaded_status(self.LOADED_STATUS_PARTIAL_PAST_ENCODER)
+                return self._counter.get_distance() - initial_encoder_position
+            else:
                 self._log_always("Error unloading filament - not enough detected at encoder. Retrying...")
                 self._track_gate_statistics('servo_retries', self.gate_selected)
                 self._servo_up()
                 self._servo_down()
-                delta = self._trace_filament_move("Retry load into encoder", self.LONG_MOVE_THRESHOLD)
-                if (self.LONG_MOVE_THRESHOLD - delta) <= 6.0:
-                    self._set_loaded_status(self.LOADED_STATUS_PARTIAL_BEFORE_ENCODER)
-                    raise ErcfError("Error loading filament - not enough movement detected at encoder after retry")
-            else:
-                raise ErcfError("Error loading filament - not enough movement detected at encoder")
+        self._set_loaded_status(self.LOADED_STATUS_PARTIAL_BEFORE_ENCODER)
+        raise ErcfError("Error loading filament - not enough movement detected at encoder")
 
-        self._set_loaded_status(self.LOADED_STATUS_PARTIAL_PAST_ENCODER)
-        return self._counter.get_distance() - initial_encoder_position
-    
     # Fast load of filament to approximate end of bowden (without homing)
     def _load_bowden(self, length):
         self._log_debug("Loading bowden tube")
@@ -2507,7 +2506,7 @@ class Ercf:
             self._counter.reset_counts()    # Encoder 0000
             for i in range(5):
                 try:
-                    encoder_moved = self._load_encoder(retry=False)
+                    self._load_encoder(retry=False)
                     # Caught the filament, so now park it in the gate
                     self._unload_encoder(self.unload_buffer)
                     self.gate_status[gate] = self.GATE_AVAILABLE
