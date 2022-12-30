@@ -213,7 +213,7 @@ class Ercf:
             for i in range(len(self.selector_offsets)):
                 self.gate_status.append(self.GATE_AVAILABLE)
 
-        # Setup tool to gate map primariliy for endless spool use
+        # Setup tool to gate map primarily for endless spool use
         self.tool_to_gate_map = []
         for i in range(len(self.selector_offsets)):
             self.tool_to_gate_map.append(i)
@@ -257,12 +257,12 @@ class Ercf:
         self.gcode.register_command('ERCF_SET_LOG_LEVEL',
                     self.cmd_ERCF_SET_LOG_LEVEL,
                     desc = self.cmd_ERCF_SET_LOG_LEVEL_help)
-        self.gcode.register_command('ERCF_DISPLAY_ENCODER_POS', 
+        self.gcode.register_command('ERCF_DISPLAY_ENCODER_POS',
                     self.cmd_ERCF_DISPLAY_ENCODER_POS,
-                    desc = self.cmd_ERCF_DISPLAY_ENCODER_POS_help)                    
-        self.gcode.register_command('ERCF_STATUS', 
+                    desc = self.cmd_ERCF_DISPLAY_ENCODER_POS_help)
+        self.gcode.register_command('ERCF_STATUS',
                     self.cmd_ERCF_STATUS,
-                    desc = self.cmd_ERCF_STATUS_help)                    
+                    desc = self.cmd_ERCF_STATUS_help)
 
 	# Calibration
         self.gcode.register_command('ERCF_CALIBRATE',
@@ -273,7 +273,7 @@ class Ercf:
                     desc = self.cmd_ERCF_CALIBRATE_SINGLE_help)
         self.gcode.register_command('ERCF_CALIB_SELECTOR',
                     self.cmd_ERCF_CALIB_SELECTOR,
-                    desc = self.cmd_ERCF_CALIB_SELECTOR_help)     
+                    desc = self.cmd_ERCF_CALIB_SELECTOR_help)
         self.gcode.register_command('ERCF_CALIBRATE_ENCODER',
                     self.cmd_ERCF_CALIBRATE_ENCODER,
                     desc=self.cmd_ERCF_CALIBRATE_ENCODER_help)
@@ -281,7 +281,7 @@ class Ercf:
         # Servo and motor control
         self.gcode.register_command('ERCF_SERVO_DOWN',
                     self.cmd_ERCF_SERVO_DOWN,
-                    desc = self.cmd_ERCF_SERVO_DOWN_help)                       
+                    desc = self.cmd_ERCF_SERVO_DOWN_help)
         self.gcode.register_command('ERCF_SERVO_UP',
                     self.cmd_ERCF_SERVO_UP,
                     desc = self.cmd_ERCF_SERVO_UP_help)
@@ -325,12 +325,12 @@ class Ercf:
                     desc = self.cmd_ERCF_RECOVER_help)
 
 	# User Testing
-        self.gcode.register_command('ERCF_TEST_GRIP', 
+        self.gcode.register_command('ERCF_TEST_GRIP',
                     self.cmd_ERCF_TEST_GRIP,
                     desc = self.cmd_ERCF_TEST_GRIP_help)
         self.gcode.register_command('ERCF_TEST_SERVO',
                     self.cmd_ERCF_TEST_SERVO,
-                    desc = self.cmd_ERCF_TEST_SERVO_help)                          
+                    desc = self.cmd_ERCF_TEST_SERVO_help)
         self.gcode.register_command('ERCF_TEST_MOVE_GEAR',
                     self.cmd_ERCF_TEST_MOVE_GEAR,
                     desc = self.cmd_ERCF_TEST_MOVE_GEAR_help)
@@ -342,7 +342,7 @@ class Ercf:
                     desc=self.cmd_ERCF_TEST_LOAD_help)
         self.gcode.register_command('ERCF_LOAD',
                     self.cmd_ERCF_TEST_LOAD,
-                    desc=self.cmd_ERCF_TEST_LOAD_help) # For backwards compatability because it's mentioned in manual, but prefer to remove
+                    desc=self.cmd_ERCF_TEST_LOAD_help) # For backwards compatibility because it's mentioned in manual, but prefer to remove
         self.gcode.register_command('ERCF_TEST_TRACKING',
                     self.cmd_ERCF_TEST_TRACKING,
                     desc=self.cmd_ERCF_TEST_TRACKING_help)
@@ -351,13 +351,13 @@ class Ercf:
                     desc=self.cmd_ERCF_TEST_UNLOAD_help)
         self.gcode.register_command('ERCF_TEST_HOME_TO_EXTRUDER',
                     self.cmd_ERCF_TEST_HOME_TO_EXTRUDER,
-                    desc = self.cmd_ERCF_TEST_HOME_TO_EXTRUDER_help)    
+                    desc = self.cmd_ERCF_TEST_HOME_TO_EXTRUDER_help)
         self.gcode.register_command('ERCF_TEST_CONFIG',
                     self.cmd_ERCF_TEST_CONFIG,
-                    desc = self.cmd_ERCF_TEST_CONFIG_help)                    
+                    desc = self.cmd_ERCF_TEST_CONFIG_help)
 
         # Runout and Endless spool
-        self.gcode.register_command('ERCF_ENCODER_RUNOUT', 
+        self.gcode.register_command('ERCF_ENCODER_RUNOUT',
                     self.cmd_ERCF_ENCODER_RUNOUT,
                     desc = self.cmd_ERCF_ENCODER_RUNOUT_help)
         self.gcode.register_command('ERCF_DISPLAY_TTG_MAP',
@@ -577,7 +577,7 @@ class Ercf:
             rounded = self.gate_statistics[gate]
             load_slip_percent = (rounded['load_delta'] / rounded['load_distance']) * 100 if rounded['load_distance'] != 0. else 0.
             unload_slip_percent = (rounded['unload_delta'] / rounded['unload_distance']) * 100 if rounded['unload_distance'] != 0. else 0.
-            # Give the gate a reliabilty grading based on slippage
+            # Give the gate a reliability grading based on slippage
             grade = load_slip_percent + unload_slip_percent
             if grade < 2.:
                 status = "Good"
@@ -863,7 +863,7 @@ class Ercf:
                 self._servo_down()
                 self._counter.reset_counts()    # Encoder 0000
                 encoder_moved = self._load_encoder()
-                self._load_bowden(self.calibration_bowden_length - encoder_moved)     
+                self._load_bowden(self.calibration_bowden_length - encoder_moved)
                 self._log_info("Finding extruder gear position (try #%d of %d)..." % (i+1, repeats))
                 self._home_to_extruder(extruder_homing_length)
                 measured_movement = self._counter.get_distance()
@@ -908,7 +908,7 @@ class Ercf:
                 self._log_always("Recommended calibration reference based on current configuration options is %.1f" % average_reference)
                 self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=ercf_calib_ref VALUE=%.1f" % average_reference)
                 self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=ercf_calib_clog_length VALUE=%.1f" % spring_based_detection_length)
-                self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=ercf_calib_0 VALUE=1.0")  
+                self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=ercf_calib_0 VALUE=1.0")
                 self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=ercf_calib_version VALUE=3")
                 if self.enable_clog_detection:
                     self._log_always("Automatically setting clog 'detection_length' to: %.1f" % spring_based_detection_length)
@@ -937,7 +937,7 @@ class Ercf:
             ratio = (test_length * 2) / (measurement - encoder_moved)
             self._log_always("Calibration move of %.1fmm, average encoder measurement %.1fmm - Ratio is %.6f" % (test_length * 2, measurement - encoder_moved, ratio))
             if not tool == 0:
-                self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=ercf_calib_%d VALUE=%.6f" % (tool, ratio))  
+                self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=ercf_calib_%d VALUE=%.6f" % (tool, ratio))
             self._unload_encoder(self.unload_buffer)
             self._servo_up()
             self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
@@ -955,7 +955,7 @@ class Ercf:
             stdev = math.sqrt( sum(diff2) / max((len(values) - 1), 1))
             vmin = min(values)
             vmax = max(values)
-        return {'mean': mean, 'stdev': stdev, 'min': vmin, 'max': vmax, 'range': vmax - vmin}        
+        return {'mean': mean, 'stdev': stdev, 'min': vmin, 'max': vmax, 'range': vmax - vmin}
 
 ### CALIBRATION GCODE COMMANDS
 
@@ -1488,8 +1488,8 @@ class Ercf:
             gear_stepper_run_current = self.tmc.get_status(0)['run_current']
             self._log_debug("Temporarily reducing gear_stepper run current to %d%% for collision detection"
                                 % self.extruder_homing_current)
-            self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=gear_stepper CURRENT=%.1f"
-                                                % ((gear_stepper_run_current * self.extruder_homing_current)/100))
+            self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=gear_stepper CURRENT=%.2f"
+                                                % ((gear_stepper_run_current * self.extruder_homing_current)/100.0))
 
         initial_encoder_position = self._counter.get_distance()
         homed = False
@@ -1505,7 +1505,7 @@ class Ercf:
         self._log_debug("Extruder %s found after %.1fmm move (%d steps), encoder measured %.1fmm (total_delta %.1fmm)"
                 % ("not" if not homed else "", step*(i+1), i+1, measured_movement, total_delta))
         if self.tmc and self.extruder_homing_current < 100:
-            self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=gear_stepper CURRENT=%.1f" % gear_stepper_run_current)
+            self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=gear_stepper CURRENT=%.2f" % gear_stepper_run_current)
 
         if total_delta > 5.0:
             self._log_info("Warning: A lot of slippage was detected whilst homing to extruder, you may want to reduce 'extruder_homing_current' and/or ensure a good grip on filament by gear drive")
@@ -1544,7 +1544,7 @@ class Ercf:
             msg = "Homing step #%d" % (i+1)
             delta = self._trace_filament_move(msg, step, speed=10, motor="both" if sync else "extruder")
             if self.toolhead_sensor.runout_helper.filament_present:
-                self._log_debug("Toolhead sensor reached after %.1fmm (%d moves)" % (step*(i+1), i+1))                
+                self._log_debug("Toolhead sensor reached after %.1fmm (%d moves)" % (step*(i+1), i+1))
                 break
 
         if self.toolhead_sensor.runout_helper.filament_present:
@@ -1594,7 +1594,7 @@ class Ercf:
         total_delta = self.home_position_to_nozzle - measured_movement
         self._log_debug("Total measured movement: %.1fmm, total delta: %.1fmm" % (measured_movement, total_delta))
         if total_delta > (length * 0.80):   # 80% of final move length
-            raise ErcfError("Move to nozzle failed (encoder not sensing sufficent movement). Extruder may not have picked up filament")
+            raise ErcfError("Move to nozzle failed (encoder not sensing sufficient movement). Extruder may not have picked up filament")
 
         self._set_loaded_status(self.LOADED_STATUS_FULL)
         self._log_info('ERCF load successful')
@@ -1671,7 +1671,7 @@ class Ercf:
         finally:
             self._track_unload_end()
 
-    # This is a recovery routine to determine the most conservate location of the filament for unload purposes
+    # This is a recovery routine to determine the most conservative location of the filament for unload purposes
     def _recover_loaded_state(self):
         self.need_to_recover_state = False
         toolhead_sensor_state = self._check_toolhead_sensor()
@@ -1701,8 +1701,8 @@ class Ercf:
         self._servo_up()
 
         # Goal is to exit extruder. Two strategies depending on availability of toolhead sensor
-        # Back up 15mm at a time until either the encoder doesnt see any movement or toolhead sensor reports clear
-        # Do this until we have travelled more than the length of the extruder 
+        # Back up 15mm at a time until either the encoder doesn't see any movement or toolhead sensor reports clear
+        # Do this until we have traveled more than the length of the extruder 
         max_length = self.home_position_to_nozzle + self.toolhead_homing_max + 10.
         step = self.encoder_move_step_size
         self._log_debug("Trying to exit the extruder, up to %.1fmm in %.1fmm steps" % (max_length, step))
@@ -1716,14 +1716,14 @@ class Ercf:
             if self.toolhead_sensor != None:
                 if not self.toolhead_sensor.runout_helper.filament_present:
                     self._set_loaded_status(self.LOADED_STATUS_PARTIAL_HOMED_SENSOR)
-                    self._log_debug("Toolhead sensor reached after %d moves" % (i+1))                
+                    self._log_debug("Toolhead sensor reached after %d moves" % (i+1))
                     # Last move to ensure we are really free because of small space between sensor and gears
                     delta = self._trace_filament_move("Last sanity move", -self.toolhead_homing_max, speed=speed, motor="extruder")
                     out_of_extruder = True
                     break
             else:
                 if (self.encoder_move_step_size - delta) <= 1.0:
-                    self._log_debug("Extruder entrance reached after %d moves" % (i+1))                
+                    self._log_debug("Extruder entrance reached after %d moves" % (i+1))
                     out_of_extruder = True
                     break
 
@@ -1804,7 +1804,7 @@ class Ercf:
                 return
         raise ErcfError("Unable to get the filament out of the encoder cart")
 
-    # Form tip and return True if encoder movement occured
+    # Form tip and return True if encoder movement occurred
     def _form_tip_standalone(self):
         self.toolhead.wait_moves()
         park_pos = 35.  # TODO cosmetic: bring in from tip forming (parking position in extruder)
@@ -2043,7 +2043,7 @@ class Ercf:
             stepper.set_step_dist(new_step_dist)
 
 
-### CORE GOCDE COMMMANDS ##########################################################
+### CORE GCODE COMMANDS ##########################################################
 
     cmd_ERCF_UNLOCK_help = "Unlock ERCF operations"
     def cmd_ERCF_UNLOCK(self, gcmd):        
@@ -2148,7 +2148,7 @@ class Ercf:
         self._recover_loaded_state()
 
 
-### GOCDE COMMMANDS INTENDED FOR TESTING #####################################
+### GCODE COMMANDS INTENDED FOR TESTING #####################################
 
     cmd_ERCF_TEST_GRIP_help = "Test the ERCF grip for a Tool"
     def cmd_ERCF_TEST_GRIP(self, gcmd):
@@ -2428,7 +2428,7 @@ class Ercf:
             self.gate_status[i] = self.GATE_AVAILABLE
         self._unselect_tool()
 
-### GOCDE COMMMANDS FOR RUNOUT and GATE LOGIC ##################################
+### GCODE COMMANDS FOR RUNOUT and GATE LOGIC ##################################
 
     cmd_ERCF_ENCODER_RUNOUT_help = "Encoder runout handler"
     def cmd_ERCF_ENCODER_RUNOUT(self, gcmd):
