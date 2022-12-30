@@ -60,8 +60,9 @@ Pro tip: If you are concerned about running `install.sh -i` then run like this: 
 <br>
 
 Also be sure to read my [notes on Encoder problems](doc/ENCODER.md) - the better the encoder the better this software will work.
-
 <br>
+
+The configuration and setup of your ERCF using Happy Hare is 95% the same as documented in the [newer V2 Manual](https://github.com/EtteGit/EnragedRabbitProject/raw/no_toolhead_sensor/Documentation/ERCF_Manual.pdf).  Be sure to read this README and the installed 'ercf_*.cfg' to understand any differences.
   
 ## Revision History
 <ul>
@@ -74,7 +75,7 @@ Also be sure to read my [notes on Encoder problems](doc/ENCODER.md) - the better
 <li> v1.1.4 - Change to automatic clog detection length based on community feedback
 <li> v1.1.5 - Further install.sh improvements - no longer need filament_sensor defined or duplicate pin override if not using clog detection; Cleaned up documentation in template config file; Stallguard filament homing should now be possible (have to configure by hand); Additional configuration checks on startup; minor useabilty improvements based on community feedback
 <li> v1.1.6 - New feature to log to file independently to console (allows for clean console and debug to logfile);  New gate statistics (like slippage) are recorded and available with an augmented ERCF_DUMP_STATS command; Several minor improvements and fixes suggested by community
-<li> v1.1.7 - No need to put anything ERCF related into existing macros (START/PAUSE/RESUME/STOP/CANCEL) anymore!;  Improvements to install script for non EASY-BRD config; Exposed all built-in gear/extruder feed speeds; Tweaks to tolerance checks to prevent false pauses; No annoying pause/unlock sequence while you are playing out of a print
+<li> v1.1.7 - No need to put anything ERCF related into existing macros (START/PAUSE/RESUME/STOP/CANCEL) anymore!;  Improvements to install script for non EASY-BRD config; Exposed all built-in gear/extruder feed speeds; Tweaks to tolerance checks to prevent false pauses; No annoying pause/unlock sequence while you are playing out of a print. UPDATE TO CONFIG FILES RECOMMENDED
 </ul>
 
 <br>
@@ -113,12 +114,12 @@ Note that if a toolhead sensor is configured it will become the default filament
 The "visual log" above shows individual steps of the loading process:
   <ol>
     <li>Starting with filament unloaded and sitting in the gate for tool 1
-    <li>Firstly ERCF clamps the servo down and pulls a short length of filament through the encoder. It it doesn't see filament it will try a second time. If still no filamament it will report the error. The speed of this initial movement is controlled by 'short_moves_speed', the accelaration is as defined on the gear stepper motor config in 'ercf_hardware.cfg'
-    <li>ERCF will then load the filament through the bowden in a fast movement.  The speed is controlled by 'long_moves_speed'.  This movement can be broken up into multiple movements with 'num_moves' to overcome "Timer too close" errors from Klipper. If you keep your step size to 8 for the gear motor you are likely to be able to operate with a single fast movement.  The length of this movement is set when you calibrate ERCF and stored in 'ercf_vars.cfg'.  There is an advanced option to allow for correction of this move if slippage is detected controlled by 'apply_bowden_correction' and 'load_bowden_tolerance' (see comments in 'ercf_parameters.cfg' for more details)
+    <li>Firstly ERCF clamps the servo down and pulls a short length of filament through the encoder. It it doesn't see filament it will try 'load_encoder_retries' times (default 2). If still no filamament it will report the error. The speed of this initial movement is controlled by 'short_moves_speed', the accelaration is as defined on the gear stepper motor config in 'ercf_hardware.cfg'
+    <li>ERCF will then load the filament through the bowden in a fast movement.  The speed is controlled by 'long_moves_speed'.  This movement can be broken up into multiple movements with 'num_moves' as one workaround to overcome "Timer too close" errors from Klipper. If you keep your step size to 8 for the gear motor you are likely to be able to operate with a single fast movement.  The length of this movement is set when you calibrate ERCF and stored in 'ercf_vars.cfg'.  There is an advanced option to allow for correction of this move if slippage is detected controlled by 'apply_bowden_correction' and 'load_bowden_tolerance' (see comments in 'ercf_parameters.cfg' for more details)
     <li>The example shown uses a toolhead sensor, but if you configure sensorless filament homing then ERCF will now creep towards your extruder gears to detect this point as its homing position.  This homing move is controlled by 'extruder_homing_max' (maximum distance to advance in order to attempt to home the extruder), 'extruder_homing_step' (step size to use when homing to the extruder with collision detection), 'extruder_homing_current' (tunable to control how much % to temporarily reduce the gear stepper current to prevent grinding of filament)
     <li>This is the move into the toolhead and is the most critical transistion point.  ERCF will advance the extruder looking to see that the filament was sucessfully picked up. In the case of a toolhead sensor this is deterministic because it will advance to the sensor and use this as a new homing point.  For sensorless ERCF will look for encoder movement implying that filament has been picked up.  Optionally this move can be made to run gear and extruder motors synchronously for greater reliability. 'sync_load_length' (mm of synchronized extruder loading at entry to extruder).  If synchronous load is not employed ERCF will attempt to use the "spring" in the filament by delaying the servo release by 'delay_servo_release' mm.
 <br>
-With toolhead sensor enabled there is a little more to this step: ERCF will home the end of the filament to the toolhead sensor controled by 'toolhead_homing_max' (maximum distance to advance in order to attempt to home to toolhead sensor) and 'toolhead_homing_step (step size to use when homing to the toolhead sensor. If 'sync_load_length' is greater than 0 this homing step will be synchronised.
+With toolhead sensor enabled there is a little more to this step: ERCF will home the end of the filament to the toolhead sensor controled by 'toolhead_homing_max' (maximum distance to advance in order to attempt to home to toolhead sensor) and 'toolhead_homing_step (step size to use when homing to the toolhead sensor. If 'sync_load_length' is greater than 0 this entire homing step will be synchronised.
 <br>The speed of all movements in this step is controlled by 'sync_load_speed'
     <li>Now the filament is under exclusive control of the extruder.  Filament is moved the remaining distance to the meltzone. This distance is defined by 'home_position_to_nozzle' and is either the distance from the toolhead sensor to the nozzle or the distance from the extruder gears to the nozzle depending on your setup.  This move speed is controlled by 'nozzle_load_speed'.  We are now loaded and ready to print.
   </ol>
@@ -136,14 +137,14 @@ The "visual log" above shows individual steps of the loading process:
   <ol>
     <li>Starting with filament loaded in tool 1. This example is taken from an unload that is not under control of the slicer, so the first thing that happends is that a tip is formed on the end of the filament which ends with filament in the cooling zone of the extruder. This operation is controlled but the user edited '_ERCF_FORM_TIP_STANDALONE' macro in 'ercf_software.cfg'
     <li>This step only occurs with toolhead sensor. The filament is withdrawn until it no longer detected by toolhead sensor. This is done at the 'nozzle_unload_speed' and provides a more accurate determination of how much further to retract and a safety check that the filament is not stuck in the nozzle
-    <li>ERCF then moves the filament out of the extruder at 'nozzle_unload_speed'. Once at where it believes is the gear entrance to the extruder an optional short synchronized (gear and extruder) move can be configured. This is contolled by 'sync_unload_speed' and 'sync_unload_length'.  This is a great saftely step and "hair pull" operation but also serves to ensure that the ERCF gear has a grip on the filament.  If synchronized unload is not configured ERCF will still perform an initial short move with gear motor, again to ensure filament is gripped
-    <li>The filamemnt is now extracted quickly through the bowden. The speed is controlled by 'long_moves_speed' and the movement can be broken up with 'num_moves' similar to when loading. Apply bowden correction can siimilarly be employed to correct for slippage
+    <li>ERCF then moves the filament out of the extruder at 'nozzle_unload_speed'. Once at where it believes is the gear entrance to the extruder an optional short synchronized (gear and extruder) move can be configured. This is contolled by 'sync_unload_speed' and 'sync_unload_length'.  This is a great saftely step and "hair pull" operation but also serves to ensure that the ERCF gear has a grip on the filament.  If synchronized unload is not configured ERCF will still perform the bowden unload with an  initial short move with gear motor only, again to ensure filament is gripped
+    <li>The filamemnt is now extracted quickly through the bowden. The speed is controlled by 'long_moves_speed' and the movement can be broken up with 'num_moves' similar to when loading.
     <li>Completion of the the fast bowden move
     <li>At this point ERCF performs a series of short moves looking for when the filament exits the encoder.  The speed is controlled by 'short_moves_speed'
     <li>When the filament is released from the encoder, the remainder of the distance to the park position is moved at 'short_moves_speed'.  The filament is now unloaded.
   </ol>
 
-When the state of ERCF is unkown, ERCF will perform other movements and look at its sensores to try to assertain filament location. This may modify the above sequence and result in the ommission of the fast bowden move.
+When the state of ERCF is unkown, ERCF will perform other movements and look at its sensores to try to assertain filament location. This may modify the above sequence and result in the ommission of the fast bowden move for unloads.
 
 #### Possible loading options (explained in ercf_parameters.cfg template):
      If you have a toolhead sensor for filament homing:
@@ -336,7 +337,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_CALIBRATE | Complete calibration of all ERCF tools | None |
   | ERCF_CALIBRATE_SINGLE | Calibration of a single ERCF tool | TOOL=\[0..n\] <br>REPEATS=\[1..10\] How many times to repeat the calibration for reference tool T0 (ercf_calib_ref) <br>VALIDATE=\[0\|1\] If True then calibration of tool 0 will simply verify the ratio i.e. another check of encoder accuracy (should result in a ratio of 1.0) |
   | ERCF_CALIB_SELECTOR | Calibration of the selector for the defined tool | TOOL=\[0..n\] |
-  | ERCF_CALIBRATE_ENCODER | Calibration routine for ERCF encoder | DIST=.. Distance (mm) to measure over. Longer is better, defaults to 500mm <br>RANGE=.. Number of times to average over <br>SPEED=.. Speed of gear motor move. Defaults to long move speed <br>ACCEL=.. Accel of gear motor move. Defaults to motor setting in ercf_hardware.cfg |
+  | ERCF_CALIBRATE_ENCODER | Calibration routine for ERCF encoder | DIST=.. Distance (mm) to measure over. Longer is better, defaults to 500mm <br>REPEATS=.. Number of times to average over <br>SPEED=.. Speed of gear motor move. Defaults to long move speed <br>ACCEL=.. Accel of gear motor move. Defaults to motor setting in ercf_hardware.cfg |
   <br>
 
   ## Servo and motor control
