@@ -76,6 +76,7 @@ The configuration and setup of your ERCF using Happy Hare is 95% the same as doc
 <li> v1.1.5 - Further install.sh improvements - no longer need filament_sensor defined or duplicate pin override if not using clog detection; Cleaned up documentation in template config file; Stallguard filament homing should now be possible (have to configure by hand); Additional configuration checks on startup; minor useability improvements based on community feedback
 <li> v1.1.6 - New feature to log to file independently to console (allows for clean console and debug to logfile);  New gate statistics (like slippage) are recorded and available with an augmented ERCF_DUMP_STATS command; Several minor improvements and fixes suggested by community
 <li> v1.1.7 - No need to put anything ERCF related into existing macros (START/PAUSE/RESUME/STOP/CANCEL) anymore!;  Improvements to install script for non EASY-BRD config; Exposed all built-in gear/extruder feed speeds; Tweaks to tolerance checks to prevent false pauses; No annoying pause/unlock sequence while you are playing out of a print. UPDATE TO CONFIG FILES RECOMMENDED
+<li> v1.1.8 - Enhanced ERCF_CHECK_GATES command; better configuraton of tip forming; Workarounds to Timer Too Close errors on selector; Fined grained current reduction control; less conservative restting of filament state; servo remains up on failed load; fixes typos and spelling mistakes
 </ul>
 
 <br>
