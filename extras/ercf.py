@@ -903,6 +903,7 @@ class Ercf:
             self._set_steps(1.)
             reference_sum = spring_max = 0.
             successes = 0
+            self._set_above_min_temp() # This will ensure the extruder stepper is powered to resist collision
             for i in range(repeats):
                 self._servo_down()
                 self._counter.reset_counts()    # Encoder 0000
@@ -1190,6 +1191,7 @@ class Ercf:
             msg = "An issue with the ERCF has been detected whilst out of a print"
             reason = "Reason: %s" % reason
 
+        self._servo_up()
         self.gcode.respond_raw("!! %s" % msg)   # non highlighted alternative self._log_always(msg)
         if self.ercf_logger:
             self.ercf_logger.info(msg)
@@ -1505,6 +1507,7 @@ class Ercf:
             self._track_load_start()
             encoder_measured = self._load_encoder()
             if length - encoder_measured > 0:
+                if home: self._set_above_min_temp() # This will ensure the extruder stepper is powered to resist collision
                 self._load_bowden(length - encoder_measured)
     
             if home:
@@ -1545,7 +1548,7 @@ class Ercf:
                 if i < retries - 1:
                     self._servo_down()
         self._set_loaded_status(self.LOADED_STATUS_PARTIAL_BEFORE_ENCODER)
-        raise ErcfError("Error loading filament - not enough movement detected at encoder")
+        raise ErcfError("Error picking up filament at gate - not enough movement detected at encoder")
 
     # Fast load of filament to approximate end of bowden (without homing)
     def _load_bowden(self, length):
@@ -1583,6 +1586,7 @@ class Ercf:
     def _home_to_extruder(self, max_length):
         self._servo_down()
         self.filament_direction = self.DIRECTION_LOAD
+        self._set_above_min_temp() # This will ensure the extruder stepper is powered to resist collision
         if self.homing_method == self.EXTRUDER_STALLGUARD:
             homed, measured_movement, aborted = self._home_to_extruder_with_stallguard(max_length)
         else:
@@ -1601,7 +1605,7 @@ class Ercf:
     def _home_to_extruder_collision_detection(self, max_length):
         step = self.extruder_homing_step
         self._log_debug("Homing to extruder gear, up to %.1fmm in %.1fmm steps" % (max_length, step))
-
+ 
         if self.gear_tmc and self.extruder_homing_current < 100:
             gear_stepper_run_current = self.gear_tmc.get_status(0)['run_current']
             self._log_debug("Temporarily reducing gear_stepper run current to %d%% for collision detection"
@@ -1650,7 +1654,6 @@ class Ercf:
     # This optional step aligns (homes) filament with the toolhead sensor. Returns measured movement
     def _home_to_sensor(self):
         # Strategy here is to home to the toolhead sensor which should be a very reliable location
-        self._set_above_min_temp()
         sync = self.sync_load_length > 0
         step = self.toolhead_homing_step
         if self.toolhead_sensor.runout_helper.filament_present:
@@ -1710,14 +1713,13 @@ class Ercf:
         measured_movement = self._counter.get_distance() - initial_encoder_position
         total_delta = self.home_position_to_nozzle - measured_movement
         self._log_debug("Total measured movement: %.1fmm, total delta: %.1fmm" % (measured_movement, total_delta))
-        if total_delta > (length * 0.70):   # 70% of final move length
+        if total_delta > (length * 0.50):   # 50% of final move length
             msg = "Move to nozzle failed (encoder not sensing sufficient movement). Extruder may not have picked up filament or filament did not home correctly"
             if not self.ignore_extruder_load_error:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
                 raise ErcfError(msg)
             else:
                 self._log_always("Ignoring: %s" % msg)
-
         self._set_loaded_status(self.LOADED_STATUS_FULL)
         self._log_info('ERCF load successful')
 
