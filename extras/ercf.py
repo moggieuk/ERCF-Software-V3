@@ -170,9 +170,10 @@ class Ercf:
         self.calibration_bowden_length = config.getfloat('calibration_bowden_length')
         self.unload_buffer = config.getfloat('unload_buffer', 30., above=15.)
         self.home_to_extruder = config.getint('home_to_extruder', 0, minval=0, maxval=1)
+        self.ignore_extruder_load_error = config.getint('ignore_extruder_load_error', 0, minval=0, maxval=1)
         self.extruder_homing_max = config.getfloat('extruder_homing_max', 50., above=20.)
         self.extruder_homing_step = config.getfloat('extruder_homing_step', 2., above=0.5, maxval=5.)
-        self.extruder_homing_current = config.getint('extruder_homing_current', 50, minval=20, maxval=100)
+        self.extruder_homing_current = config.getint('extruder_homing_current', 50, minval=10, maxval=100)
         self.extruder_form_tip_current = config.getint('extruder_form_tip_current', 100, minval=100, maxval=150)
         self.toolhead_homing_max = config.getfloat('toolhead_homing_max', 20., minval=0.)
         self.toolhead_homing_step = config.getfloat('toolhead_homing_step', 1., above=0.5, maxval=5.)
@@ -702,16 +703,17 @@ class Ercf:
 
     def _log_level_to_human_string(self, level):
         log = "OFF"
-        if level > 3:
-            log = "STEPPER"
-        elif level > 2:
-            log = "TRACE"
-        elif level > 1:
-            log = "DEBUG"
-        elif level > 0:
-            log = "INFO"
-        elif level > -1:
-            log = "ESSENTIAL MESSAGES"
+        if level > 3: log = "STEPPER"
+        elif level > 2: log = "TRACE"
+        elif level > 1: log = "DEBUG"
+        elif level > 0: log = "INFO"
+        elif level > -1: log = "ESSENTIAL MESSAGES"
+        return log
+
+    def _visual_log_level_to_human_string(self, level):
+        log = "OFF"
+        if level > 1: log = "SHORT"
+        elif level > 0: log = "LONG"
         return log
 
 ### LOGGING AND STATISTICS FUNCTIONS GCODE FUNCTIONS
@@ -729,10 +731,10 @@ class Ercf:
     cmd_ERCF_SET_LOG_LEVEL_help = "Set the log level for the ERCF"
     def cmd_ERCF_SET_LOG_LEVEL(self, gcmd):
         if self._check_is_disabled(): return
-        self.log_level = gcmd.get_int('LEVEL', 1, minval=0, maxval=4)
-        self.log_logfile_level = gcmd.get_int('LOGFILE', 3, minval=0, maxval=4)
-        self.log_visual = gcmd.get_int('VISUAL', 1, minval=0, maxval=2)
-        self.log_statistics = gcmd.get_int('STATISTICS', 0, minval=0, maxval=1)
+        self.log_level = gcmd.get_int('LEVEL', self.log_level, minval=0, maxval=4)
+        self.logfile_level = gcmd.get_int('LOGFILE', self.logfile_level, minval=0, maxval=4)
+        self.log_visual = gcmd.get_int('VISUAL', self.log_visual, minval=0, maxval=2)
+        self.log_statistics = gcmd.get_int('STATISTICS', self.log_statistics, minval=0, maxval=1)
 
     cmd_ERCF_DISPLAY_ENCODER_POS_help = "Display current value of the ERCF encoder"
     def cmd_ERCF_DISPLAY_ENCODER_POS(self, gcmd):
@@ -748,6 +750,7 @@ class Ercf:
         msg += ", Encoder reads %.2fmm" % self._counter.get_distance()
         msg += "\nTool %s is selected " % self._selected_tool_string()
         msg += " on gate %s" % self._selected_gate_string()
+        msg += ". Toolhead position is saved pending resume" if self.saved_toolhead_position else ""
         msg += "\nFilament position: %s" % self._state_to_human_string()
         
         if config:
@@ -761,23 +764,28 @@ class Ercf:
                     msg += " and then"
             msg += " to TOOLHEAD SENSOR" if self.toolhead_sensor != None else ""
             msg += " after a %.1fmm calibration reference length" % self._get_calibration_ref()
-            msg += "\nGear and Extruder steppers are synchronized during "
-            load = False
-            if self.toolhead_sensor != None and self.sync_load_length > 0:
-                msg += "load (up to %.1fmm)" % (self.toolhead_homing_max)
-                load = True
-            elif self.sync_load_length > 0:
-                msg += "load (%.1fmm)" % (self.sync_load_length)
-                load = True
-            if self.sync_unload_length > 0:
-                msg += " and " if load else ""
-                msg += "unload (%.1fmm)" % (self.sync_unload_length)
+            if self.sync_load_length > 0 or self.sync_unload_length > 0:
+                msg += "\nGear and Extruder steppers are synchronized during "
+                load = False
+                if self.toolhead_sensor != None and self.sync_load_length > 0:
+                    msg += "load (up to %.1fmm)" % (self.toolhead_homing_max)
+                    load = True
+                elif self.sync_load_length > 0:
+                    msg += "load (%.1fmm)" % (self.sync_load_length)
+                    load = True
+                if self.sync_unload_length > 0:
+                    msg += " and " if load else ""
+                    msg += "unload (%.1fmm)" % (self.sync_unload_length)
+            else:
+                msg += "\nGear and Extruder steppers are not synchronized"
+            msg += ". Extruder tip forming current is %d%%" % self.extruder_form_tip_current
             msg += "\nSelector homing is %s - blocked gate detection and recovery %s possible" % (("sensorless", "may be") if self.sensorless_selector else ("microswitch", "is not"))
             msg += "\nClog detection is %s" % ("ENABLED" if self.enable_clog_detection else "DISABLED")
             msg += " and EndlessSpool is %s" % ("ENABLED" if self.enable_endless_spool else "DISABLED")
-            msg += "\nConsole logging level is %d (%s)" % (self.log_level, self._log_level_to_human_string(self.log_level))
-            msg += ", Logfile level is %d (%s)" % (self.logfile_level, self._log_level_to_human_string(self.logfile_level))
-            msg += "%s" % " and statistics are being logged" if self.log_statistics else ""
+            msg += "\nLogging levels: Console %d(%s)" % (self.log_level, self._log_level_to_human_string(self.log_level))
+            msg += ", Logfile %d(%s)" % (self.logfile_level, self._log_level_to_human_string(self.logfile_level))
+            msg += ", Visual %d(%s)" % (self.log_visual, self._visual_log_level_to_human_string(self.log_visual))
+            msg += ", Statistics %d(%s)" % (self.log_statistics, "ON" if self.log_statistics else "OFF")
         msg += "\n\nTool/gate mapping%s" % (" and EndlessSpool groups:" if self.enable_endless_spool else ":")
         msg += "\n%s" % self._tool_to_gate_map_to_human_string()
         msg += "\n\n%s" % self._statistics_to_human_string()
@@ -874,7 +882,12 @@ class Ercf:
 
     def _get_gate_ratio(self, gate):
         if gate < 0: return 1.
-        return self.variables.get('ercf_calib_%d' % gate, 1.)
+        ratio = self.variables.get('ercf_calib_%d' % gate, 1.)
+        if ratio > 0.9 and ratio < 1.1:
+            return ratio
+        else:
+            self._log_always("Warning: ercf_calib_%d value (%.6f) is invalid. Using reference 1.0. Re-run ERCF_CALIBRATE_SINGLE TOOL=%d" % (gate, ratio, gate))
+            return 1.
 
     def _get_calibration_clog_length(self):
         return max(self.variables.get('ercf_calib_clog_length', 10.), 5.)
@@ -968,7 +981,10 @@ class Ercf:
             ratio = (test_length * 2) / (measurement - encoder_moved)
             self._log_always("Calibration move of %.1fmm, average encoder measurement %.1fmm - Ratio is %.6f" % (test_length * 2, measurement - encoder_moved, ratio))
             if not tool == 0:
-                self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=ercf_calib_%d VALUE=%.6f" % (tool, ratio))
+                if ratio > 0.9 and ratio < 1.1:
+                    self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=ercf_calib_%d VALUE=%.6f" % (tool, ratio))
+                else:
+                    self._log_always("Calibration ratio not saved because it is not considered valid (0.9 < ratio < 1.0)")
             self._unload_encoder(self.unload_buffer)
             self._servo_up()
             self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
@@ -1688,14 +1704,19 @@ class Ercf:
 
         # Move the remaining distance to the nozzle meltzone under exclusive extruder stepper control
         self._servo_up()
-        delta = self._trace_filament_move("Remainder of final move to meltzone", length, speed=self.nozzle_load_speed, motor="extruder")
+        delta = self._trace_filament_move("Remainder of final move to meltzone", length, speed=self.sync_load_speed, motor="extruder")
 
         # Final sanity check
         measured_movement = self._counter.get_distance() - initial_encoder_position
         total_delta = self.home_position_to_nozzle - measured_movement
         self._log_debug("Total measured movement: %.1fmm, total delta: %.1fmm" % (measured_movement, total_delta))
-        if total_delta > (length * 0.80):   # 80% of final move length
-            raise ErcfError("Move to nozzle failed (encoder not sensing sufficient movement). Extruder may not have picked up filament")
+        if total_delta > (length * 0.70):   # 70% of final move length
+            msg = "Move to nozzle failed (encoder not sensing sufficient movement). Extruder may not have picked up filament or filament did not home correctly"
+            if not self.ignore_extruder_load_error:
+                self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
+                raise ErcfError(msg)
+            else:
+                self._log_always("Ignoring: %s" % msg)
 
         self._set_loaded_status(self.LOADED_STATUS_FULL)
         self._log_info('ERCF load successful')
@@ -1743,12 +1764,12 @@ class Ercf:
                     # No movement means we can safely assume we are somewhere in the bowden
                     self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
      
-            if self.loaded_status >= self.LOADED_STATUS_PARTIAL_IN_EXTRUDER:
+            if self.loaded_status > self.LOADED_STATUS_PARTIAL_HOMED_EXTRUDER:
                 # Unload extruder, then fast unload of bowden
                 self._unload_extruder()
                 self._unload_bowden(length - self.unload_buffer, skip_sync_move=skip_sync_move)
                 self._unload_encoder(self.unload_buffer)
-            elif self.loaded_status == self.LOADED_STATUS_PARTIAL_END_OF_BOWDEN:
+            elif self.loaded_status == self.LOADED_STATUS_PARTIAL_END_OF_BOWDEN or self.loaded_status == self.LOADED_STATUS_PARTIAL_HOMED_EXTRUDER:
                 # Fast unload of bowden
                 self._unload_bowden(length - self.unload_buffer, skip_sync_move=skip_sync_move)
                 self._unload_encoder(self.unload_buffer)
@@ -2421,11 +2442,12 @@ class Ercf:
         self.long_moves_speed = gcmd.get_float('LONG_MOVES_SPEED', self.long_moves_speed, above=20.)
         self.short_moves_speed = gcmd.get_float('SHORT_MOVES_SPEED', self.short_moves_speed, above=20.)
         self.home_to_extruder = gcmd.get_int('HOME_TO_EXTRUDER', self.home_to_extruder, minval=0, maxval=1)
+        self.ignore_extruder_load_error = gcmd.get_int('IGNORE_EXTRUDER_LOAD_ERROR', self.ignore_extruder_load_error, minval=0, maxval=1)
         self.extruder_homing_max = gcmd.get_float('EXTRUDER_HOMING_MAX', self.extruder_homing_max, above=20.)
         self.extruder_homing_step = gcmd.get_float('EXTRUDER_HOMING_STEP', self.extruder_homing_step, minval=1., maxval=5.)
         self.toolhead_homing_max = gcmd.get_float('TOOLHEAD_HOMING_MAX', self.toolhead_homing_max, minval=0.)
         self.toolhead_homing_step = gcmd.get_float('TOOLHEAD_HOMING_STEP', self.toolhead_homing_step, minval=0.5, maxval=5.)
-        self.extruder_homing_current = gcmd.get_int('EXTRUDER_HOMING_CURRENT', self.extruder_homing_current, minval=0, maxval=100)
+        self.extruder_homing_current = gcmd.get_int('EXTRUDER_HOMING_CURRENT', self.extruder_homing_current, minval=10, maxval=100)
         if self.extruder_homing_current == 0: self.extruder_homing_current = 100
         self.extruder_form_tip_current = gcmd.get_int('EXTRUDER_FORM_TIP_CURRENT', self.extruder_form_tip_current, minval=100, maxval=150)
         self.delay_servo_release = gcmd.get_float('DELAY_SERVO_RELEASE', self.delay_servo_release, minval=0., maxval=5.)
@@ -2446,6 +2468,7 @@ class Ercf:
         msg = "long_moves_speed = %.1f" % self.long_moves_speed
         msg += "\nshort_moves_speed = %.1f" % self.short_moves_speed
         msg += "\nhome_to_extruder = %d" % self.home_to_extruder
+        msg += "\nignore_extruder_load_error = %d" % self.ignore_extruder_load_error
         msg += "\nextruder_homing_max = %.1f" % self.extruder_homing_max
         msg += "\nextruder_homing_step = %.1f" % self.extruder_homing_step
         msg += "\ntoolhead_homing_max = %.1f" % self.toolhead_homing_max
