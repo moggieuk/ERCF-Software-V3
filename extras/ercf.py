@@ -375,6 +375,22 @@ class Ercf:
                     desc = self.cmd_ERCF_CHECK_GATES_help)
 
     def handle_connect(self):
+        # Setup background file based logging before logging any messages
+        if self.logfile_level >= 0:
+            logfile_path = self.printer.start_args['log_file']
+            dirname = os.path.dirname(logfile_path)
+            if dirname == None:
+                ercf_log = '/tmp/ercf.log'
+            else:
+                ercf_log = dirname + '/ercf.log'
+            self._log_debug("ercf_log=%s" % ercf_log)
+            self.queue_listener = QueueListener(ercf_log)
+            self.queue_listener.setFormatter(MultiLineFormatter('%(asctime)s %(message)s', datefmt='%I:%M:%S'))
+            queue_handler = QueueHandler(self.queue_listener.bg_queue)
+            self.ercf_logger = logging.getLogger('ercf')
+            self.ercf_logger.setLevel(logging.INFO)
+            self.ercf_logger.addHandler(queue_handler)
+
         self.toolhead = self.printer.lookup_object('toolhead')
         for manual_stepper in self.printer.lookup_objects('manual_stepper'):
             stepper_name = manual_stepper[1].get_steppers()[0].get_name()
@@ -438,22 +454,6 @@ class Ercf:
         # Sanity check to see that ercf_vars.cfg is included
         if self.variables == {}:
             raise self.config.error("Calibration settings in ercf_vars.cfg not found.  Did you include it in your printer.cfg?")
-
-        # Setup background file based logging
-        if self.logfile_level >= 0:
-            logfile_path = self.printer.start_args['log_file']
-            dirname = os.path.dirname(logfile_path)
-            if dirname == None:
-                ercf_log = '/tmp/ercf.log'
-            else:
-                ercf_log = dirname + '/ercf.log'
-            self._log_debug("ercf_log=%s" % ercf_log)
-            self.queue_listener = QueueListener(ercf_log)
-            self.queue_listener.setFormatter(MultiLineFormatter('%(asctime)s %(message)s', datefmt='%I:%M:%S'))
-            queue_handler = QueueHandler(self.queue_listener.bg_queue)
-            self.ercf_logger = logging.getLogger('ercf')
-            self.ercf_logger.setLevel(logging.INFO)
-            self.ercf_logger.addHandler(queue_handler)
 
         # Setup statistics & event handlers to control encoder status
         if not self.done_connect:
@@ -1683,7 +1683,7 @@ class Ercf:
             length -= self.sync_load_length
         elif self.home_to_extruder and self.delay_servo_release > 0:
             # Delay servo release by a few mm to keep filament tension for reliable transition
-            delta = self._trace_filament_move("Small extruder move under filament tension before servo release", self.delay_servo_release, speed=self.home_position_to_nozzle_speed, motor="extruder")
+            delta = self._trace_filament_move("Small extruder move under filament tension before servo release", self.delay_servo_release, speed=self.sync_load_speed, motor="extruder")
             length -= self.delay_servo_release
 
         # Move the remaining distance to the nozzle meltzone under exclusive extruder stepper control
