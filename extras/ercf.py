@@ -1683,7 +1683,7 @@ class Ercf:
             length -= self.sync_load_length
         elif self.home_to_extruder and self.delay_servo_release > 0:
             # Delay servo release by a few mm to keep filament tension for reliable transition
-            delta = self._trace_filament_move("Small extruder move under filament tension before servo release", self.delay_servo_release, speed=self.home_poaition_to_nozzle_speed, motor="extruder")
+            delta = self._trace_filament_move("Small extruder move under filament tension before servo release", self.delay_servo_release, speed=self.home_position_to_nozzle_speed, motor="extruder")
             length -= self.delay_servo_release
 
         # Move the remaining distance to the nozzle meltzone under exclusive extruder stepper control
