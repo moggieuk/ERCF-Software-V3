@@ -1307,7 +1307,7 @@ class Ercf:
                 else:
                     print_status = idle_timeout['state'].lower()
         finally:
-            self._log_debug("Determined print status as: %s from %s" % (print_status, source))
+            self._log_trace("Determined print status as: %s from %s" % (print_status, source))
             return print_status
 
     def _set_above_min_temp(self):
@@ -1871,7 +1871,6 @@ class Ercf:
             if sync:
                 self._log_debug("Moving the gear and extruder motors in sync for %.1fmm" % -initial_move) 
                 delta = self._trace_filament_move("Sync unload", -initial_move, speed=self.sync_unload_speed, motor="both")
-                self._log_debug("Moving the gear and extruder motors in sync for %.1fmm" % -initial_move) 
             else:
                 self._log_debug("Moving the gear motor for %.1fmm" % -initial_move) 
                 delta = self._trace_filament_move("Unload", -initial_move, speed=self.sync_unload_speed, motor="gear", track=True)
@@ -2252,7 +2251,7 @@ class Ercf:
         if self._check_is_paused(): return
         if self._check_not_homed(): return
         try:
-            self._load_extruder(True, skip_sync_move=True)
+            self._load_extruder(True)
         except ErcfError as ee:
             self._pause(str(ee))
 
