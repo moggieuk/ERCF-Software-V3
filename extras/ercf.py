@@ -178,13 +178,13 @@ class Ercf:
         self.toolhead_homing_max = config.getfloat('toolhead_homing_max', 20., minval=0.)
         self.toolhead_homing_step = config.getfloat('toolhead_homing_step', 1., above=0.5, maxval=5.)
         self.sync_load_length = config.getfloat('sync_load_length', 8., minval=0., maxval=50.)
-        self.sync_load_speed = config.getfloat('sync_load_speed', 10., minval=1., maxval=50.)
-        self.sync_unload_length = config.getfloat('sync_unload_length', 10., minval=0., maxval=100.)
-        self.sync_unload_speed = config.getfloat('sync_unload_speed', 10., minval=1., maxval=50.)
+        self.sync_load_speed = config.getfloat('sync_load_speed', 10., minval=1., maxval=100.)
+        self.sync_unload_length = config.getfloat('sync_unload_length', 10., minval=0., maxval=50.)
+        self.sync_unload_speed = config.getfloat('sync_unload_speed', 10., minval=1., maxval=100.)
         self.delay_servo_release =config.getfloat('delay_servo_release', 2., minval=0., maxval=5.)
-        self.home_position_to_nozzle = config.getfloat('home_position_to_nozzle', above=20.)
-        self.nozzle_load_speed = config.getfloat('nozzle_load_speed', 15, minval=1., maxval=50.)
-        self.nozzle_unload_speed = config.getfloat('nozzle_unload_speed', 20, minval=1., maxval=50.)
+        self.home_position_to_nozzle = config.getfloat('home_position_to_nozzle', minval=5.)
+        self.nozzle_load_speed = config.getfloat('nozzle_load_speed', 15, minval=1., maxval=100.)
+        self.nozzle_unload_speed = config.getfloat('nozzle_unload_speed', 20, minval=1., maxval=100.)
 
         # Options
         self.homing_method = config.getint('homing_method', 0, minval=0, maxval=1)
@@ -518,7 +518,16 @@ class Ercf:
 
     def get_status(self, eventtime):
         encoder_pos = float(self._counter.get_distance())
-        return {'encoder_pos': encoder_pos, 'is_paused': self.is_paused, 'tool': self.tool_selected, 'gate': self.gate_selected, 'clog_detection': self.enable_clog_detection, 'enabled': self.is_enabled}
+        return {'encoder_pos': encoder_pos,
+                'is_paused': self.is_paused,
+                'tool': self.tool_selected,
+                'gate': self.gate_selected,
+                'clog_detection': self.enable_clog_detection,
+                'enabled': self.is_enabled,
+                'filament': "Loaded" if self.loaded_status == self.LOADED_STATUS_FULL else
+                            "Unloaded" if self.loaded_status == self.LOADED_STATUS_UNLOADED else
+                            "Unknown"
+                }
 
     def _reset_statistics(self):
         self.total_swaps = 0
@@ -2290,11 +2299,34 @@ class Ercf:
         self._save_toolhead_position_and_lift(False)
         self.gcode.run_script_from_command("__CANCEL_PRINT")
 
-    cmd_ERCF_RECOVER_help = "Recover the filament location state after manual intervention/movement"
+    cmd_ERCF_RECOVER_help = "Recover the filament location and set ERCF state after manual intervention/movement"
     def cmd_ERCF_RECOVER(self, gcmd):
         if self._check_is_disabled(): return
         if self._check_is_paused(): return
-        if self._check_in_bypass(): return
+        tool = gcmd.get_int('TOOL', -1, minval=-2, maxval=len(self.selector_offsets)-1)
+        mod_gate = gcmd.get_int('GATE', -1, minval=0, maxval=len(self.selector_offsets)-1)
+        loaded = gcmd.get_int('LOADED', -1, minval=0, maxval=1)
+        if tool == self.TOOL_BYPASS:
+            self._set_tool_selected(tool)
+            return
+        if tool >= 0:
+            gate = self._tool_to_gate(tool)
+            if mod_gate >= 0:
+                gate = mod_gate
+            if gate >= 0:
+                self.is_homed = False
+                self.gate_selected = gate
+        if tool == -1 and self._check_in_bypass(): return
+        if loaded == 1:
+            self.filament_direction = self.DIRECTION_LOAD
+            self.loaded_status = self.LOADED_STATUS_FULL
+            self._set_tool_selected(tool)
+            return
+        elif loaded == 0:
+            self.filament_direction = self.DIRECTION_LOAD
+            self.loaded_status = self.LOADED_STATUS_UNLOADED
+            self._set_tool_selected(tool)
+            return
         self._log_info("Recovering filament position/state...")
         self._recover_loaded_state()
 
@@ -2452,16 +2484,16 @@ class Ercf:
         if self.extruder_homing_current == 0: self.extruder_homing_current = 100
         self.extruder_form_tip_current = gcmd.get_int('EXTRUDER_FORM_TIP_CURRENT', self.extruder_form_tip_current, minval=100, maxval=150)
         self.delay_servo_release = gcmd.get_float('DELAY_SERVO_RELEASE', self.delay_servo_release, minval=0., maxval=5.)
-        self.sync_load_length = gcmd.get_float('SYNC_LOAD_LENGTH', self.sync_load_length, minval=0., maxval=100.)
-        self.sync_load_speed = gcmd.get_float('SYNC_LOAD_SPEED', self.sync_load_speed, minval=1., maxval=50.)
-        self.sync_unload_length = gcmd.get_float('SYNC_UNLOAD_LENGTH', self.sync_unload_length, minval=0.)
-        self.sync_unload_speed = gcmd.get_float('SYNC_UNLOAD_SPEED', self.sync_unload_speed, minval=1.)
+        self.sync_load_length = gcmd.get_float('SYNC_LOAD_LENGTH', self.sync_load_length, minval=0., maxval=50.)
+        self.sync_load_speed = gcmd.get_float('SYNC_LOAD_SPEED', self.sync_load_speed, minval=1., maxval=100.)
+        self.sync_unload_length = gcmd.get_float('SYNC_UNLOAD_LENGTH', self.sync_unload_length, minval=0., maxval=50.)
+        self.sync_unload_speed = gcmd.get_float('SYNC_UNLOAD_SPEED', self.sync_unload_speed, minval=1., maxval=100.)
         self.num_moves = gcmd.get_int('NUM_MOVES', self.num_moves, minval=1)
         self.apply_bowden_correction = gcmd.get_int('APPLY_BOWDEN_CORRECTION', self.apply_bowden_correction, minval=0, maxval=1)
         self.load_bowden_tolerance = gcmd.get_float('LOAD_BOWDEN_TOLERANCE', self.load_bowden_tolerance, minval=1., maxval=50.)
-        self.home_position_to_nozzle = gcmd.get_float('HOME_POSITION_TO_NOZZLE', self.home_position_to_nozzle, minval=25.)
-        self.nozzle_load_speed = gcmd.get_float('NOZZLE_LOAD_SPEED', self.nozzle_load_speed, minval=1., maxval=50.)
-        self.nozzle_unload_speed = gcmd.get_float('NOZZLE_UNLOAD_SPEED', self.nozzle_unload_speed, minval=1.)
+        self.home_position_to_nozzle = gcmd.get_float('HOME_POSITION_TO_NOZZLE', self.home_position_to_nozzle, minval=5.)
+        self.nozzle_load_speed = gcmd.get_float('NOZZLE_LOAD_SPEED', self.nozzle_load_speed, minval=1., maxval=100.)
+        self.nozzle_unload_speed = gcmd.get_float('NOZZLE_UNLOAD_SPEED', self.nozzle_unload_speed, minval=1., maxval=100)
         self.z_hop_height = gcmd.get_float('Z_HOP_HEIGHT', self.z_hop_height, minval=0.)
         self.z_hop_speed = gcmd.get_float('Z_HOP_SPEED', self.z_hop_speed, minval=1.)
         self.variables['ercf_calib_ref'] = gcmd.get_float('ERCF_CALIB_REF', self._get_calibration_ref(), minval=10.)
