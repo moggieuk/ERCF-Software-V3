@@ -298,21 +298,21 @@ ERCF will always return the toolhead to the correct position, but if you leave i
 ### Recovering ERCF state:
 At some point when a project occurs during a multi-color print ERCF will go into a `pause/locked` state.  Generally the user would then call `ERCF_UNLOCK`, fix the issue and then resume print with `RESUME`.   While fixing the problem you may find it useful to issue ERCF commands to move the filament around or change gate. If you do this the ERCF will "know" the correct state when resuming a print and everything will be copacetic. However, if you manually move the filament you are able to tell ERCF the correct state with the `ERCF_RECOVER` command.  This command is also useful when first turning on an ERCF with filament already loaded.  Instead of ERCF having to unload and reload to figure out the state you can simple tell it!  Here are some examples:
 
-  ERCF_RECOVER - attempt to automatically recover the filament state.  The tool or gate selection will not be changed.
-  ERCF_RECOVER TOOL=0 - tell ERCF that T0 is selected but automatically look at filament location
-  ERCF_RECOVER TOOL=5 LOADED=1 - tell ERCF that T5 is loaded and ready to print
-  ERCF_RECOVER TOOL=1 GATE=2 LOADED=0 - tell ERCF that T1 is being serviced by gate #2 and the filamaent is Unloaded
+    ERCF_RECOVER - attempt to automatically recover the filament state.  The tool or gate selection will not be changed.
+    ERCF_RECOVER TOOL=0 - tell ERCF that T0 is selected but automatically look at filament location
+    ERCF_RECOVER TOOL=5 LOADED=1 - tell ERCF that T5 is loaded and ready to print
+    ERCF_RECOVER TOOL=1 GATE=2 LOADED=0 - tell ERCF that T1 is being serviced by gate #2 and the filament is Unloaded
 
 ### ERCF variables accessable in your own macros:
 Happy Hare exposes the following 'printer' variables:
 
-  printer.ercf.encoder_pos : {float}
-  printer.ercf.tool : {int} 0..n | -1 for unknown | -2 for bypass
-  printer.ercf.gate : {int} 0..n | -1 for unknown
-  printer.ercf.filament : {string} Loaded | Unloaded | Unknown
-  printer.ercf.is_paused : {bool}
-  printer.ercf.enabled : {bool}
-  printer.ercf.clog_detection : {int} 0 | 1
+    printer.ercf.encoder_pos : {float}
+    printer.ercf.tool : {int} 0..n | -1 for unknown | -2 for bypass
+    printer.ercf.gate : {int} 0..n | -1 for unknown
+    printer.ercf.filament : {string} Loaded | Unloaded | Unknown
+    printer.ercf.is_paused : {bool}
+    printer.ercf.enabled : {bool}
+    printer.ercf.clog_detection : {int} 0 | 1
 
 ## My Testing:
 This software is largely rewritten as well as being extended and so, despite best efforts, has probably introduced some bugs that may not exist in the official driver.  It also lacks extensive testing on different configurations that will stress the corner cases.  I have been using successfully on Voron 2.4 / ERCF with EASY-BRD.  I use a self-modified CW2 extruder with foolproof microswitch toolhead sensor. My day-to-day configuration is to load the filament to the extruder in a single movement (`num_moves=1`) at 200mm/s, then home to toolhead sensor with synchronous gear/extruder movement (option #1 explained above).  I use the sensorless selector and have runout and EndlessSpool enabled.
