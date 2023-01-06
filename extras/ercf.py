@@ -1586,7 +1586,7 @@ class Ercf:
                     break
             if delta > tolerance:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
-                self._log_info("Warning: Excess slippage was detected in bowden tube load afer correction moves. Moved %.1fmm, Encoder delta %.1fmm. Possible causes:\nCalibration ref length too long (hitting extruder gear before homing) \nERCF gears are not properly gripping filament\nEncoder reading is inaccurate\nFaulty servo" % (length, delta))
+                self._log_info("Warning: Excess slippage was detected in bowden tube load afer correction moves. Moved %.1fmm, Encoder delta %.1fmm. Possible causes:\nCalibration ref length too long (hitting extruder gear before homing)\nCalibration ratio for gate is not accurate\nERCF gears are not properly gripping filament\nEncoder reading is inaccurate\nFaulty servo" % (length, delta))
         else:
             if delta >= tolerance:
                 self._log_info("Warning: Excess slippage was detected in bowden tube load but 'apply_bowden_correction' is disabled. Moved %.1fmm, Encoder delta %.1fmm" % (length, delta))
@@ -1744,7 +1744,7 @@ class Ercf:
             self._log_debug("Tool already unloaded")
             return
         self._log_debug("Unloading tool %s" % self._selected_tool_string())
-        self._unload_sequence(self._get_calibration_ref(), skip_tip)
+        self._unload_sequence(self._get_calibration_ref(), skip_tip=skip_tip)
 
     def _unload_sequence(self, length, check_state=False, skip_sync_move=False, skip_tip=False):
         try:
@@ -2227,7 +2227,7 @@ class Ercf:
             self._log_debug("Unknown filament position, recovering state...")
             self._recover_loaded_state()
         try:
-            restore_encoder = self._disable_encoder_sensor() # Don't want runout accidently triggering during tool change
+            restore_encoder = self._disable_encoder_sensor() # Don't want runout accidently triggering du tool change
             self._change_tool(tool, skip_tip)
             self._enable_encoder_sensor(restore_encoder)
         except ErcfError as ee:
