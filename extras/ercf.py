@@ -175,13 +175,13 @@ class Ercf:
         self.toolhead_homing_max = config.getfloat('toolhead_homing_max', 20., minval=0.)
         self.toolhead_homing_step = config.getfloat('toolhead_homing_step', 1., above=0.5, maxval=5.)
         self.sync_load_length = config.getfloat('sync_load_length', 8., minval=0., maxval=50.)
-        self.sync_load_speed = config.getfloat('sync_load_speed', 10., minval=1., maxval=50.)
+        self.sync_load_speed = config.getfloat('sync_load_speed', 10., minval=1., maxval=150.)
         self.sync_unload_length = config.getfloat('sync_unload_length', 10., minval=0., maxval=100.)
-        self.sync_unload_speed = config.getfloat('sync_unload_speed', 10., minval=1., maxval=50.)
+        self.sync_unload_speed = config.getfloat('sync_unload_speed', 10., minval=1., maxval=150.)
         self.delay_servo_release =config.getfloat('delay_servo_release', 2., minval=0., maxval=5.)
         self.home_position_to_nozzle = config.getfloat('home_position_to_nozzle', above=20.)
-        self.nozzle_load_speed = config.getfloat('nozzle_load_speed', 15, minval=1., maxval=50.)
-        self.nozzle_unload_speed = config.getfloat('nozzle_unload_speed', 20, minval=1., maxval=50.)
+        self.nozzle_load_speed = config.getfloat('nozzle_load_speed', 15, minval=1., maxval=150.)
+        self.nozzle_unload_speed = config.getfloat('nozzle_unload_speed', 20, minval=1., maxval=150.)
 
         # Options
         self.homing_method = config.getint('homing_method', 0, minval=0, maxval=1)
