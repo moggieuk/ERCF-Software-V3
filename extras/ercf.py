@@ -361,7 +361,7 @@ class Ercf:
                     self.cmd_ERCF_TEST_CONFIG,
                     desc = self.cmd_ERCF_TEST_CONFIG_help)
 
-        # Runout and Endless spool
+        # Runout, TTG and Endless spool
         self.gcode.register_command('ERCF_ENCODER_RUNOUT',
                     self.cmd_ERCF_ENCODER_RUNOUT,
                     desc = self.cmd_ERCF_ENCODER_RUNOUT_help)
@@ -374,6 +374,9 @@ class Ercf:
         self.gcode.register_command('ERCF_RESET_TTG_MAP',
                     self.cmd_ERCF_RESET_TTG_MAP,
                     desc = self.cmd_ERCF_RESET_TTG_MAP_help)
+        self.gcode.register_command('ERCF_ENDLESS_SPOOL_GROUPS',
+                    self.cmd_ERCF_ENDLESS_SPOOL_GROUPS,
+                    desc = self.cmd_ERCF_ENDLESS_SPOOL_GROUPS_help)
         self.gcode.register_command('ERCF_CHECK_GATES',
                     self.cmd_ERCF_CHECK_GATES,
                     desc = self.cmd_ERCF_CHECK_GATES_help)
@@ -963,7 +966,7 @@ class Ercf:
     
             if successes > 0:
                 average_reference = reference_sum / successes
-                spring_based_detection_length = spring_max * 2.0
+                spring_based_detection_length = spring_max * 3.0 # Theoretically this would be double the spring, but this provides safety margin
                 self._log_always("Recommended calibration reference based on current configuration options is %.1fmm" % average_reference)
                 self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=ercf_calib_ref VALUE=%.1f" % average_reference)
                 self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=ercf_calib_clog_length VALUE=%.1f" % spring_based_detection_length)
@@ -1736,7 +1739,8 @@ class Ercf:
         measured_movement = self._counter.get_distance() - initial_encoder_position
         total_delta = self.home_position_to_nozzle - measured_movement
         self._log_debug("Total measured movement: %.1fmm, total delta: %.1fmm" % (measured_movement, total_delta))
-        if total_delta > (length * 0.50):   # 50% of final move length
+        tolerance = max(self._get_calibration_clog_length(), self.home_position_to_nozzle * 0.50)
+        if total_delta > tolerance:
             msg = "Move to nozzle failed (encoder not sensing sufficient movement). Extruder may not have picked up filament or filament did not home correctly"
             if not self.ignore_extruder_load_error:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
@@ -2500,7 +2504,7 @@ class Ercf:
         except ErcfError as ee:
             self._log_always("Homing test failed: %s" % str(ee))
 
-    cmd_ERCF_TEST_CONFIG_help = "Runtime adjustment of ERCF configuration for testing purposes"
+    cmd_ERCF_TEST_CONFIG_help = "Runtime adjustment of ERCF configuration for testing or in-print tweaking purposes"
     def cmd_ERCF_TEST_CONFIG(self, gcmd):
         self.long_moves_speed = gcmd.get_float('LONG_MOVES_SPEED', self.long_moves_speed, above=20.)
         self.short_moves_speed = gcmd.get_float('SHORT_MOVES_SPEED', self.short_moves_speed, above=20.)
@@ -2526,6 +2530,7 @@ class Ercf:
         self.nozzle_unload_speed = gcmd.get_float('NOZZLE_UNLOAD_SPEED', self.nozzle_unload_speed, minval=1., maxval=100)
         self.z_hop_height = gcmd.get_float('Z_HOP_HEIGHT', self.z_hop_height, minval=0.)
         self.z_hop_speed = gcmd.get_float('Z_HOP_SPEED', self.z_hop_speed, minval=1.)
+        self.log_visual = gcmd.get_int('LOG_VISUAL', self.log_visual, minval=0, maxval=2)
         self.variables['ercf_calib_ref'] = gcmd.get_float('ERCF_CALIB_REF', self._get_calibration_ref(), minval=10.)
         self.variables['ercf_calib_clog_length'] = gcmd.get_float('ERCF_CALIB_CLOG_LENGTH', self._get_calibration_clog_length(), minval=1., maxval=100.)
         if self.encoder_sensor != None:
@@ -2553,6 +2558,7 @@ class Ercf:
         msg += "\nnozzle_unload_speed = %.1f" % self.nozzle_unload_speed
         msg += "\nz_hop_height = %.1f" % self.z_hop_height
         msg += "\nz_hop_speed = %.1f" % self.z_hop_speed
+        msg += "\nlog_visual = %d" % self.log_visual
         msg += "\nercf_calib_ref = %.1f" % self.variables['ercf_calib_ref']
         msg += "\nercf_calib_clog_length = %.1f" % self.variables['ercf_calib_clog_length']
         self._log_info(msg)
@@ -2623,24 +2629,19 @@ class Ercf:
         num_tools = len(self.selector_offsets)
         for i in range(num_tools):
             msg += "\n" if i else ""
-            msg += "T%d -> Gate #%d" % (i, self._tool_to_gate(i))
+            msg += "T%d -> Gate #%d [%s]" % (i, self._tool_to_gate(i), "---> " if self.gate_status[i] == self.GATE_AVAILABLE else "Empty")
             if self.enable_endless_spool:
                 group = self.endless_spool_groups[i]
-                es = ", EndlessSpool Grp %s: " % group
+                es = ", Group %s:" % group
                 prefix = ""
                 for j in range(num_tools):
                     check = (j + i) % num_tools
                     if self.endless_spool_groups[check] == group:
-                        es += "%s%s%d" % (prefix, ("#" if self.gate_status[check] == self.GATE_AVAILABLE else "e"), check)
-                        prefix = " > "
+                        es += "%s%s%d%s" % (prefix, (" #" if self.gate_status[check] == self.GATE_AVAILABLE else " e"), check, " " if self.gate_status[check] == self.GATE_AVAILABLE else " ")
+                        prefix = ">"
                 msg += es
             if i == self.tool_selected:
-                msg += " [SELECTED on gate #%d]" % self._tool_to_gate(i)
-        msg += "\n"
-        for i in range(len(self.gate_status)):
-            msg += "\nGate #%d %s" % (i, "Available" if self.gate_status[i] == self.GATE_AVAILABLE else "Empty" if self.gate_status[i] == self.GATE_EMPTY else "Unknown")
-            if i == self.gate_selected:
-                msg += " [ACTIVE supporting tool T%d]" % self.tool_selected
+                msg += " [SELECTED on gate #%d]" % self.gate_selected
         return msg
 
     def _remap_tool(self, tool, gate, available):
@@ -2659,7 +2660,7 @@ class Ercf:
     cmd_ERCF_ENCODER_RUNOUT_help = "Encoder runout handler"
     def cmd_ERCF_ENCODER_RUNOUT(self, gcmd):
         if self._check_is_disabled(): return
-        force_runout = bool(gcmd.get_int('RUNOUT', 0, minval=0, maxval=1))
+        force_runout = bool(gcmd.get_int('FORCE_RUNOUT', 0, minval=0, maxval=1))
         try:
             self._handle_runout(force_runout)
         except ErcfError as ee:
@@ -2674,16 +2675,37 @@ class Ercf:
     cmd_ERCF_REMAP_TTG_help = "Remap a tool to a specific gate and set gate availability"
     def cmd_ERCF_REMAP_TTG(self, gcmd):
         if self._check_is_disabled(): return
-        tool = gcmd.get_int('TOOL', minval=0, maxval=len(self.selector_offsets)-1)
+        tool = gcmd.get_int('TOOL', -1, minval=0, maxval=len(self.selector_offsets)-1)
         gate = gcmd.get_int('GATE', minval=0, maxval=len(self.selector_offsets)-1)
         available = gcmd.get_int('AVAILABLE', 1, minval=0, maxval=1)
-        self._remap_tool(tool, gate, available)
+        if tool == -1:
+            self.gate_status[gate] = available
+        else:
+            self._remap_tool(tool, gate, available)
         self._log_info(self._tool_to_gate_map_to_human_string())
 
     cmd_ERCF_RESET_TTG_MAP_help = "Reset the tool to gate map"
     def cmd_ERCF_RESET_TTG_MAP(self, gcmd):
         if self._check_is_disabled(): return
         self._reset_ttg_mapping()
+        self._log_info(self._tool_to_gate_map_to_human_string())
+
+    cmd_ERCF_ENDLESS_SPOOL_GROUPS_help = "Redefine the EndlessSpool groups"
+    def cmd_ERCF_ENDLESS_SPOOL_GROUPS(self, gcmd):
+        if self._check_is_disabled(): return
+        if not self.enable_endless_spool:
+            self._log_always("EndlessSpool is disabled")
+            return
+        groups = gcmd.get('GROUPS').split(",")
+        if len(groups) != len(self.selector_offsets):
+            self._log_always("The number of group values (%d) is not the same as number of selectors (%d)" % (len(groups), len(self.selector_offsets)))
+            return
+        self.endless_spool_groups = []
+        for group in groups:
+            if group.isdigit():
+                self.endless_spool_groups.append(int(group))
+            else:
+                self.endless_spool_groups.append(0)
         self._log_info(self._tool_to_gate_map_to_human_string())
 
     cmd_ERCF_CHECK_GATES_help = "Automatically inspects gate(s), parks filament and marks availability"
@@ -2731,7 +2753,7 @@ class Ercf:
             self._select_gate(gate)
             self._counter.reset_counts()    # Encoder 0000
             try:
-                self._log_debug("Checking gate #%d..." % gate)
+                self._log_info("Checking gate #%d..." % gate)
                 encoder_moved = self._load_encoder(retry=False)
                 if tool >= 0:
                     self._log_info("Tool T%d - filament detected. Gate #%d marked available" % (tool, gate))
@@ -2754,7 +2776,7 @@ class Ercf:
             except ErcfError as ee:
                 self.gate_status[gate] = self.GATE_EMPTY
                 if tool >= 0: 
-                    msg = "Tool T%d - filament not detected. Gate #%d marked unavailable" % (tool, gate)
+                    msg = "Tool T%d - filament not detected. Gate #%d marked empty" % (tool, gate)
                 else:
                     msg = "Gate #%d - filament not detected. Marked unavailable" % gate
                 if self._is_in_print():
