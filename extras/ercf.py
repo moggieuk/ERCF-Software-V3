@@ -214,7 +214,7 @@ class Ercf:
                 raise self.config.error("Gate status map has different number of values than the number of selectors")
         else:
             for i in range(len(self.selector_offsets)):
-                self.gate_status.append(self.GATE_AVAILABLE)
+                self.gate_status.append(self.GATE_UNKNOWN)
 
         # Setup tool to gate map primarily for endless spool use
         self.tool_to_gate_map = []
@@ -380,6 +380,7 @@ class Ercf:
         self.gcode.register_command('ERCF_CHECK_GATES',
                     self.cmd_ERCF_CHECK_GATES,
                     desc = self.cmd_ERCF_CHECK_GATES_help)
+
 
     def handle_connect(self):
         # Setup background file based logging before logging any messages
@@ -818,6 +819,7 @@ class Ercf:
         self.gcode.run_script_from_command("SET_SERVO SERVO=ercf_servo ANGLE=%1.f" % angle)
 
     def _servo_off(self):
+        self._log_trace("Servo turned off")
         self.gcode.run_script_from_command("SET_SERVO SERVO=ercf_servo WIDTH=0.0")
 
     def _servo_down(self):
@@ -847,7 +849,7 @@ class Ercf:
         self.servo_state = self.SERVO_UP_STATE
 
         # Report on spring back in filament then reset counter
-        self.toolhead.dwell(0.3)
+        self.toolhead.dwell(0.2)
         self.toolhead.wait_moves()
         delta = self._counter.get_distance() - initial_encoder_position
         if delta > 0.:
@@ -875,7 +877,7 @@ class Ercf:
         if self._check_is_disabled(): return
         self.gear_stepper.do_enable(False)
         self.selector_stepper.do_enable(False)
-        self._servo_off()
+        self._servo_up()
         self.is_homed = False
         self._set_tool_selected(self.TOOL_UNKNOWN, True)
 
@@ -1188,18 +1190,17 @@ class Ercf:
 
     def _pause(self, reason, force_in_print=False):
         run_pause = False
+        self.paused_extruder_temp = self.printer.lookup_object("extruder").heater.target_temp
         if self._is_in_print() or force_in_print:
             if self.is_paused: return
             self.is_paused = True
             self._track_pause_start()
-            self.paused_extruder_temp = self.printer.lookup_object("extruder").heater.target_temp
             self.gcode.run_script_from_command("SET_IDLE_TIMEOUT TIMEOUT=%d" % self.timeout_pause)
             self.reactor.update_timer(self.heater_off_handler, self.reactor.monotonic() + self.disable_heater)
             self._save_toolhead_position_and_lift()
-            msg = "An issue with the ERCF has been detected during print. ERCF has been locked and print has been paused"
+            msg = "An issue with the ERCF has been detected during print and it has been locked. The print has been paused"
             reason = "Reason: %s" % reason
-            reason += "\nWhen you intervene to fix the issue, first call \"ERCF_UNLOCK\""
-            reason += "\nRefer to the manual before resuming the print"
+            reason += "\nWhen you intervene to fix the issue, first call \'ERCF_UNLOCK\'"
             run_pause = True
         elif self._is_in_pause():
             msg = "An issue with the ERCF has been detected whilst printer is paused"
@@ -1219,6 +1220,8 @@ class Ercf:
     def _unlock(self):
         if not self.is_paused: return
         self.reactor.update_timer(self.heater_off_handler, self.reactor.NEVER)
+        if not self.printer.lookup_object("extruder").heater.can_extrude and self.paused_extruder_temp > 0:
+            self._log_info("Enabling extruder heater (%.1f)" % self.paused_extruder_temp)
         self.gcode.run_script_from_command("M104 S%.1f" % self.paused_extruder_temp)
         self._counter.reset_counts()    # Encoder 0000
         self._track_pause_end()
@@ -1228,7 +1231,7 @@ class Ercf:
     def _save_toolhead_position_and_lift(self, remember=True):
         if remember and not self.saved_toolhead_position:
             self.toolhead.wait_moves()
-            self._log_debug("Saving print head position")
+            self._log_debug("Saving toolhead position")
             self.gcode.run_script_from_command("SAVE_GCODE_STATE NAME=ERCF_state")
             self.saved_toolhead_position = True
         elif remember:
@@ -1247,7 +1250,7 @@ class Ercf:
 
     def _restore_toolhead_position(self):
         if self.saved_toolhead_position:
-            self._log_debug("Restoring print head position")
+            self._log_debug("Restoring toolhead position")
             self.gcode.run_script_from_command("RESTORE_GCODE_STATE NAME=ERCF_state MOVE=1 MOVE_SPEED=%.1f" % self.z_hop_speed)
         self.saved_toolhead_position = False
 
@@ -1286,7 +1289,7 @@ class Ercf:
 
     def _check_is_paused(self):
         if self.is_paused:
-            self._log_always("ERCF is currently locked/paused. Please use ERCF_UNLOCK")
+            self._log_always("ERCF is currently locked/paused. Please use \'ERCF_UNLOCK\'")
             return True
         return False
 
@@ -1340,10 +1343,11 @@ class Ercf:
             self._log_trace("Determined print status as: %s from %s" % (print_status, source))
             return print_status
 
-    def _set_above_min_temp(self):
+    def _set_above_min_temp(self, temp=-1):
+        if temp == -1: temp = self.min_temp_extruder
         if not self.printer.lookup_object("extruder").heater.can_extrude :
-            self._log_info("Heating extruder above min extrusion temp (%.1f)" % self.min_temp_extruder)
-            self.gcode.run_script_from_command("M109 S%.1f" % self.min_temp_extruder)
+            self._log_info("Heating extruder to minimum temp (%.1f)" % temp)
+            self.gcode.run_script_from_command("M109 S%.1f" % temp)
 
     def _set_loaded_status(self, state, silent=False):
             self.loaded_status = state
@@ -1514,7 +1518,7 @@ class Ercf:
         self._log_debug('Loading tool T%d...' % tool)
         self._select_tool(tool)
         gate = self._tool_to_gate(tool)
-        if self.gate_status[gate] != self.GATE_AVAILABLE:
+        if self.gate_status[gate] == self.GATE_EMPTY:
             raise ErcfError("Gate %d is empty!" % gate)
         self._load_sequence(self._get_calibration_ref())
 
@@ -2211,7 +2215,7 @@ class Ercf:
         if self._check_is_disabled(): return
         self._log_info("Unlocking the ERCF")
         self._unlock()
-        self._log_info("Refer to the manual before resuming the print")
+        self._log_info("When the issue is addressed you can resume print")
 
     cmd_ERCF_HOME_help = "Home the ERCF"
     def cmd_ERCF_HOME(self, gcmd):
@@ -2315,6 +2319,8 @@ class Ercf:
         if self.is_paused:
             self._log_always("You can't resume the print without unlocking the ERCF first")
             return
+        if self.printer.lookup_object("extruder").heater.target_temp < max(self.paused_extruder_temp, self.min_temp_extruder):
+            self._set_above_min_temp(max(self.paused_extruder_temp, self.min_temp_extruder))
         self.gcode.run_script_from_command("__RESUME")
         self._restore_toolhead_position()
         self._counter.reset_counts()    # Encoder 0000
@@ -2413,7 +2419,7 @@ class Ercf:
                     if random == 1:
                         tool = randint(0, len(self.selector_offsets)-1)
                     gate = self._tool_to_gate(tool)
-                    if self.gate_status[gate] != self.GATE_AVAILABLE:
+                    if self.gate_status[gate] == self.GATE_EMPTY:
                         self._log_always("Skipping tool %d of %d because gate %d is empty" % (tool, len(self.selector_offsets), gate))
                     else:
                         self._log_always("Testing tool %d of %d (gate %d)" % (tool, len(self.selector_offsets), gate))
@@ -2596,7 +2602,7 @@ class Ercf:
             check = self.gate_selected + 1
             while check != self.gate_selected:
                 check = check % num_tools
-                if self.endless_spool_groups[check] == group and self.gate_status[check] == self.GATE_AVAILABLE:
+                if self.endless_spool_groups[check] == group and self.gate_status[check] != self.GATE_EMPTY:
                     next_gate = check
                     break
                 check += 1
@@ -2629,19 +2635,32 @@ class Ercf:
         num_tools = len(self.selector_offsets)
         for i in range(num_tools):
             msg += "\n" if i else ""
-            msg += "T%d -> Gate #%d [%s]" % (i, self._tool_to_gate(i), "---> " if self.gate_status[i] == self.GATE_AVAILABLE else "Empty")
+            msg += "T%d -> Gate #%d" % (i, self._tool_to_gate(i))
             if self.enable_endless_spool:
                 group = self.endless_spool_groups[i]
-                es = ", Group %s:" % group
+                es = ", group%s: " % group
                 prefix = ""
+                starting_gate = self._tool_to_gate(i)
                 for j in range(num_tools):
-                    check = (j + i) % num_tools
+                    check = (j + starting_gate) % num_tools
                     if self.endless_spool_groups[check] == group:
-                        es += "%s%s%d%s" % (prefix, (" #" if self.gate_status[check] == self.GATE_AVAILABLE else " e"), check, " " if self.gate_status[check] == self.GATE_AVAILABLE else " ")
-                        prefix = ">"
+                        es += "%s%d%s" % (prefix, check,("(*)" if self.gate_status[check] == self.GATE_AVAILABLE else "( )" if self.gate_status[check] == self.GATE_EMPTY else "(?)"))
+                        prefix = " > "
                 msg += es
             if i == self.tool_selected:
-                msg += " [SELECTED on gate #%d]" % self.gate_selected
+                msg += " [SELECTED on gate #%d]" % self._tool_to_gate(i)
+        msg += "\n"
+        for g in range(len(self.selector_offsets)):
+            msg += "\nGate #%d (%s)" % (g, "*" if self.gate_status[g] == self.GATE_AVAILABLE else " " if self.gate_status[g] == self.GATE_EMPTY else "?")
+            tool_str = " -> "
+            prefix = ""
+            for t in range(len(self.selector_offsets)):
+                if self._tool_to_gate(t) == g:
+                    tool_str += "%sT%d" % (prefix, t)
+                    prefix = ","
+            msg += tool_str
+            if g == self.gate_selected:
+                msg += " [SELECTED supporting tool T%d]" % self.tool_selected
         return msg
 
     def _remap_tool(self, tool, gate, available):
@@ -2652,7 +2671,7 @@ class Ercf:
         self._log_debug("Resetting TTG map")
         for i in range(len(self.selector_offsets)):
             self.tool_to_gate_map[i] = i
-            self.gate_status[i] = self.GATE_AVAILABLE
+            self.gate_status[i] = self.GATE_UNKNOWN
         self._unselect_tool()
 
 ### GCODE COMMANDS FOR RUNOUT and GATE LOGIC ##################################
@@ -2778,7 +2797,7 @@ class Ercf:
                 if tool >= 0: 
                     msg = "Tool T%d - filament not detected. Gate #%d marked empty" % (tool, gate)
                 else:
-                    msg = "Gate #%d - filament not detected. Marked unavailable" % gate
+                    msg = "Gate #%d - filament not detected. Marked empty" % gate
                 if self._is_in_print():
                     self._pause(msg)
                 else:
