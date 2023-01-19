@@ -214,7 +214,7 @@ class Ercf:
                 raise self.config.error("Gate status map has different number of values than the number of selectors")
         else:
             for i in range(len(self.selector_offsets)):
-                self.gate_status.append(self.GATE_AVAILABLE)
+                self.gate_status.append(self.GATE_UNKNOWN)
 
         # Setup tool to gate map primarily for endless spool use
         self.tool_to_gate_map = []
@@ -310,6 +310,9 @@ class Ercf:
         self.gcode.register_command('ERCF_LOAD_BYPASS',
                     self.cmd_ERCF_LOAD_BYPASS,
                     desc=self.cmd_ERCF_LOAD_BYPASS_help)
+        self.gcode.register_command('ERCF_UNLOAD_BYPASS',
+                    self.cmd_ERCF_UNLOAD_BYPASS,
+                    desc=self.cmd_ERCF_UNLOAD_BYPASS_help)
         self.gcode.register_command('ERCF_CHANGE_TOOL',
                     self.cmd_ERCF_CHANGE_TOOL,
                     desc = self.cmd_ERCF_CHANGE_TOOL_help)
@@ -358,7 +361,7 @@ class Ercf:
                     self.cmd_ERCF_TEST_CONFIG,
                     desc = self.cmd_ERCF_TEST_CONFIG_help)
 
-        # Runout and Endless spool
+        # Runout, TTG and Endless spool
         self.gcode.register_command('ERCF_ENCODER_RUNOUT',
                     self.cmd_ERCF_ENCODER_RUNOUT,
                     desc = self.cmd_ERCF_ENCODER_RUNOUT_help)
@@ -371,9 +374,13 @@ class Ercf:
         self.gcode.register_command('ERCF_RESET_TTG_MAP',
                     self.cmd_ERCF_RESET_TTG_MAP,
                     desc = self.cmd_ERCF_RESET_TTG_MAP_help)
+        self.gcode.register_command('ERCF_ENDLESS_SPOOL_GROUPS',
+                    self.cmd_ERCF_ENDLESS_SPOOL_GROUPS,
+                    desc = self.cmd_ERCF_ENDLESS_SPOOL_GROUPS_help)
         self.gcode.register_command('ERCF_CHECK_GATES',
                     self.cmd_ERCF_CHECK_GATES,
                     desc = self.cmd_ERCF_CHECK_GATES_help)
+
 
     def handle_connect(self):
         # Setup background file based logging before logging any messages
@@ -670,11 +677,13 @@ class Ercf:
 
     def _state_to_human_string(self, direction=None):
         tool_str = str(self.tool_selected) if self.tool_selected >=0 else "?"
-        sensor_str = " [sensor] " if self.toolhead_sensor != None else ""
+        sensor_str = " [sensor] " if self._has_toolhead_sensor() else ""
         counter_str = " (@%.1f mm)" % self._counter.get_distance()
         visual = ""
-        if self.tool_selected == self.TOOL_BYPASS:
-            visual = "ERCF BYPASS -------- [encoder] -------------->>"
+        if self.tool_selected == self.TOOL_BYPASS and self.loaded_status == self.LOADED_STATUS_FULL:
+            visual = "ERCF BYPASS ----- [encoder] ----------->> [nozzle] LOADED"
+        elif self.tool_selected == self.TOOL_BYPASS:
+            visual = "ERCF BYPASS >.... [encoder] ............. [nozzle] UNLOADED"
         elif self.loaded_status == self.LOADED_STATUS_UNKNOWN:
             visual = "ERCF [T%s] ..... [encoder] ............. [extruder] ...%s... [nozzle] UNKNOWN" % (tool_str, sensor_str)
         elif self.loaded_status == self.LOADED_STATUS_UNLOADED:
@@ -764,19 +773,19 @@ class Ercf:
         
         if config:
             msg += "\n\nConfiguration:\nFilament homes"
-            if self.home_to_extruder:
+            if self._must_home_to_extruder():
                 if self.homing_method == self.EXTRUDER_COLLISION:
                     msg += " to EXTRUDER using COLLISION DETECTION (current %d%%)" % self.extruder_homing_current
                 else:
                     msg += " to EXTRUDER using STALLGUARD"
-                if self.toolhead_sensor != None:
+                if self._has_toolhead_sensor():
                     msg += " and then"
-            msg += " to TOOLHEAD SENSOR" if self.toolhead_sensor != None else ""
+            msg += " to TOOLHEAD SENSOR" if self._has_toolhead_sensor() else ""
             msg += " after a %.1fmm calibration reference length" % self._get_calibration_ref()
             if self.sync_load_length > 0 or self.sync_unload_length > 0:
                 msg += "\nGear and Extruder steppers are synchronized during "
                 load = False
-                if self.toolhead_sensor != None and self.sync_load_length > 0:
+                if self._has_toolhead_sensor() and self.sync_load_length > 0:
                     msg += "load (up to %.1fmm)" % (self.toolhead_homing_max)
                     load = True
                 elif self.sync_load_length > 0:
@@ -810,6 +819,7 @@ class Ercf:
         self.gcode.run_script_from_command("SET_SERVO SERVO=ercf_servo ANGLE=%1.f" % angle)
 
     def _servo_off(self):
+        self._log_trace("Servo turned off")
         self.gcode.run_script_from_command("SET_SERVO SERVO=ercf_servo WIDTH=0.0")
 
     def _servo_down(self):
@@ -824,7 +834,7 @@ class Ercf:
         self.toolhead.dwell(0.1)
         self._gear_stepper_move_wait(0.5, speed=25, accel=self.gear_buzz_accel, wait=False, sync=False)
         self.toolhead.dwell(0.1 + self.extra_servo_dwell_down / 1000.)
-        self._gear_stepper_move_wait(-0.5, speed=25, accel=self.gear_buzz_accel, wait=True, sync=True)
+        self._gear_stepper_move_wait(-0.5, speed=25, accel=self.gear_buzz_accel, wait=True, sync=False)
         self._servo_off()
         self.servo_state = self.SERVO_DOWN_STATE
 
@@ -839,7 +849,7 @@ class Ercf:
         self.servo_state = self.SERVO_UP_STATE
 
         # Report on spring back in filament then reset counter
-        self.toolhead.dwell(0.3)
+        self.toolhead.dwell(0.2)
         self.toolhead.wait_moves()
         delta = self._counter.get_distance() - initial_encoder_position
         if delta > 0.:
@@ -867,7 +877,7 @@ class Ercf:
         if self._check_is_disabled(): return
         self.gear_stepper.do_enable(False)
         self.selector_stepper.do_enable(False)
-        self._servo_off()
+        self._servo_up()
         self.is_homed = False
         self._set_tool_selected(self.TOOL_UNKNOWN, True)
 
@@ -924,14 +934,14 @@ class Ercf:
                 spring = self._servo_up()
                 reference = measured_movement - (spring * 0.1)
                 if spring > 0:
-                    if self.home_to_extruder:
+                    if self._must_home_to_extruder():
                         # Home to extruder step is enabled so we don't need any spring
                         # in filament since we will do it again on every load
                         reference = measured_movement - (spring * 1.0)
                     elif self.sync_load_length > 0:
                         # Synchronized load makes the transition from gear stepper to extruder stepper
                         # work reliably so we don't need spring tension in the bowden
-                        if self.toolhead_sensor != None:
+                        if self._has_toolhead_sensor():
                             # We have a toolhead sensor so the extruder entrance isn't the reference
                             # homing point and therefore not critical to press against it. Relax tension
                             reference = measured_movement - (spring * 1.1) 
@@ -958,7 +968,7 @@ class Ercf:
     
             if successes > 0:
                 average_reference = reference_sum / successes
-                spring_based_detection_length = spring_max * 2.0
+                spring_based_detection_length = spring_max * 3.0 # Theoretically this would be double the spring, but this provides safety margin
                 self._log_always("Recommended calibration reference based on current configuration options is %.1fmm" % average_reference)
                 self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=ercf_calib_ref VALUE=%.1f" % average_reference)
                 self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=ercf_calib_clog_length VALUE=%.1f" % spring_based_detection_length)
@@ -1180,18 +1190,17 @@ class Ercf:
 
     def _pause(self, reason, force_in_print=False):
         run_pause = False
+        self.paused_extruder_temp = self.printer.lookup_object("extruder").heater.target_temp
         if self._is_in_print() or force_in_print:
             if self.is_paused: return
             self.is_paused = True
             self._track_pause_start()
-            self.paused_extruder_temp = self.printer.lookup_object("extruder").heater.target_temp
             self.gcode.run_script_from_command("SET_IDLE_TIMEOUT TIMEOUT=%d" % self.timeout_pause)
             self.reactor.update_timer(self.heater_off_handler, self.reactor.monotonic() + self.disable_heater)
             self._save_toolhead_position_and_lift()
-            msg = "An issue with the ERCF has been detected during print. ERCF has been locked and print has been paused"
+            msg = "An issue with the ERCF has been detected during print and it has been locked. The print has been paused"
             reason = "Reason: %s" % reason
-            reason += "\nWhen you intervene to fix the issue, first call \"ERCF_UNLOCK\""
-            reason += "\nRefer to the manual before resuming the print"
+            reason += "\nWhen you intervene to fix the issue, first call \'ERCF_UNLOCK\'"
             run_pause = True
         elif self._is_in_pause():
             msg = "An issue with the ERCF has been detected whilst printer is paused"
@@ -1211,6 +1220,8 @@ class Ercf:
     def _unlock(self):
         if not self.is_paused: return
         self.reactor.update_timer(self.heater_off_handler, self.reactor.NEVER)
+        if not self.printer.lookup_object("extruder").heater.can_extrude and self.paused_extruder_temp > 0:
+            self._log_info("Enabling extruder heater (%.1f)" % self.paused_extruder_temp)
         self.gcode.run_script_from_command("M104 S%.1f" % self.paused_extruder_temp)
         self._counter.reset_counts()    # Encoder 0000
         self._track_pause_end()
@@ -1220,7 +1231,7 @@ class Ercf:
     def _save_toolhead_position_and_lift(self, remember=True):
         if remember and not self.saved_toolhead_position:
             self.toolhead.wait_moves()
-            self._log_debug("Saving print head position")
+            self._log_debug("Saving toolhead position")
             self.gcode.run_script_from_command("SAVE_GCODE_STATE NAME=ERCF_state")
             self.saved_toolhead_position = True
         elif remember:
@@ -1239,7 +1250,7 @@ class Ercf:
 
     def _restore_toolhead_position(self):
         if self.saved_toolhead_position:
-            self._log_debug("Restoring print head position")
+            self._log_debug("Restoring toolhead position")
             self.gcode.run_script_from_command("RESTORE_GCODE_STATE NAME=ERCF_state MOVE=1 MOVE_SPEED=%.1f" % self.z_hop_speed)
         self.saved_toolhead_position = False
 
@@ -1247,7 +1258,7 @@ class Ercf:
         if self.encoder_sensor:
             try:
                 if self.encoder_sensor.runout_helper.sensor_enabled:
-                    self._log_trace("Disabled encoder sensor")
+                    self._log_debug("Disabled encoder sensor")
                     self.encoder_sensor.runout_helper.sensor_enabled = False
                     return True
             except Error as e:
@@ -1255,29 +1266,42 @@ class Ercf:
         return False
 
     def _enable_encoder_sensor(self, restore=False):
-        if (self.encoder_sensor and self._is_in_print() and self.enable_clog_detection) or restore:
-            try:
-                if not self.encoder_sensor.runout_helper.sensor_enabled:
-                    self._log_trace("Enabled encoder sensor")
-                    self.encoder_sensor.runout_helper.sensor_enabled = True
-            except Error as e:
-                self._log_debug("Failed to enable encoder: %s" % str(e))
+        if self.encoder_sensor:
+            if self.enable_clog_detection and (restore or self._is_in_print()):
+                try:
+                    if not self.encoder_sensor.runout_helper.sensor_enabled:
+                        self._log_debug("Enabled encoder sensor")
+                        self.encoder_sensor.runout_helper.sensor_enabled = True
+                except Error as e:
+                    self._log_debug("Failed to enable encoder: %s" % str(e))
+
+    def _has_toolhead_sensor(self):
+        return self.toolhead_sensor != None and self.toolhead_sensor.runout_helper.sensor_enabled
+
+    def _must_home_to_extruder(self):
+        return self.home_to_extruder or not self._has_toolhead_sensor()
 
     def _check_is_disabled(self):
         if not self.is_enabled:
-            self._log_always("ERCF is disabled.  Please use ERCF_ENABLE to use")
+            self._log_always("ERCF is disabled. Please use ERCF_ENABLE to use")
             return True
         return False
 
     def _check_is_paused(self):
         if self.is_paused:
-            self._log_always("ERCF is currently locked/paused.  Please use ERCF_UNLOCK")
+            self._log_always("ERCF is currently locked/paused. Please use \'ERCF_UNLOCK\'")
             return True
         return False
 
     def _check_in_bypass(self):
         if self.tool_selected == self.TOOL_BYPASS:
             self._log_always("Operation not possible. ERCF is currently using bypass")
+            return True
+        return False
+
+    def _check_not_bypass(self):
+        if self.tool_selected != self.TOOL_BYPASS:
+            self._log_always("Bypass not selected. Please use ERCF_SELECT_BYPASS first")
             return True
         return False
 
@@ -1289,7 +1313,7 @@ class Ercf:
 
     def _check_is_loaded(self):
         if not (self.loaded_status == self.LOADED_STATUS_UNLOADED or self.loaded_status == self.LOADED_STATUS_UNKNOWN):
-            self._log_always("ERCF already has filament loaded")
+            self._log_always("ERCF has filament loaded")
             return True
         return False
 
@@ -1319,10 +1343,11 @@ class Ercf:
             self._log_trace("Determined print status as: %s from %s" % (print_status, source))
             return print_status
 
-    def _set_above_min_temp(self):
+    def _set_above_min_temp(self, temp=-1):
+        if temp == -1: temp = self.min_temp_extruder
         if not self.printer.lookup_object("extruder").heater.can_extrude :
-            self._log_info("Heating extruder above min extrusion temp (%.1f)" % self.min_temp_extruder)
-            self.gcode.run_script_from_command("M109 S%.1f" % self.min_temp_extruder)
+            self._log_info("Heating extruder to minimum temp (%.1f)" % temp)
+            self.gcode.run_script_from_command("M109 S%.1f" % temp)
 
     def _set_loaded_status(self, state, silent=False):
             self.loaded_status = state
@@ -1464,7 +1489,7 @@ class Ercf:
 
     # Return toolhead sensor or -1 if not installed
     def _check_toolhead_sensor(self):
-        if self.toolhead_sensor != None:
+        if self._has_toolhead_sensor():
             if self.toolhead_sensor.runout_helper.filament_present:
                 self._log_trace("(Toolhead sensor detects filament)")
                 return 1
@@ -1493,7 +1518,7 @@ class Ercf:
         self._log_debug('Loading tool T%d...' % tool)
         self._select_tool(tool)
         gate = self._tool_to_gate(tool)
-        if self.gate_status[gate] != self.GATE_AVAILABLE:
+        if self.gate_status[gate] == self.GATE_EMPTY:
             raise ErcfError("Gate %d is empty!" % gate)
         self._load_sequence(self._get_calibration_ref())
 
@@ -1522,11 +1547,10 @@ class Ercf:
             if home:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_END_OF_BOWDEN)
                 self._log_debug("Full length load, will home filament...")
-                skip_sync_move = False
-                if self.home_to_extruder:
+                if self._must_home_to_extruder():
                     self._home_to_extruder(self.extruder_homing_max)
                 if not no_extruder:
-                    self._load_extruder(skip_sync_move)
+                    self._load_extruder()
     
             self.toolhead.wait_moves()
             self._log_info("Loaded %.1fmm of filament" % self._counter.get_distance())
@@ -1637,8 +1661,8 @@ class Ercf:
                 self._log_debug("Encoder is measuring more than amount of filament pushed! Aborting homing")
                 aborted = True
                 break
-        self._log_debug("Extruder %s found after %.1fmm move (%d steps), encoder measured %.1fmm (total_delta %.1fmm)"
-                % ("not" if not homed else "", step*(i+1), i+1, measured_movement, total_delta))
+        self._log_debug("Extruder%s found after %.1fmm move (%d steps), encoder measured %.1fmm (total_delta %.1fmm)"
+                % (" not" if not homed else "", step*(i+1), i+1, measured_movement, total_delta))
 
         if self.gear_tmc and self.extruder_homing_current < 100:
             self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=gear_stepper CURRENT=%.2f" % gear_stepper_run_current)
@@ -1660,24 +1684,23 @@ class Ercf:
             homed = True
         return homed, measured_movement, False
 
-    # This optional step aligns (homes) filament with the toolhead sensor. Returns measured movement
-    def _home_to_sensor(self):
-        # Strategy here is to home to the toolhead sensor which should be a very reliable location
-        sync = self.sync_load_length > 0
-        step = self.toolhead_homing_step
+    # This optional step aligns (homes) filament to the toolhead sensor which should be a very
+    # reliable location. Returns measured movement
+    def _home_to_toolhead_sensor(self, skip_entry_moves):
         if self.toolhead_sensor.runout_helper.filament_present:
             # We shouldn't be here and probably means the toolhead sensor is malfunctioning/blocked
             raise ErcfError("Toolhead sensor malfunction - filament detected before it entered extruder!")
-        if sync:
-            self._set_above_min_temp()
-            self._servo_down()
-        else:
-            self._servo_up()
 
+        sync = not skip_entry_moves and self.sync_load_length > 0.
+        delay = self.delay_servo_release if self._must_home_to_extruder() else 0.
+        if sync: self._servo_down()
+        step = self.toolhead_homing_step
         self._log_debug("Homing to toolhead sensor%s, up to %.1fmm in %.1fmm steps" % (" (synced)" if sync else "", self.toolhead_homing_max, step))
         for i in range(int(self.toolhead_homing_max / step)):
             msg = "Homing step #%d" % (i+1)
-            delta = self._trace_filament_move(msg, step, speed=10, motor="both" if sync else "extruder")
+            if not sync and step*(i+1) > delay:
+                self._servo_up()
+            delta = self._trace_filament_move(msg, step, speed=10, motor="both" if sync and step*(i+1) > delay else "extruder")
             if self.toolhead_sensor.runout_helper.filament_present:
                 self._log_debug("Toolhead sensor reached after %.1fmm (%d moves)" % (step*(i+1), i+1))
                 break
@@ -1688,31 +1711,29 @@ class Ercf:
             raise ErcfError("Failed to reach toolhead sensor after moving %.1fmm" % self.toolhead_homing_max)
 
     # Move filament from the extruder entrance to the nozzle. Return measured movement
-    def _load_extruder(self, skip_sync_move=False):
+    def _load_extruder(self, skip_entry_moves=False):
         self.filament_direction = self.DIRECTION_LOAD
         self._set_above_min_temp()
 
-        # With toolhead sensor we must home filament first
-        if self.toolhead_sensor != None:
-            self._home_to_sensor()
-            skip_sync_move = True
+        if self._has_toolhead_sensor():
+            # With toolhead sensor we must home filament first which performs extruder entry steps
+            self._home_to_toolhead_sensor(skip_entry_moves)
 
         length = self.home_position_to_nozzle
         self._log_debug("Loading last %.1fmm to the nozzle..." % length)
         initial_encoder_position = self._counter.get_distance()
 
-        # Sync load (ERCF + extruder) for passing over control from gear stepper to extruder
-        # Not strictly necessary with home to extruder option but will still increase reliability
-        # This will automatically be skipped if we are homed to toolhead sensor
-        if not skip_sync_move and self.sync_load_length > 0:
-            self._servo_down()
-            self._log_debug("Moving the gear and extruder motors in sync for %.1fmm" % self.sync_load_length) 
-            delta = self._trace_filament_move("Sync load move", self.sync_load_length, speed=self.sync_load_speed, motor="both") 
-            length -= self.sync_load_length
-        elif self.home_to_extruder and self.delay_servo_release > 0:
-            # Delay servo release by a few mm to keep filament tension for reliable transition
-            delta = self._trace_filament_move("Small extruder move under filament tension before servo release", self.delay_servo_release, speed=self.sync_load_speed, motor="extruder")
-            length -= self.delay_servo_release
+        if not self._has_toolhead_sensor() and not skip_entry_moves:
+            # This is the extruder entry logic similar to that in home_to_toolhead_sensor()
+            if self.delay_servo_release > 0:
+                # Delay servo release by a few mm to keep filament tension for reliable transition
+                delta = self._trace_filament_move("Small extruder move under filament tension before servo release", self.delay_servo_release, speed=self.sync_load_speed, motor="extruder")
+                length -= self.delay_servo_release
+            if self.sync_load_length > 0:
+                self._servo_down()
+                self._log_debug("Moving the gear and extruder motors in sync for %.1fmm" % self.sync_load_length) 
+                delta = self._trace_filament_move("Sync load move", self.sync_load_length, speed=self.sync_load_speed, motor="both") 
+                length -= self.sync_load_length
 
         # Move the remaining distance to the nozzle meltzone under exclusive extruder stepper control
         self._servo_up()
@@ -1722,7 +1743,8 @@ class Ercf:
         measured_movement = self._counter.get_distance() - initial_encoder_position
         total_delta = self.home_position_to_nozzle - measured_movement
         self._log_debug("Total measured movement: %.1fmm, total delta: %.1fmm" % (measured_movement, total_delta))
-        if total_delta > (length * 0.50):   # 50% of final move length
+        tolerance = max(self._get_calibration_clog_length(), self.home_position_to_nozzle * 0.50)
+        if total_delta > tolerance:
             msg = "Move to nozzle failed (encoder not sensing sufficient movement). Extruder may not have picked up filament or filament did not home correctly"
             if not self.ignore_extruder_load_error:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
@@ -1748,7 +1770,6 @@ class Ercf:
 
     def _unload_sequence(self, length, check_state=False, skip_sync_move=False, skip_tip=False):
         try:
-            self._log_info("Unloading filament...")
             self.filament_direction = self.DIRECTION_UNLOAD
             self.toolhead.wait_moves()
             self._counter.reset_counts()    # Encoder 0000
@@ -1756,15 +1777,16 @@ class Ercf:
 
             if check_state or self.loaded_status == self.LOADED_STATUS_UNKNOWN:
                 # Let's determine where filament is and reset state before continuing
-                self._log_debug("Unknown filament position, recovering state...")
+                self._log_info("Unknown filament position, recovering state...")
                 self._recover_loaded_state()
-            else:
-                self._display_visual_state()
 
             if self.loaded_status == self.LOADED_STATUS_UNLOADED:
                 self._log_debug("Filament already ejected")
                 self._servo_up()
                 return
+
+            self._log_info("Unloading filament...")
+            self._display_visual_state()
 
             # Check for cases where we must form tip
             if not skip_tip and self.loaded_status >= self.LOADED_STATUS_PARTIAL_IN_EXTRUDER:
@@ -1845,7 +1867,7 @@ class Ercf:
             delta = self._trace_filament_move(msg, -self.encoder_move_step_size, speed=speed, motor="extruder")
             speed = self.nozzle_unload_speed  # Can pull at full speed on subsequent steps
 
-            if self.toolhead_sensor != None:
+            if self._has_toolhead_sensor():
                 if not self.toolhead_sensor.runout_helper.filament_present:
                     self._set_loaded_status(self.LOADED_STATUS_PARTIAL_HOMED_SENSOR)
                     self._log_debug("Toolhead sensor reached after %d moves" % (i+1))
@@ -1909,7 +1931,9 @@ class Ercf:
             if i < moves:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
 
-        if delta >= tolerance and not self.calibrating:
+        if delta >= length * 0.8 and not self.calibrating: # 80% slippage detects filament still stuck in extruder
+            raise ErcfError("Failure to unload bowden. Perhaps filament is stuck in extruder. Moved %.1fmm, Encoder delta %.1fmm" % (length, delta))
+        elif delta >= tolerance and not self.calibrating:
             # Only a warning because _unload_encoder() will deal with it
             self._log_info("Warning: Excess slippage was detected in bowden tube unload. Moved %.1fmm, Encoder delta %.1fmm" % (length, delta))
 
@@ -1970,9 +1994,9 @@ class Ercf:
 #################################################
 
     def _home(self, tool = -1, force_unload = False):
+        if self._check_in_bypass(): return
         if self._get_calibration_version() != 3:
             self._log_info("You are running an old calibration version.\nIt is strongly recommended that you rerun 'ERCF_CALIBRATE_SINGLE TOOL=0' to generate updated calibration values")
-
         self._log_info("Homing ERCF...")
         if self.is_paused:
             self._log_debug("ERCF is locked, unlocking it before continuing...")
@@ -1996,7 +2020,7 @@ class Ercf:
             self.selector_stepper.do_set_position(0.)
             self._selector_stepper_move_wait(2)  # Ensure some bump space
             self.selector_stepper.do_set_position(0.)
-            self._selector_stepper_move_wait(-selector_length, speed=80, homing_move=2)
+            self._selector_stepper_move_wait(-selector_length, speed=75, homing_move=2)
         else:
             self.selector_stepper.do_set_position(0.)
             self._selector_stepper_move_wait(-selector_length, speed=100, homing_move=2)   # Fast homing move
@@ -2113,7 +2137,7 @@ class Ercf:
             skip_unload = True
 
         if not skip_unload:
-            self._unload_tool(skip_tip)
+            self._unload_tool(skip_tip=skip_tip)
         self._select_and_load_tool(tool)
         self._track_swap_completed()
         self._dump_statistics()
@@ -2191,7 +2215,7 @@ class Ercf:
         if self._check_is_disabled(): return
         self._log_info("Unlocking the ERCF")
         self._unlock()
-        self._log_info("Refer to the manual before resuming the print")
+        self._log_info("When the issue is addressed you can resume print")
 
     cmd_ERCF_HOME_help = "Home the ERCF"
     def cmd_ERCF_HOME(self, gcmd):
@@ -2224,10 +2248,10 @@ class Ercf:
         standalone = bool(gcmd.get_int('STANDALONE', 0, minval=0, maxval=1))
         skip_tip = self._is_in_print() and not standalone
         if self.loaded_status == self.LOADED_STATUS_UNKNOWN:
-            self._log_debug("Unknown filament position, recovering state...")
+            self._log_info("Unknown filament position, recovering state...")
             self._recover_loaded_state()
         try:
-            restore_encoder = self._disable_encoder_sensor() # Don't want runout accidently triggering du tool change
+            restore_encoder = self._disable_encoder_sensor() # Don't want runout accidently triggering during tool change
             self._change_tool(tool, skip_tip)
             self._enable_encoder_sensor(restore_encoder)
         except ErcfError as ee:
@@ -2258,9 +2282,22 @@ class Ercf:
     def cmd_ERCF_LOAD_BYPASS(self, gcmd):
         if self._check_is_disabled(): return
         if self._check_is_paused(): return
-        if self._check_not_homed(): return
+        if self._check_not_bypass(): return
         try:
             self._load_extruder(True)
+            self._set_loaded_status(self.LOADED_STATUS_FULL)
+        except ErcfError as ee:
+            self._pause(str(ee))
+
+    cmd_ERCF_UNLOAD_BYPASS_help = "Smart unload of extruder. Designed for bypass usage"
+    def cmd_ERCF_UNLOAD_BYPASS(self, gcmd):
+        if self._check_is_disabled(): return
+        if self._check_is_paused(): return
+        if self._check_not_bypass(): return
+        try:
+            if self._form_tip_standalone():
+                self._unload_extruder()
+            self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
         except ErcfError as ee:
             self._pause(str(ee))
 
@@ -2282,9 +2319,12 @@ class Ercf:
         if self.is_paused:
             self._log_always("You can't resume the print without unlocking the ERCF first")
             return
+        if self.printer.lookup_object("extruder").heater.target_temp < max(self.paused_extruder_temp, self.min_temp_extruder):
+            self._set_above_min_temp(max(self.paused_extruder_temp, self.min_temp_extruder))
         self.gcode.run_script_from_command("__RESUME")
         self._restore_toolhead_position()
         self._counter.reset_counts()    # Encoder 0000
+        self._enable_encoder_sensor(True)
 
     # Not a user facing command - used in automatic wrapper
     cmd_ERCF_CANCEL_PRINT_help = "Wrapper around default CANCEL_PRINT macro"
@@ -2379,7 +2419,7 @@ class Ercf:
                     if random == 1:
                         tool = randint(0, len(self.selector_offsets)-1)
                     gate = self._tool_to_gate(tool)
-                    if self.gate_status[gate] != self.GATE_AVAILABLE:
+                    if self.gate_status[gate] == self.GATE_EMPTY:
                         self._log_always("Skipping tool %d of %d because gate %d is empty" % (tool, len(self.selector_offsets), gate))
                     else:
                         self._log_always("Testing tool %d of %d (gate %d)" % (tool, len(self.selector_offsets), gate))
@@ -2470,7 +2510,7 @@ class Ercf:
         except ErcfError as ee:
             self._log_always("Homing test failed: %s" % str(ee))
 
-    cmd_ERCF_TEST_CONFIG_help = "Runtime adjustment of ERCF configuration for testing purposes"
+    cmd_ERCF_TEST_CONFIG_help = "Runtime adjustment of ERCF configuration for testing or in-print tweaking purposes"
     def cmd_ERCF_TEST_CONFIG(self, gcmd):
         self.long_moves_speed = gcmd.get_float('LONG_MOVES_SPEED', self.long_moves_speed, above=20.)
         self.short_moves_speed = gcmd.get_float('SHORT_MOVES_SPEED', self.short_moves_speed, above=20.)
@@ -2496,8 +2536,11 @@ class Ercf:
         self.nozzle_unload_speed = gcmd.get_float('NOZZLE_UNLOAD_SPEED', self.nozzle_unload_speed, minval=1., maxval=100)
         self.z_hop_height = gcmd.get_float('Z_HOP_HEIGHT', self.z_hop_height, minval=0.)
         self.z_hop_speed = gcmd.get_float('Z_HOP_SPEED', self.z_hop_speed, minval=1.)
+        self.log_visual = gcmd.get_int('LOG_VISUAL', self.log_visual, minval=0, maxval=2)
         self.variables['ercf_calib_ref'] = gcmd.get_float('ERCF_CALIB_REF', self._get_calibration_ref(), minval=10.)
-        self.encoder_sensor.detection_length = self.variables['ercf_calib_clog_length'] = gcmd.get_float('ERCF_CALIB_CLOG_LENGTH', self._get_calibration_clog_length(), minval=1., maxval=100.)
+        self.variables['ercf_calib_clog_length'] = gcmd.get_float('ERCF_CALIB_CLOG_LENGTH', self._get_calibration_clog_length(), minval=1., maxval=100.)
+        if self.encoder_sensor != None:
+            self.encoder_sensor.detection_length = self.variables['ercf_calib_clog_length']
         msg = "long_moves_speed = %.1f" % self.long_moves_speed
         msg += "\nshort_moves_speed = %.1f" % self.short_moves_speed
         msg += "\nhome_to_extruder = %d" % self.home_to_extruder
@@ -2521,6 +2564,7 @@ class Ercf:
         msg += "\nnozzle_unload_speed = %.1f" % self.nozzle_unload_speed
         msg += "\nz_hop_height = %.1f" % self.z_hop_height
         msg += "\nz_hop_speed = %.1f" % self.z_hop_speed
+        msg += "\nlog_visual = %d" % self.log_visual
         msg += "\nercf_calib_ref = %.1f" % self.variables['ercf_calib_ref']
         msg += "\nercf_calib_clog_length = %.1f" % self.variables['ercf_calib_clog_length']
         self._log_info(msg)
@@ -2532,11 +2576,11 @@ class Ercf:
 
     def _handle_runout(self, force_runout):
         if self._check_is_paused(): return
-        self._disable_encoder_sensor() # Precaution to avoid duplicate firing during EndlessSpool
         if self.tool_selected < 0 or self.loaded_status != self.LOADED_STATUS_FULL:
             raise ErcfError("Filament runout or clog on an unknown or bypass tool - manual intervention is required")
 
         self._log_info("Issue on tool T%d" % self.tool_selected)
+        self._disable_encoder_sensor() # Precaution to avoid duplicate firing during EndlessSpool
         self._save_toolhead_position_and_lift()
 
         # Check for clog by looking for filament in the encoder
@@ -2558,7 +2602,7 @@ class Ercf:
             check = self.gate_selected + 1
             while check != self.gate_selected:
                 check = check % num_tools
-                if self.endless_spool_groups[check] == group and self.gate_status[check] == self.GATE_AVAILABLE:
+                if self.endless_spool_groups[check] == group and self.gate_status[check] != self.GATE_EMPTY:
                     next_gate = check
                     break
                 check += 1
@@ -2594,21 +2638,29 @@ class Ercf:
             msg += "T%d -> Gate #%d" % (i, self._tool_to_gate(i))
             if self.enable_endless_spool:
                 group = self.endless_spool_groups[i]
-                es = ", EndlessSpool Grp %s: " % group
+                es = ", group%s: " % group
                 prefix = ""
+                starting_gate = self._tool_to_gate(i)
                 for j in range(num_tools):
-                    check = (j + i) % num_tools
+                    check = (j + starting_gate) % num_tools
                     if self.endless_spool_groups[check] == group:
-                        es += "%s%s%d" % (prefix, ("#" if self.gate_status[check] == self.GATE_AVAILABLE else "e"), check)
+                        es += "%s%d%s" % (prefix, check,("(*)" if self.gate_status[check] == self.GATE_AVAILABLE else "( )" if self.gate_status[check] == self.GATE_EMPTY else "(?)"))
                         prefix = " > "
                 msg += es
             if i == self.tool_selected:
                 msg += " [SELECTED on gate #%d]" % self._tool_to_gate(i)
         msg += "\n"
-        for i in range(len(self.gate_status)):
-            msg += "\nGate #%d %s" % (i, "Available" if self.gate_status[i] == self.GATE_AVAILABLE else "Empty" if self.gate_status[i] == self.GATE_EMPTY else "Unknown")
-            if i == self.gate_selected:
-                msg += " [ACTIVE supporting tool T%d]" % self.tool_selected
+        for g in range(len(self.selector_offsets)):
+            msg += "\nGate #%d (%s)" % (g, "*" if self.gate_status[g] == self.GATE_AVAILABLE else " " if self.gate_status[g] == self.GATE_EMPTY else "?")
+            tool_str = " -> "
+            prefix = ""
+            for t in range(len(self.selector_offsets)):
+                if self._tool_to_gate(t) == g:
+                    tool_str += "%sT%d" % (prefix, t)
+                    prefix = ","
+            msg += tool_str
+            if g == self.gate_selected:
+                msg += " [SELECTED supporting tool T%d]" % self.tool_selected
         return msg
 
     def _remap_tool(self, tool, gate, available):
@@ -2619,7 +2671,7 @@ class Ercf:
         self._log_debug("Resetting TTG map")
         for i in range(len(self.selector_offsets)):
             self.tool_to_gate_map[i] = i
-            self.gate_status[i] = self.GATE_AVAILABLE
+            self.gate_status[i] = self.GATE_UNKNOWN
         self._unselect_tool()
 
 ### GCODE COMMANDS FOR RUNOUT and GATE LOGIC ##################################
@@ -2627,7 +2679,7 @@ class Ercf:
     cmd_ERCF_ENCODER_RUNOUT_help = "Encoder runout handler"
     def cmd_ERCF_ENCODER_RUNOUT(self, gcmd):
         if self._check_is_disabled(): return
-        force_runout = bool(gcmd.get_int('RUNOUT', 0, minval=0, maxval=1))
+        force_runout = bool(gcmd.get_int('FORCE_RUNOUT', 0, minval=0, maxval=1))
         try:
             self._handle_runout(force_runout)
         except ErcfError as ee:
@@ -2642,16 +2694,37 @@ class Ercf:
     cmd_ERCF_REMAP_TTG_help = "Remap a tool to a specific gate and set gate availability"
     def cmd_ERCF_REMAP_TTG(self, gcmd):
         if self._check_is_disabled(): return
-        tool = gcmd.get_int('TOOL', minval=0, maxval=len(self.selector_offsets)-1)
+        tool = gcmd.get_int('TOOL', -1, minval=0, maxval=len(self.selector_offsets)-1)
         gate = gcmd.get_int('GATE', minval=0, maxval=len(self.selector_offsets)-1)
         available = gcmd.get_int('AVAILABLE', 1, minval=0, maxval=1)
-        self._remap_tool(tool, gate, available)
+        if tool == -1:
+            self.gate_status[gate] = available
+        else:
+            self._remap_tool(tool, gate, available)
         self._log_info(self._tool_to_gate_map_to_human_string())
 
     cmd_ERCF_RESET_TTG_MAP_help = "Reset the tool to gate map"
     def cmd_ERCF_RESET_TTG_MAP(self, gcmd):
         if self._check_is_disabled(): return
         self._reset_ttg_mapping()
+        self._log_info(self._tool_to_gate_map_to_human_string())
+
+    cmd_ERCF_ENDLESS_SPOOL_GROUPS_help = "Redefine the EndlessSpool groups"
+    def cmd_ERCF_ENDLESS_SPOOL_GROUPS(self, gcmd):
+        if self._check_is_disabled(): return
+        if not self.enable_endless_spool:
+            self._log_always("EndlessSpool is disabled")
+            return
+        groups = gcmd.get('GROUPS').split(",")
+        if len(groups) != len(self.selector_offsets):
+            self._log_always("The number of group values (%d) is not the same as number of selectors (%d)" % (len(groups), len(self.selector_offsets)))
+            return
+        self.endless_spool_groups = []
+        for group in groups:
+            if group.isdigit():
+                self.endless_spool_groups.append(int(group))
+            else:
+                self.endless_spool_groups.append(0)
         self._log_info(self._tool_to_gate_map_to_human_string())
 
     cmd_ERCF_CHECK_GATES_help = "Automatically inspects gate(s), parks filament and marks availability"
@@ -2699,7 +2772,7 @@ class Ercf:
             self._select_gate(gate)
             self._counter.reset_counts()    # Encoder 0000
             try:
-                self._log_debug("Checking gate #%d..." % gate)
+                self._log_info("Checking gate #%d..." % gate)
                 encoder_moved = self._load_encoder(retry=False)
                 if tool >= 0:
                     self._log_info("Tool T%d - filament detected. Gate #%d marked available" % (tool, gate))
@@ -2722,9 +2795,9 @@ class Ercf:
             except ErcfError as ee:
                 self.gate_status[gate] = self.GATE_EMPTY
                 if tool >= 0: 
-                    msg = "Tool T%d - filament not detected. Gate #%d marked unavailable" % (tool, gate)
+                    msg = "Tool T%d - filament not detected. Gate #%d marked empty" % (tool, gate)
                 else:
-                    msg = "Gate #%d - filament not detected. Marked unavailable" % gate
+                    msg = "Gate #%d - filament not detected. Marked empty" % gate
                 if self._is_in_print():
                     self._pause(msg)
                 else:
@@ -2743,8 +2816,8 @@ class Ercf:
     def cmd_ERCF_PRELOAD(self, gcmd):
         if self._check_is_disabled(): return
         if self._check_not_homed(): return
-        if self._check_is_loaded(): return
         if self._check_in_bypass(): return
+        if self._check_is_loaded(): return
         gate = gcmd.get_int('GATE', -1, minval=0, maxval=len(self.selector_offsets)-1)
         try:
             # If gate not specified assume current gate
