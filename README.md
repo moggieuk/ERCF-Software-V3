@@ -5,15 +5,16 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 <ul>
 <li>Support all options for both toolhead sensor based loading/unloading and the newer sensorless filament homing (no toolhead sensor)
 <li>Supports sync load and unloading steps moving the extruder and gear motor together, including a config with toolhead sensor that can work with FLEX materials!
-  <li>Fully implements “EndlessSpool” with new concept of Tool --> Gate mapping.  This allows empty gates to be identified and tool changes subsequent to runout to use the correct filament spool.  It has the added advantage for being able to map gates to tools in case of slicing to spool loading mismatch.
+<li>Fully implements “EndlessSpool” with new concept of Tool --> Gate mapping.  This allows empty gates to be identified and tool changes subsequent to runout to use the correct filament spool.  It has the added advantage for being able to map gates to tools in case of slicing to spool loading mismatch.
 <li>Vastly improved logging including a new log to file functionality. You can keep the console log to a minimum and send debugging information to `ercf.log` located in the same directory as Klipper logs
 <li>Optional fun visual representation of loading and unloading sequence
-<li>Ability to specify empty or disabled tools (gates).
+<li>Ability to specify empty or disabled tools (gates) and to discover availability autmatically
 <li>Formal support for the filament bypass block with associated new commands and state if using it.
 <li>Ability to reduce gear current (currently TMC2209 only) during “collision” homing procedure to prevent grinding, etc.
 <li>Convenience filament "autoload" function and check gate feature to ensure filaments are all ready before print
 <li>No need to do anything custom in your existing macros
-<li>Moonraker update-manager support!
+<li>Moonraker update-manager support
+<li>Complete persitance of state and statistics across restarts!
 </ul>
 
 ## Other features:
@@ -56,7 +57,7 @@ Note that the installer will look for Klipper install and config in standard loc
 REMEMBER that `ercf_hardware.cfg`, `ercf_software.cfg` & `ercf_parameters.cfg` must all be referenced by your `printer.cfg` master config file.  `client_macros.cfg` should also be referenced if you don't already have working PAUSE/RESUME/CANCEL_PRINT macros (but be sure to read the section before on macro expectations). These includes can be added automatically for you with the install script.
 <br>
 
-Pro tip: If you are concerned about running `install.sh -i` then run like this: `install.sh -i -c /tmp -k /tmp` This will build the `*.cfg` files for you but put then in /tmp.  You can then read them, pull out the bits your want to augment existing install or simple see what the answers to the various questions will do...
+Pro tip: If you are concerned about running `install.sh -i` then run like this: `install.sh -i -c /tmp -k /tmp` This will build the `*.cfg` files for you but put then in /tmp.  You can then read them, pull out the bits your want to augment existing install or simply see what the answers to the various questions will do...
 <br>
 
 Also be sure to read my [notes on Encoder problems](doc/ENCODER.md) - the better the encoder the better this software will work.
@@ -75,8 +76,10 @@ The configuration and setup of your ERCF using Happy Hare is 95% the same as doc
 <li> v1.1.4 - Change to automatic clog detection length based on community feedback
 <li> v1.1.5 - Further install.sh improvements - no longer need filament_sensor defined or duplicate pin override if not using clog detection; Cleaned up documentation in template config file; Stallguard filament homing should now be possible (have to configure by hand); Additional configuration checks on startup; minor useability improvements based on community feedback
 <li> v1.1.6 - New feature to log to file independently to console (allows for clean console and debug to logfile);  New gate statistics (like slippage) are recorded and available with an augmented ERCF_DUMP_STATS command; Several minor improvements and fixes suggested by community
-<li> v1.1.7 - No need to put anything ERCF related into existing macros (START/PAUSE/RESUME/STOP/CANCEL) anymore!;  Improvements to install script for non EASY-BRD config; Exposed all built-in gear/extruder feed speeds; Tweaks to tolerance checks to prevent false pauses; No annoying pause/unlock sequence while you are playing out of a print. UPDATE TO CONFIG FILES RECOMMENDED
+<li> v1.1.7 - Automatic setting of encoder state - no need to put anything ERCF related into existing macros (START/PAUSE/RESUME/STOP/CANCEL) anymore!;  Improvements to install script for non EASY-BRD config; Exposed all built-in gear/extruder feed speeds; Tweaks to tolerance checks to prevent false pauses; No annoying pause/unlock sequence while you are playing out of a print. UPDATE TO CONFIG FILES RECOMMENDED
 <li> v1.1.8 - Enhanced ERCF_CHECK_GATES command; better configuraton of tip forming; Workarounds to Timer Too Close errors on selector; Fined grained current reduction control; less conservative restting of filament state; servo remains up on failed load; fixes typos and spelling mistakes. Full details here: https://discord.com/channels/460117602945990666/909743915475816458/1058586768791838791
+<li> v1.1.9 - Installer support for the Fytsec ERB Burrows board; Inclusion of display setup for 12864 mini displays; Bug fixes
+<li> v1.2.0 - Major new feature for being able to persist all ERCF state between restarts - now you can just turn on an print!; Various bug fixes, error message and status display improvements. SOME ADDITIONS TO `ercf_parameters.cfg` CONFIG FILE
 </ul>
 
 <br>
@@ -84,11 +87,11 @@ The configuration and setup of your ERCF using Happy Hare is 95% the same as doc
 ## Summary of new commands:
   | Commmand | Description | Parameters |
   | -------- | ----------- | ---------- |
-  | ERCF_STATUS | Report on ERCF state, capabilities and Tool-to-Gate map | SHOWCONFIG=\[0\|1\] Whether or not to describe the machine configuration in status message |
+  | ERCF_STATUS | Report on ERCF state, capabilities and Tool-to-Gate map | SHOWCONFIG=\[0\|1\] Whether or not to describe the machine configuration in status message. Default 0 |
   | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime | Many. Best to run ERCF_TEST_CONFIG without options to report all parameters that can be specified |
   | ERCF_DISPLAY_TTG_MAP | Displays the current Tool - to - Gate mapping (can be used all the time but generally designed for EndlessSpool  | None |
-  | ERCF_REMAP_TTG | Reconfiguration of the Tool - to - Gate (TTG) map.  Can also set gates as empty! | TOOL=\[0..n\] <br>GATE=\[0..n\] Maps specified tool to this gate (multiple tools can point to same gate) <br>AVAILABLE=\[0\|1\]  Marks gate as available or empty |
-  | ERCF_ENDLESS_SPOOL | Modify the defined EndlessSpool groups at runtime | GROUPS={comma separated list of groups} The same format as the default groups defined in `ercf_parameters.cfg` Must be the same length as the number of ERCF gates ||
+  | ERCF_REMAP_TTG | Reconfiguration of the Tool - to - Gate (TTG) map.  Can also set gates as empty! | RESET=\[0\|1\] If specified the Tool -> Gate mapping will be reset to that defined in `ercf_parameters.cfg` <br>TOOL=\[0..n\] <br>GATE=\[0..n\] Maps specified tool to this gate (multiple tools can point to same gate) <br>AVAILABLE=\[0\|1\]  Marks gate as available or empty |
+  | ERCF_ENDLESS_SPOOL | Modify the defined EndlessSpool groups at runtime | RESET=\[0\|1\] If specified the EndlessSpool groups will be reset to that defined in `ercf_parameters.cfg` <br>GROUPS={comma separated list of groups} The same format as the default groups defined in ercf_parameters.cfg. Must be the same length as the number of ERCF gates ||
   | ERCF_SELECT_BYPASS | Unload and select the bypass selector position if configured | None |
   | ERCF_LOAD_BYPASS | Does the extruder loading part of the load sequence - designed for bypass filament loading | None |
   | ERCF_TEST_HOME_TO_EXTRUDER | For calibrating extruder homing - TMC current setting, etc. | RETURN=\[0\|1\] Whether to return the filament to the approximate starting position after homing - good for repeated testing |
@@ -98,6 +101,7 @@ The configuration and setup of your ERCF using Happy Hare is 95% the same as doc
   | ERCF_RECOVER | Recover filament position and optionally reset ERCF state. Useful to call prior to RESUME if you intervene/manipulate filament by hand | TOOL=\[0..n\] \| -2 Optionally force set the currently selected tool (-2 = bypass). Use caution! <br>GATE=\[0..n\] Optionally force set the currently selected gate if TTG mapping is being leveraged otherwise it will get the gate associated with current tool. Use caution! <br>LOADED=\[0\|1\] Optionally specify if the filamanet is fully loaded or fully unloaded. Use caution! If not specified, ERCF will try to discover filament position |
   | ERCF_ENABLE | Enable ERCF and reset state after disable | None |
   | ERCF_DISABLE | Disable all ERCF functionality | None |
+  | ERCF_RESET | Reset the ERCF persisted state back to defaults | None |
   
   Note that some existing commands have been enhanced a little.  See the [command reference](#ercf-command-reference) at the end of this page.
   
@@ -304,6 +308,47 @@ At some point when a project occurs during a multi-color print ERCF will go into
     ERCF_RECOVER TOOL=5 LOADED=1 - tell ERCF that T5 is loaded and ready to print
     ERCF_RECOVER TOOL=1 GATE=2 LOADED=0 - tell ERCF that T1 is being serviced by gate #2 and the filament is Unloaded
 
+### State persistence
+This is considered advanced functionality but it is incredibly useful once you are familar with the basic operation of ERCF. Essentially the state of everything from the EndlessSpool groups to the filament position and gate selection can be persisted accross restarts (homing is not even necessary)! The implication of using this big time saver is that you must be aware that if you modify ERCF whilst it is off-line you will need to correct the appropriate state prior to printing. Here is an example startup state:
+
+  <img src="doc/persisted_state.png" alt="Persisted Startup State">
+
+(note this was accomplished by setting `startup_status: 1` in ercf_parameters.cfg and can be generated anytime with the `ERCF_DISPLAY_TTG_MAP SUMMARY=1` command)
+This graphic indicates how I left ERCF the day prior... Filaments are loaded in gates 0,1 & 6; Gate/Tool #1 is selected; and the filament is fully loaded. If you are astute you can see I have remapped T2 to be on gate #3 and T3 to be on gate #2 because previously I had loaded these spools backward and this saved me from regenerating g-code.
+<br>
+
+In addition to basic operational state the print statistics and gate health statistics are persisted and so occasionally you might want to explicitly reset them with `ERCF_RESET_STATS`.  There are 5 levels of operation for this feature that you can set based on your personal preference/habbits. The level is controlled by a single variable `persistence_level` in `ercf_parameters.cfg`:
+
+    Advanced: ERCF can auto-initialize based on previous persisted state. There are 5 levels with each level bringing in
+    additional state information requiring progressively less inital setup. The higher level assume that you don't touch
+    ERCF while it is offline and it can come back to life exactly where it left off.  If you do touch it or get confused
+    then issue an appropriate reset command (E.g. ERCF_RESET) to get state back to the defaults.
+    Enabling `startup_status` is recommended if you use persisted state at level 2 and above
+    Levels: 0 = start fresh every time (the former default behavior)
+            1 = restore persisted endless spool groups
+            2 = additionally restore persisted tool-to-gate mapping
+            3 = additionally restore persisted gate status (filament availability)
+            4 = additionally restore persisted tool, gate and filament position!
+
+Generally there is no downside of setting the level to 2 and so that is the suggested default.  Really, so long as you are aware that persistence is happening and know how to adjust/reset you can set the level to 4 and enjoy immediate ERCF availability.  So what options are there for resetting state?  Here is the complete list:
+
+<ul>
+  <li>`ERCF_RESET` - Reset all persisted state back to defaults / unknown except for print stats and per-gate health stats
+  <li>`ERCF_RESET_STATS` - Reset print stats and per-gate health stats back to 0
+  <li>`ERCF_REMAP_TTG RESET=1` - Reset just the tool-to-gate mapping
+  <li>`ERCF_ENDLESS_SPOOL_GROUPS RESET=1` - Reset just the endless spool groups back to default
+  <li>`ERCF_RECOVER` - Automatically discover or manually reset filament position, selected gate, selected tool, filament availability (lots of options)
+  <li>Needless to say, other operations can also be used to update state
+</ul>
+
+Couple of miscellaneous notes:
+<ul>
+  <li>Closely relevant to the usefulness of this functionality is the `ERCF_CHECK_GATES` command that will examine all or selection of gates for presence of filament
+  <li>In the graphic depictions of filament state the '*' indicates presence, '?' unknown and ' ' or '.' the lack of filament
+  <li>With tool-to-gate mapping it is entirely possible to have multiple tools mapped to the same gate (for example to force a multi-color print to be monotone) and therefore some gates can be made inaccessable until map is reset
+  <li>The default value for `gate_status`, `tool_to_gate_map` and `endless_spool_groups` can be set in `ercf_parameters.cfg`.  If not set the default will be, Tx maps to Gate#x, the status of each gate is unknown and each tool is in its own endless spool group (i.e. not part of a group)
+<br>
+
 ### ERCF variables accessable in your own macros:
 Happy Hare exposes the following 'printer' variables:
 
@@ -322,6 +367,7 @@ This software is largely rewritten as well as being extended and so, despite bes
 <img src="doc/My Voron 2.4 and ERCF.jpg" width="400" alt="My Setup">
 
 ### Some setup notes based on my learnings:
+
 Firstly the importance of a reliable and fairly accurate encoder should not be under estimated. If you cannot get very reliable results from `ERCF_CALIBRATE_ENCODER` then don't proceed with setup - address the encoder problem first. Because the encoder is the HEART of ERCF I [created a how-to](doc/ENCODER.md) on fixing many possible problems with encoder.
 <ul>
   <li>If using a toolhead sensor, that must be reliable too.  The hall effect based switch is very awkward to get right because of so many variables: strength of magnet, amount of iron in washer, even temperature, therefore I strongly recommend a simple microswitch based detection.  They work first time, every time.
@@ -351,29 +397,30 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   
   *Note that some of these commands have been enhanced from the original*
 
-  ## Logging and Stats
+  ## Logging, Stats and Persisted state
   | Command | Description | Parameters |
-  | -------- | ----------- | ---------- |
+  | ------- | ----------- | ---------- |
+  | ERCF_RESET | Reset the ERCF persisted state back to defaults | None |
   | ERCF_RESET_STATS | Reset the ERCF statistics | None |
   | ERCF_DUMP_STATS | Dump the ERCF statistics (and Gate statistics to debug level - usually the logfile) | None |
   | ERCF_SET_LOG_LEVEL | Sets the logging level and turning on/off of visual loading/unloading sequence and stats reporting | LEVEL=\[1..4\] The level of logging to the console (1 recommended) <br>LOGFILE=\[1..4\] The level of logging to the ercf.log file (3 recommended) <br>VISUAL=\[0\|1\] Whether to also show visual representation <br>STATS=\[0\|1\] Whether to log print stats and gate summary on every tool change |
-  | ERCF_STATUS | Report on ERCF state, capabilities and Tool-to-Gate map | SHOWCONFIG=\[0\|1\] Whether or not to describe the machine configuration in status message |
+  | ERCF_STATUS | Report on ERCF state, capabilities and Tool-to-Gate map | SHOWCONFIG=\[0\|1\] Whether or not to describe the machine configuration in status message. Default 0 |
   | ERCF_DISPLAY_ENCODER_POS | Displays the current value of the ERCF encoder | None |
   <br>
 
   ## Calibration
   | Command | Description | Parameters |
-  | -------- | ----------- | ---------- |
+  | ------- | ----------- | ---------- |
   | ERCF_CALIBRATE | Complete calibration of all ERCF tools | None |
   | ERCF_CALIBRATE_SINGLE | Calibration of a single ERCF tool | TOOL=\[0..n\] <br>REPEATS=\[1..10\] How many times to repeat the calibration for reference tool T0 (ercf_calib_ref) <br>VALIDATE=\[0\|1\] If True then calibration of tool 0 will simply verify the ratio i.e. another check of encoder accuracy (should result in a ratio of 1.0) |
-  | ERCF_CALIBRATE_SELECTOR | Calibration of the selector for the defined tool | TOOL=\[0..n\] |
+  | ERCF_CALIBRATE_SELECTOR | Calibration of the selector for the defined tool | GATE=\[0..n\] or TOOL=\[0..n\] |
   | ERCF_CALIB_SELECTOR | Deprecated, but included as alias to ERCF_CALIBRATE_SELECTOR because in current documentation | TOOL=\[0..n\] |
   | ERCF_CALIBRATE_ENCODER | Calibration routine for ERCF encoder | DIST=.. Distance (mm) to measure over. Longer is better, defaults to 500mm <br>REPEATS=.. Number of times to average over <br>SPEED=.. Speed of gear motor move. Defaults to long move speed <br>ACCEL=.. Accel of gear motor move. Defaults to motor setting in ercf_hardware.cfg |
   <br>
 
   ## Servo and motor control
   | Command | Description | Parameters |
-  | -------- | ----------- | ---------- |
+  | ------- | ----------- | ---------- |
   | ERCF_SERVO_DOWN | Engage the ERCF gear | None |
   | ERCF_SERVO_UP | Disengage the ERCF gear | None |
   | ERCF_MOTORS_OFF | Turn off both ERCF motors | None |
@@ -382,7 +429,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
 
   ## Core ERCF functionality
   | Command | Description | Parameters |
-  | -------- | ----------- | ---------- |
+  | ------- | ----------- | ---------- |
   | ERCF_PRELOAD | Helper for filament loading. Feed filament into gate, ERCF will catch it and correctly position at the specified gate | GATE=\[0..n\] The specific gate to preload. If omitted the currently selected gate can be loaded |
   | ERCF_UNLOCK | Unlock ERCF operations after a pause caused by error condition | None |
   | ERCF_HOME | Home the ERCF selector and optionally selects gate associated with the specified tool | TOOL=\[0..n\] After homing, select this gate as if ERCF_SELECT_GATE was called <br>FORCE_UNLOAD=\[0\|1\] ERCF will try to unload filament if it thinks it has to but this option will force it to check and attempt unload |
@@ -399,7 +446,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
 
   ## User Testing
   | Command | Description | Parameters |
-  | -------- | ----------- | ---------- |
+  | ------- | ----------- | ---------- |
   | ERCF_TEST_GRIP | Test the ERCF grip of the currently selected tool | None |
   | ERCF_TEST_SERVO | Test the servo angle | VALUE=.. Angle value sent to servo |
   | ERCF_TEST_MOVE_GEAR | Move the ERCF gear | LENGTH=..\[200\] Length of gear move in mm <br>SPEED=..\[50\] Stepper move speed50 <br>ACCEL=..\[200\] Gear stepper accel |
@@ -414,18 +461,17 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
 
   ## Tool to Gate map and Endless spool
   | Command | Description | Parameters |
-  | -------- | ----------- | ---------- |
+  | ------- | ----------- | ---------- |
   | ERCF_ENCODER_RUNOUT | Filament runout handler that will also implement EndlessSpool if enabled | FORCE_RUNOUT=1 is useful for testing to validate your _ERCF_ENDLESS_SPOOL\*\* macros |
-  | ERCF_DISPLAY_TTG_MAP | Displays the current Tool -> Gate mapping (can be used all the time but generally designed for EndlessSpool  | None |
-  | ERCF_REMAP_TTG | Reconfiguration of the Tool - to - Gate (TTG) map.  Can also set gates as empty! | TOOL=\[0..n\] <br>GATE=\[0..n\] Maps specified tool to this gate (multiple tools can point to same gate) <br>AVAILABLE=\[0\|1\]  Marks gate as available or empty |
-  | ERCF_RESET_TTG_MAP | Reset the Tool-to-Gate map back to default | None |
-  | ERCF_ENDLESS_SPOOL | Modify the defined EndlessSpool groups at runtime | GROUPS={comma separated list of groups} The same format as the default groups defined in ercf_parameters.cfg. Must be the same length as the number of ERCF gates ||
+  | ERCF_DISPLAY_TTG_MAP | Displays the current Tool -> Gate mapping (can be used all the time but generally designed for EndlessSpool  | SUMMARY=\[0\|1\] Whether to show complete or summary view |
+  | ERCF_REMAP_TTG | Reconfiguration of the Tool - to - Gate (TTG) map.  Can also set gates as empty! | RESET=\[0\|1\] If specified the Tool -> Gate mapping will be reset to that defined in `ercf_parameters.cfg` <br>TOOL=\[0..n\] <br>GATE=\[0..n\] Maps specified tool to this gate (multiple tools can point to same gate) <br>AVAILABLE=\[0\|1\]  Marks gate as available or empty |
+  | ERCF_ENDLESS_SPOOL | Modify the defined EndlessSpool groups at runtime | RESET=\[0\|1\] If specified the EndlessSpool groups will be reset to that defined in `ercf_parameters.cfg` <br>GROUPS={comma separated list of groups} The same format as the default groups defined in ercf_parameters.cfg. Must be the same length as the number of ERCF gates ||
   | ERCF_CHECK_GATES | Inspect the gate(s) and mark availability | GATE=\[0..n\] The specific gate to check <br>TOOL=\[0..n\] The specific too to check (same as gate if no TTG mapping in place) <br>TOOLS="comma separated list of tools" The list of tools to check. Typically used in print start macro to validate all necessary tools <br>If all parameters are omitted all gates will be checked (the default) |
   <br>
 
   ## User defined/configurable macros (in ercf_software.cfg)
   | Command | Description | Parameters |
-  | -------- | ----------- | ---------- |
+  | ------- | ----------- | ---------- |
   | _ERCF_ENDLESS_SPOOL_PRE_UNLOAD | Called prior to unloading the remains of the current filament |
   | _ERCF_ENDLESS_SPOOL_POST_LOAD | Called subsequent to loading filament in the new gate in the sequence |
   | _ERCF_FORM_TIP_STANDALONE | Called to create tip on filament when not in print (and under the control of the slicer). You tune this macro by modifying the defaults to the parameters |
