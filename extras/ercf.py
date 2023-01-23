@@ -2360,7 +2360,7 @@ class Ercf:
         tool = gcmd.get_int('TOOL', minval=0, maxval=len(self.selector_offsets)-1)
         standalone = bool(gcmd.get_int('STANDALONE', 0, minval=0, maxval=1))
         skip_tip = self._is_in_print() and not standalone
-        if self.loaded_status == self.LOADED_STATUS_UNKNOWN and self._is_homed: # Will be done later if not homed
+        if self.loaded_status == self.LOADED_STATUS_UNKNOWN and self.is_homed: # Will be done later if not homed
             self._log_info("Unknown filament position, recovering state...")
             self._recover_loaded_state()
         try:
