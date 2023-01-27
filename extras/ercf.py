@@ -16,6 +16,7 @@ import textwrap, math, os.path
 from random import randint
 from . import pulse_counter
 
+
 # Forward all messages through a queue (polled by background thread)
 class QueueHandler(logging.Handler):
     def __init__(self, queue):
@@ -399,6 +400,7 @@ class Ercf:
                     self.cmd_ERCF_CHECK_GATES,
                     desc = self.cmd_ERCF_CHECK_GATES_help)
 
+
     def handle_connect(self):
         # Setup background file based logging before logging any messages
         if self.logfile_level >= 0:
@@ -482,7 +484,7 @@ class Ercf:
         self.variables = self.printer.lookup_object('save_variables').allVariables
         # Sanity check to see that ercf_vars.cfg is included
         if self.variables == {}:
-            raise self.config.error("Calibration settings in ercf_vars.cfg not found.  Did you include it in your printer.cfg?")
+            raise self.config.error("Calibration settings in ercf_vars.cfg not found.  Did you include it in your klipper config directory?")
 
     def _initialize_state(self):
         self.is_enabled = True
@@ -586,6 +588,9 @@ class Ercf:
                 'enabled': self.is_enabled,
                 'filament': "Loaded" if self.loaded_status == self.LOADED_STATUS_FULL else
                             "Unloaded" if self.loaded_status == self.LOADED_STATUS_UNLOADED else
+                            "Unknown",
+                'servo': "Up" if self.servo_state == self.SERVO_UP_STATE else
+                            "Down" if self.servo_state == self.SERVO_DOWN_STATE else
                             "Unknown"
                 }
 
@@ -1154,7 +1159,7 @@ class Ercf:
         dist = gcmd.get_float('DIST', 500., above=0.)
         repeats = gcmd.get_int('REPEATS', 3, minval=1, maxval=10)
         speed = gcmd.get_float('SPEED', self.long_moves_speed, above=0.)
-        accel = gcmd.get_float('ACCEL', self.gear_stepper.accel, above=0.)
+        accel = gcmd.get_float('ACCEL', self.gear_stepper.accel, minval=0.)
         try:
             self.calibrating = True
             plus_values, min_values = [], []
@@ -1342,24 +1347,17 @@ class Ercf:
 
     def _disable_encoder_sensor(self):
         if self.encoder_sensor:
-            try:
-                if self.encoder_sensor.runout_helper.sensor_enabled:
-                    self._log_debug("Disabled encoder sensor")
-                    self.encoder_sensor.runout_helper.sensor_enabled = False
-                    return True
-            except Error as e:
-                self._log_debug("Failed to disable encoder: %s" % str(e))
+            if self.encoder_sensor.runout_helper.sensor_enabled:
+                self._log_debug("Disabled encoder sensor")
+                self.encoder_sensor.runout_helper.sensor_enabled = False
+                return True
         return False
 
     def _enable_encoder_sensor(self, restore=False):
-        if self.encoder_sensor:
-            if self.enable_clog_detection and (restore or self._is_in_print()):
-                try:
-                    if not self.encoder_sensor.runout_helper.sensor_enabled:
-                        self._log_debug("Enabled encoder sensor")
-                        self.encoder_sensor.runout_helper.sensor_enabled = True
-                except Error as e:
-                    self._log_debug("Failed to enable encoder: %s" % str(e))
+        if self.encoder_sensor and self.enable_clog_detection and (restore or self._is_in_print()):
+            if not self.encoder_sensor.runout_helper.sensor_enabled:
+                self._log_debug("Enabled encoder sensor")
+                self.encoder_sensor.runout_helper.sensor_enabled = True
 
     def _has_toolhead_sensor(self):
         return self.toolhead_sensor != None and self.toolhead_sensor.runout_helper.sensor_enabled
@@ -1522,8 +1520,10 @@ class Ercf:
     def _trace_filament_move(self, trace_str, distance, speed=None, accel=None, motor="gear", homing=False, track=False):
         if speed == None:
             speed = self.gear_stepper.velocity
+        if accel == None:
+            accel = self.gear_stepper.accel
         start = self._counter.get_distance()
-        trace_str += ". Stepper: '%s' moved %%.1fmm, encoder measure %%.1fmm (delta %%.1fmm)" % motor
+        trace_str += ". Stepper: '%s' moved %%.1fmm, encoder measured %%.1fmm (delta %%.1fmm)" % motor
         if motor == "both":
             self._log_stepper("BOTH: dist=%.1f, speed=%d, accel=%d" % (distance, speed, self.gear_sync_accel))
             self.gear_stepper.do_set_position(0.)                   # Make incremental move
@@ -1570,7 +1570,7 @@ class Ercf:
             accel = self.selector_stepper.accel
         if homing_move != 0:
             self._log_stepper("SELECTOR: dist=%.1f, speed=%d, accel=%d homing=%d" % (dist, speed, accel, homing_move))
-            if abs(dist - self.selector_stepper.get_position()[0]) < 12: # TODO: Workaround for Timer Too Close error with short homing moves (klipper may have fixed in v11-0-66)
+            if abs(dist - self.selector_stepper.get_position()[0]) < 12: # Workaround for Timer Too Close error with short homing moves
                 self.toolhead.dwell(1)
             self.selector_stepper.do_homing_move(dist, speed, accel, homing_move > 0, abs(homing_move) == 1)
         else:
@@ -1693,7 +1693,7 @@ class Ercf:
                     self._servo_up()
                     self._servo_down()
         self._set_gate_status(self.gate_selected, self.GATE_UNKNOWN)
-        self._set_loaded_status(self.LOADED_STATUS_PARTIAL_BEFORE_ENCODER)
+        self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
         if servo_up_on_error:
             self._servo_up()
         raise ErcfError("Error picking up filament at gate - not enough movement detected at encoder")
@@ -2124,7 +2124,7 @@ class Ercf:
         self.toolhead.wait_moves()
         if self.sensorless_selector == 1:
             self.selector_stepper.do_set_position(0.)
-            self._selector_stepper_move_wait(2)  # Ensure some bump space
+            self._selector_stepper_move_wait(2)                             # Ensure some bump space
             self.selector_stepper.do_set_position(0.)
             self._selector_stepper_move_wait(-selector_length, speed=75, homing_move=2)
         else:
@@ -2132,6 +2132,7 @@ class Ercf:
             self._selector_stepper_move_wait(-selector_length, speed=100, homing_move=2)   # Fast homing move
             self.selector_stepper.do_set_position(0.)
             self._selector_stepper_move_wait(5, False)                      # Ensure some bump space
+            self.selector_stepper.do_set_position(0.)
             self._selector_stepper_move_wait(-10, speed=10, homing_move=2)  # Slower more accurate homing move
 
         self.is_homed = self._check_selector_endstop()
@@ -2400,6 +2401,7 @@ class Ercf:
             self._load_extruder(True)
             self._set_loaded_status(self.LOADED_STATUS_FULL)
         except ErcfError as ee:
+            self._set_loaded_status(self.LOADED_STATUS_UNKNOWN)
             self._pause(str(ee))
 
     cmd_ERCF_UNLOAD_BYPASS_help = "Smart unload of extruder. Designed for bypass usage"
@@ -2511,7 +2513,7 @@ class Ercf:
         if self._check_in_bypass(): return
         length = gcmd.get_float('LENGTH', 200.)
         speed = gcmd.get_float('SPEED', 50.)
-        accel = gcmd.get_float('ACCEL', 200.)
+        accel = gcmd.get_float('ACCEL', 200., minval=0.)
         self._gear_stepper_move_wait(length, wait=False, speed=speed, accel=accel)
 
     cmd_ERCF_TEST_LOAD_SEQUENCE_help = "Test sequence"
@@ -2930,7 +2932,7 @@ class Ercf:
             self._select_gate(gate)
             self._counter.reset_counts()    # Encoder 0000
             try:
-                self.calibrating = True
+                self.calibrating = True # To suppress visual filament position
                 self._log_info("Checking gate #%d..." % gate)
                 encoder_moved = self._load_encoder(retry=False)
                 if tool >= 0:
@@ -2981,6 +2983,7 @@ class Ercf:
         if self._check_is_loaded(): return
         gate = gcmd.get_int('GATE', -1, minval=0, maxval=len(self.selector_offsets)-1)
         try:
+            self.calibrating = True # To suppress visual filament position
             # If gate not specified assume current gate
             if gate == -1:
                 gate = self.gate_selected
@@ -2988,10 +2991,13 @@ class Ercf:
                 self._select_gate(gate)
             self._counter.reset_counts()    # Encoder 0000
             for i in range(5):
+                self._log_always("Loading...")
                 try:
                     self._load_encoder(retry=False, servo_up_on_error=False)
                     # Caught the filament, so now park it in the gate
+                    self._log_always("Parking...")
                     self._unload_encoder(self.unload_buffer)
+                    self._log_always("Filament detected and parked in gate #%d" % gate)
                     return
                 except ErcfError as ee:
                     # Exception just means filament is not loaded yet, so continue
@@ -3002,6 +3008,7 @@ class Ercf:
         except ErcfError as ee:
             self._log_always("Filament preload for gate #%d failed: %s" % (gate, str(ee)))
         finally:
+            self.calibrating = False
             self._servo_up()
 
 def load_config(config):

@@ -353,6 +353,7 @@ Happy Hare exposes the following 'printer' variables:
     printer.ercf.is_paused : {bool}
     printer.ercf.enabled : {bool}
     printer.ercf.clog_detection : {int} 0 | 1
+    printer.ercf.servo : {string} Up | Down | Unknown
 
 ## My Testing:
 This software is largely rewritten as well as being extended and so, despite best efforts, has probably introduced some bugs that may not exist in the official driver.  It also lacks extensive testing on different configurations that will stress the corner cases.  I have been using successfully on Voron 2.4 / ERCF with EASY-BRD.  I use a self-modified CW2 extruder with foolproof microswitch toolhead sensor. My day-to-day configuration is to load the filament to the extruder in a single movement (`num_moves=1`) at 200mm/s, then home to toolhead sensor with synchronous gear/extruder movement (option #1 explained above).  I use the sensorless selector and have runout and EndlessSpool enabled.
