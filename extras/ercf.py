@@ -663,9 +663,9 @@ class Ercf:
         msg = "ERCF Statistics:"
         msg += "\n%d swaps completed" % self.total_swaps
         msg += "\n%s spent loading (average: %s)" % (self._seconds_to_human_string(self.time_spent_loading),
-                                                    self._seconds_to_human_string(self.time_spent_loading / self.total_swaps))
+                                                    self._seconds_to_human_string(self.time_spent_loading / self.total_swaps) if self.total_swaps > 0 else "0")
         msg += "\n%s spent unloading (average: %s)" % (self._seconds_to_human_string(self.time_spent_unloading),
-                                                      self._seconds_to_human_string(self.time_spent_unloading / self.total_swaps))
+                                                      self._seconds_to_human_string(self.time_spent_unloading / self.total_swaps) if self.total_swaps > 0 else "0")
         msg += "\n%s spent paused (total pauses: %d)" % (self._seconds_to_human_string(self.time_spent_paused), self.total_pauses)
         return msg
 
