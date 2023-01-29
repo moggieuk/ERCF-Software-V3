@@ -1,9 +1,10 @@
-# Enraged Rabbit Carrot Feeder
+# Happy Hare ERCF Software
+# Main module
 #
-# Copyright (C) 2021  Ette
-#
-# Happy Hare rewrite and feature updates
 # Copyright (C) 2022  moggieuk#6538 (discord)
+#
+# Based on and inspired by original ERCF software
+# Enraged Rabbit Carrot Feeder Project  Copyright (C) 2021  Ette
 #
 # (\_/)
 # ( *,*)
@@ -15,7 +16,6 @@ import logging, logging.handlers, threading, queue, time
 import textwrap, math, os.path
 from random import randint
 from . import pulse_counter
-
 
 # Forward all messages through a queue (polled by background thread)
 class QueueHandler(logging.Handler):
@@ -140,7 +140,7 @@ class Ercf:
 
     DEFAULT_ENCODER_RESOLUTION = 0.67 # 0.67 is about the resolution of one pulse
     EMPTY_GATE_STATS = {'pauses': 0, 'loads': 0, 'load_distance': 0.0, 'load_delta': 0.0, 'unloads': 0, 'unload_distance': 0.0, 'unload_delta': 0.0, 'servo_retries': 0, 'load_failures': 0, 'unload_failures': 0}
-
+#
     def __init__(self, config):
         self.config = config
         self.printer = config.get_printer()
@@ -160,7 +160,7 @@ class Ercf:
                                             self.encoder_sample_time,
                                             self.encoder_poll_time, 
                                             self.encoder_resolution)
-        
+
         # Specific build parameters / tuning
         self.long_moves_speed = config.getfloat('long_moves_speed', 100.)
         self.short_moves_speed = config.getfloat('short_moves_speed', 25.)
@@ -171,8 +171,7 @@ class Ercf:
         self.gear_buzz_accel = config.getfloat('gear_buzz_accel', 2000)
         self.servo_down_angle = config.getfloat('servo_down_angle')
         self.servo_up_angle = config.getfloat('servo_up_angle')
-        self.extra_servo_dwell_down = config.getint('extra_servo_dwell_down', 0)
-        self.extra_servo_dwell_up = config.getint('extra_servo_dwell_up', 0)
+        self.servo_duration = config.getfloat('servo_duration', 0.2, minval=0.1)
         self.num_moves = config.getint('num_moves', 2, minval=1)
         self.apply_bowden_correction = config.getint('apply_bowden_correction', 0, minval=0, maxval=1)
         self.load_bowden_tolerance = config.getfloat('load_bowden_tolerance', 8., minval=1., maxval=50.)
@@ -400,7 +399,6 @@ class Ercf:
                     self.cmd_ERCF_CHECK_GATES,
                     desc = self.cmd_ERCF_CHECK_GATES_help)
 
-
     def handle_connect(self):
         # Setup background file based logging before logging any messages
         if self.logfile_level >= 0:
@@ -467,6 +465,12 @@ class Ercf:
             raise self.config.error("Selector endstop must be specified")
         if self.sensorless_selector and self.gear_endstop == None:
             raise self.config.error("Gear stepper endstop must be configured for sensorless selector operation")
+
+        # Get servo
+        try:
+            self.servo = self.printer.lookup_object('ercf_servo ercf_servo')
+        except:
+            raise self.config.error("Missing [ercf_servo] definition in ercf_hardware.cfg\nERCF UPGRADE requires slight modification of ercf_hardware.cfg\nPlease rename [servo ercf_servo] to [ercf_servo ercf_servo] and comment/delete `extra_servo_dwell_*` variables in ercf_parameters.cfg")
 
         # See if we have a TMC controller capable of current control for filament collision method on gear_stepper 
         # and tip forming on extruder (just 2209 for now)
@@ -568,6 +572,7 @@ class Ercf:
 
         self._log_always('(\_/)\n( *,*)\n(")_(") ERCF Ready')
         self._load_persisted_state()
+        self._servo_up()
         if self.startup_status > 0:
             self._log_always(self._tool_to_gate_map_to_human_string(self.startup_status == 1))
             if self.persistence_level >= 4:
@@ -657,9 +662,11 @@ class Ercf:
     def _swap_statistics_to_human_string(self):
         msg = "ERCF Statistics:"
         msg += "\n%d swaps completed" % self.total_swaps
-        msg += "\n%s spent loading" % self._seconds_to_human_string(self.time_spent_loading)
-        msg += "\n%s spent unloading" % self._seconds_to_human_string(self.time_spent_unloading)
-        msg += "\n%s spent paused (%d pauses total)" % (self._seconds_to_human_string(self.time_spent_paused), self.total_pauses)
+        msg += "\n%s spent loading (average: %s)" % (self._seconds_to_human_string(self.time_spent_loading),
+                                                    self._seconds_to_human_string(self.time_spent_loading / self.total_swaps))
+        msg += "\n%s spent unloading (average: %s)" % (self._seconds_to_human_string(self.time_spent_unloading),
+                                                      self._seconds_to_human_string(self.time_spent_unloading / self.total_swaps))
+        msg += "\n%s spent paused (total pauses: %d)" % (self._seconds_to_human_string(self.time_spent_paused), self.total_pauses)
         return msg
 
     def _dump_statistics(self, report=False):
@@ -898,27 +905,22 @@ class Ercf:
 #############################
 
     def _servo_set_angle(self, angle):
+        self.servo.set_value(angle=angle, duration=self.servo_duration)
         self.servo_state = self.SERVO_UNKNOWN_STATE 
-        self.gcode.run_script_from_command("SET_SERVO SERVO=ercf_servo ANGLE=%1.f" % angle)
-
-    def _servo_off(self):
-        self._log_trace("Servo turned off")
-        self.gcode.run_script_from_command("SET_SERVO SERVO=ercf_servo WIDTH=0.0")
 
     def _servo_down(self):
         if self.servo_state == self.SERVO_DOWN_STATE: return
         if self.tool_selected == self.TOOL_BYPASS: return
         self._log_debug("Setting servo to down angle: %d" % (self.servo_down_angle))
         self.toolhead.wait_moves()
-        self._servo_set_angle(self.servo_down_angle)
+        self.servo.set_value(angle=self.servo_down_angle, duration=self.servo_duration)
         oscillations = 2
         for i in range(oscillations):
             self.toolhead.dwell(0.05)
             self._gear_stepper_move_wait(0.5, speed=25, accel=self.gear_buzz_accel, wait=False, sync=False)
             self.toolhead.dwell(0.05)
             self._gear_stepper_move_wait(-0.5, speed=25, accel=self.gear_buzz_accel, wait=False, sync=(i == oscillations - 1))
-        self.toolhead.dwell(self.extra_servo_dwell_down / 1000.)
-        self._servo_off()
+        self.toolhead.dwell(max(0., self.servo_duration - (0.1 * oscillations)))
         self.servo_state = self.SERVO_DOWN_STATE
 
     def _servo_up(self):
@@ -926,13 +928,11 @@ class Ercf:
         initial_encoder_position = self._counter.get_distance()
         self._log_debug("Setting servo to up angle: %d" % (self.servo_up_angle))
         self.toolhead.wait_moves()
-        self._servo_set_angle(self.servo_up_angle)
-        self.toolhead.dwell(0.25 + self.extra_servo_dwell_up / 1000.)
-        self._servo_off()
+        self.servo.set_value(angle=self.servo_up_angle, duration=self.servo_duration)
         self.servo_state = self.SERVO_UP_STATE
 
         # Report on spring back in filament then reset counter
-        self.toolhead.dwell(0.1)
+        self.toolhead.dwell(self.servo_duration)
         self.toolhead.wait_moves()
         delta = self._counter.get_distance() - initial_encoder_position
         if delta > 0.:
@@ -1550,7 +1550,7 @@ class Ercf:
 
         end = self._counter.get_distance()
         measured = end - start
-        # delta: +ve means measured less than moved, -ve means measured more than moved
+        # Delta: +ve means measured less than moved, -ve means measured more than moved
         delta = abs(distance) - measured
         trace_str += ". Counter: @%.1fmm" % end
         self._log_trace(trace_str % (distance, measured, delta))
@@ -2503,8 +2503,6 @@ class Ercf:
         angle = gcmd.get_float('VALUE')
         self._log_debug("Setting servo to angle: %d" % angle)
         self._servo_set_angle(angle)
-        self.toolhead.dwell(0.25 + self.extra_servo_dwell_up / 1000.)
-        self._servo_off()
 
     cmd_ERCF_TEST_MOVE_GEAR_help = "Move the ERCF gear"
     def cmd_ERCF_TEST_MOVE_GEAR(self, gcmd):
