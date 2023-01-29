@@ -47,7 +47,6 @@ class ErcfServo:
         servo_name = config.get_name().split()[1]
         gcode = self.printer.lookup_object('gcode')
         gcode.register_mux_command('ERCF_SET_SERVO', 'SERVO', servo_name, self.cmd_SET_SERVO, desc=self.cmd_SET_SERVO_help)
-        return
 
     def handle_connect(self):
         print_time = self.printer.lookup_object('toolhead').get_last_move_time()

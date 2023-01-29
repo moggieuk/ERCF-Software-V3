@@ -470,7 +470,7 @@ class Ercf:
         try:
             self.servo = self.printer.lookup_object('ercf_servo ercf_servo')
         except:
-            raise self.config.error("Missing [ercf_servo] definition in ercf_hardware.cfg\nERCF UPGRADE requires slight modification of ercf_hardware.cfg\nPlease rename [servo ercf_servo] to [ercf_servo ercf_servo] and comment/delete `extra_servo_dwell_*` variables in ercf_parameters.cfg")
+            raise self.config.error("Missing [ercf_servo] definition in ercf_hardware.cfg\nERCF UPGRADE requires slight modification to configuration\nPlease rename [servo ercf_servo] to [ercf_servo ercf_servo] in ercf_hardware.cfg and comment/delete `extra_servo_dwell_*` variables in ercf_parameters.cfg")
 
         # See if we have a TMC controller capable of current control for filament collision method on gear_stepper 
         # and tip forming on extruder (just 2209 for now)
