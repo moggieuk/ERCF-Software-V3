@@ -140,7 +140,7 @@ class Ercf:
 
     DEFAULT_ENCODER_RESOLUTION = 0.67 # 0.67 is about the resolution of one pulse
     EMPTY_GATE_STATS = {'pauses': 0, 'loads': 0, 'load_distance': 0.0, 'load_delta': 0.0, 'unloads': 0, 'unload_distance': 0.0, 'unload_delta': 0.0, 'servo_retries': 0, 'load_failures': 0, 'unload_failures': 0}
-#
+
     def __init__(self, config):
         self.config = config
         self.printer = config.get_printer()
