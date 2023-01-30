@@ -543,7 +543,7 @@ class Ercf:
     def handle_ready(self):
         # Override motion sensor runout detection_length based on calibration and turn if off by default
         if self.encoder_sensor != None:
-            #self.encoder_sensor.runout_helper.sensor_enabled = False # PAUL emergency fix
+            self.encoder_sensor.runout_helper.sensor_enabled = False
             self.encoder_sensor.detection_length = self._get_calibration_clog_length()
 
         self.printer.register_event_handler("idle_timeout:printing", self._handle_idle_timeout_printing)
@@ -572,7 +572,7 @@ class Ercf:
 
         self._log_always('(\_/)\n( *,*)\n(")_(") ERCF Ready')
         self._load_persisted_state()
-        self._servo_up()
+        #self._servo_up()
         if self.startup_status > 0:
             self._log_always(self._tool_to_gate_map_to_human_string(self.startup_status == 1))
             if self.persistence_level >= 4:
