@@ -572,7 +572,7 @@ class Ercf:
 
         self._log_always('(\_/)\n( *,*)\n(")_(") ERCF Ready')
         self._load_persisted_state()
-        #self._servo_up()
+        #self._servo_up() Tool early to do this
         if self.startup_status > 0:
             self._log_always(self._tool_to_gate_map_to_human_string(self.startup_status == 1))
             if self.persistence_level >= 4:
@@ -2944,13 +2944,14 @@ class Ercf:
                     else:
                         self._set_loaded_status(self.LOADED_STATUS_UNLOADED, silent=True)
                 except ErcfError as ee:
-                    self._servo_up()
                     msg = "Failure during check gate #%d %s: %s" % (gate, "(T%d)" % tool if tool >= 0 else "", str(ee))
                     if self._is_in_print():
                         self._pause(msg)
                     else:
                         self._log_always(msg)
                     return
+                finally:
+                    self._servo_up()
             except ErcfError as ee:
                 self._set_gate_status(gate, self.GATE_EMPTY)
                 self._set_loaded_status(self.LOADED_STATUS_UNLOADED, silent=True)

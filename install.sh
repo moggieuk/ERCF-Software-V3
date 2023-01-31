@@ -123,6 +123,10 @@ copy_template_files() {
             else
                 magic_str2="NO CLOG"
             fi
+	    uart_comment=""
+            if [ "${brd_type}" == "ERB" ]; then
+	        uart_comment="#"
+            fi
 
             if [ "${sensorless_selector}" -eq 1 ]; then
                 cat ${SRCDIR}/${file} | sed -e "\
@@ -131,11 +135,14 @@ copy_template_files() {
                     s/^#driver_SGTHRS: 75/driver_SGTHRS: 75/; \
                     s/^endstop_pin: \^{selector_endstop_pin}/#endstop_pin: \^{selector_endstop_pin}/; \
                     s/^#endstop_pin: tmc2209_selector_stepper/endstop_pin: tmc2209_selector_stepper/; \
+                    s/^uart_address:/${uart_comment}uart_address:/; \
                     s/{brd_type}/${brd_type}/; \
                         " > ${dest}.tmp
             else
                 # This is the default template config without sensorless selector homing enabled
-                cp ${SRCDIR}/${file} ${dest}.tmp
+                cat ${SRCDIR}/${file} | sed -e "\
+                    s/^uart_address:/${uart_comment}uart_address:/; \
+                        " > ${dest}.tmp
 	    fi
 
             # Now substitute pin tokens for correct brd_type
