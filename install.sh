@@ -99,6 +99,8 @@ link_ercf_plugin() {
 
 copy_template_files() {
     if [ "${INSTALL_TEMPLATES}" -eq 0 ]; then
+        # Then check to see if we need to upgrade the current config files
+        upgrade_config_files
         return
     fi
 
@@ -117,11 +119,6 @@ copy_template_files() {
                 magic_str1="## ERCF Toolhead sensor"
             else
                 magic_str1="NO TOOLHEAD"
-            fi
-            if [ "${clog_detection}" -eq 1 ]; then
-                magic_str2="## ERCF Clog detection"
-            else
-                magic_str2="NO CLOG"
             fi
 	    uart_comment=""
             if [ "${brd_type}" == "ERB" ]; then
@@ -151,7 +148,6 @@ copy_template_files() {
                     s/{toolhead_sensor_pin}/${toolhead_sensor_pin}/; \
                     s%{serial}%${serial}%; \
                     /^${magic_str1} START/,/${magic_str1} END/ s/^#//; \
-                    /^${magic_str2} START/,/${magic_str2} END/ s/^#//; \
                         " > ${dest} && rm ${dest}.tmp
             else
                 cat ${dest}.tmp | sed -e "\
@@ -172,7 +168,6 @@ copy_template_files() {
                     s/{toolhead_sensor_pin}/${toolhead_sensor_pin}/; \
                     s%{serial}%${serial}%; \
                     /^${magic_str1} START/,/${magic_str1} END/ s/^#//; \
-                    /^${magic_str2} START/,/${magic_str2} END/ s/^#//; \
                         " > ${dest} && rm ${dest}.tmp
             fi
         elif [ "${file}" == "ercf_software.cfg" ]; then
@@ -228,6 +223,80 @@ copy_template_files() {
                 echo -e "${WARNING}File printer.cfg file not found! Cannot include ERCF configuration files"
             fi
         fi
+    fi
+}
+
+# Save the user some time and attempt the upgrade of config files for them...
+upgrade_config_files() {
+    echo -e "${INFO}Upgrading configuration files..."
+    hardware="ercf_hardware.cfg"
+    dest_hardware=${KLIPPER_CONFIG_HOME}/${hardware}
+    parameters="ercf_parameters.cfg"
+    dest_parameters=${KLIPPER_CONFIG_HOME}/${parameters}
+
+    encoder_pin="<FIXME>"
+    encoder_resolution="<FIXME>"
+    if test -f $dest_parameters; then
+        next_dest="$(nextsuffix "$dest_parameters")"
+        echo -e "${INFO}Pre upgrade config file ${dest_parameters} moved to ${next_dest} for reference"
+        cp ${dest_parameters} ${next_dest}
+
+        update_encoder=$(grep -c '\encoder_pin:' ${dest_parameters} || true)
+        if [ "${update_encoder}" -eq 1 ]; then
+            encoder_pin=$(egrep 'encoder_pin:' ${dest_parameters} | awk '{ sub("\^", "") ; print $2 }')
+	    encoder_resolution=$(egrep 'encoder_resolution:' ${dest_parameters} | awk '{ print $2 }')
+	    echo "encoder_pin=${encoder_pin}"
+            echo -e "${WARNING}Upgrading ${dest_parameters} to remove legacy encoder..."
+            cat ${dest_parameters} | sed -e " \
+                s/^encoder_pin:/#encoder_pin:/ ;
+                s/^encoder_resolution:/#encoder_resolution:/ ;
+                    " > ${dest_parameters}.encoder_upgrade && mv ${dest_parameters}.encoder_upgrade ${dest_parameters}
+	fi
+    fi
+
+    if test -f $dest_hardware; then
+        next_dest="$(nextsuffix "$dest_hardware")"
+        echo -e "${INFO}Pre upgrade config file ${dest_hardware} moved to ${next_dest} for reference"
+        cp ${dest_hardware} ${next_dest}
+
+        update_servo=$(grep -c '\[servo ercf_servo\]' ${dest_hardware} || true)
+        if [ "${update_servo}" -eq 1 ]; then
+            echo -e "${WARNING}Upgrading ${dest_hardware} for new ercf_servo..."
+            cat ${dest_hardware} | sed -e " \
+                s/^\[servo ercf_servo\]/\[ercf_servo ercf_servo\]/ ;
+                    " > ${dest_hardware}.servo_upgrade
+        else
+            # Servo already upgraded or can't upgrade
+            cp ${dest_hardware} ${dest_hardware}.servo_upgrade
+        fi
+
+        update_encoder=$(grep -c '\[filament_motion_sensor encoder_sensor\]' ${dest_hardware}.servo_upgrade || true)
+        if [ "${update_encoder}" -eq 1 ]; then
+            magic_str2="# ERCF Clog detection"
+            echo -e "${WARNING}Upgrading ${dest_hardware} for new ercf_encoder..."
+            cat ${dest_hardware}.servo_upgrade | sed -e " \
+                /${magic_str2} START/,/${magic_str2} END/d; \
+                /\[duplicate_pin_override\]/d; \
+                /pins:/d; \
+                /\[filament_motion_sensor encoder_sensor\]/,+6 d; \
+                    " > ${dest_hardware} && rm ${dest_hardware}.servo_upgrade
+        else
+            # Encoder already upgraded or can't upgrade
+            mv ${dest_hardware}.servo_upgrade ${dest_hardware}
+        fi
+
+        cat << EOF >> ${dest_hardware}
+
+## ENCODER -----------------------------------------------------------------------------------------------------------------
+## The encoder_resolution is determined by running the ERCF_CALIBRATE_ENCODER. Be sure to read the manual
+[ercf_encoder ercf_encoder]
+encoder_pin: ^${encoder_pin}			# EASY-BRD: ^ercf:PA6, Flytech ERB: ^ercf:gpio22
+encoder_resolution: ${encoder_resolution}		# Set AFTER 'rotation_distance' is tuned for gear stepper (see manual)
+detection_length: 10.0			# This is the default detection - it overridden during calibration with calculated length
+extruder: extruder			# The extruder to track with for runout/clog detection
+headroom: 5.0				# In automatic detection this is the runout headroom that will be maintained
+
+EOF
     fi
 }
 
@@ -438,6 +507,11 @@ if [ "${INSTALL_TEMPLATES}" -eq 1 ]; then
     case $yn in
         y)
             clog_detection=1
+	    echo -e "${PROMPT}    Would you like ERCF to automatically adjust clog detection length (time saver)?${INPUT}"
+            yn=$(prompt_yn "    Automatic")
+            if [ "${yn}" == "y" ]; then
+                clog_detection=2
+            fi
             ;;
         n)
             clog_detection=0
