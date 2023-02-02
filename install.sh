@@ -90,8 +90,9 @@ verify_home_dirs() {
 link_ercf_plugin() {
     echo -e "${INFO}Linking ercf extension to Klipper..."
     if [ -d "${KLIPPER_HOME}/klippy/extras" ]; then
-        ln -sf "${SRCDIR}/extras/ercf.py" "${KLIPPER_HOME}/klippy/extras/ercf.py"
-        ln -sf "${SRCDIR}/extras/ercf_servo.py" "${KLIPPER_HOME}/klippy/extras/ercf_servo.py"
+        for file in `cd ${SRCDIR}/extras ; ls *.py`; do
+            ln -sf "${SRCDIR}/extras/${file}" "${KLIPPER_HOME}/klippy/extras/${file}"
+        done
     else
         echo -e "${WARNING}ERCF modules not installed because Klipper 'extras' directory not found!"
     fi
