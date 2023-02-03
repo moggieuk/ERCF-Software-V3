@@ -177,13 +177,7 @@ copy_template_files() {
                     " > ${dest}
         else
             # Other config files (not ercf_hardware.cfg, ercf_software.cfg, ercf_display_menu.cfg)
-            if [ "${brd_type}" == "unknown" ]; then
-                cp ${SRCDIR}/${file} ${dest}.tmp
-            else
-                cat ${SRCDIR}/${file} | sed -e "\
-                    s/{encoder_pin}/${PIN[$brd_type,encoder_pin]}/g; \
-                        " > ${dest}.tmp
-            fi
+            cp ${SRCDIR}/${file} ${dest}.tmp
             cat ${dest}.tmp | sed -e "\
                 s/{sensorless_selector}/${sensorless_selector}/g; \
                 s/{clog_detection}/${clog_detection}/g; \
@@ -247,10 +241,12 @@ upgrade_config_files() {
             encoder_pin=$(egrep 'encoder_pin:' ${dest_parameters} | awk '{ sub("\^", "") ; print $2 }')
 	    encoder_resolution=$(egrep 'encoder_resolution:' ${dest_parameters} | awk '{ print $2 }')
 	    echo "encoder_pin=${encoder_pin}"
-            echo -e "${WARNING}Upgrading ${dest_parameters} to remove legacy encoder..."
+            echo -e "${WARNING}Upgrading ${dest_parameters} to remove legacy servo and encoder settings..."
             cat ${dest_parameters} | sed -e " \
                 s/^encoder_pin:/#encoder_pin:/ ;
                 s/^encoder_resolution:/#encoder_resolution:/ ;
+                s/^extra_servo_dwell_up:/#extra_servo_dwell_up:/ ;
+                s/^extra_servo_dwell_down:/#extra_servo_dwell_down:/ ;
                     " > ${dest_parameters}.encoder_upgrade && mv ${dest_parameters}.encoder_upgrade ${dest_parameters}
 	fi
     fi

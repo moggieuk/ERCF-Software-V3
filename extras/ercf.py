@@ -430,13 +430,13 @@ class Ercf:
         try:
             self.servo = self.printer.lookup_object('ercf_servo ercf_servo')
         except:
-            raise self.config.error("Missing [ercf_servo] definition in ercf_hardware.cfg\nERCF UPGRADE requires slight modification to configuration\nPlease rename [servo ercf_servo] to [ercf_servo ercf_servo] in ercf_hardware.cfg and comment/delete `extra_servo_dwell_*` variables in ercf_parameters.cfg")
+            raise self.config.error("Missing [ercf_servo] definition in ercf_hardware.cfg\nDid you upgrade? Run Happy Hare './install.sh' again to fix configuration files and/or read https://github.com/moggieuk/ERCF-Software-V3")
 
         # Get and configure encoder
         try:
             self.encoder_sensor = self.printer.lookup_object('ercf_encoder ercf_encoder')
         except:
-            raise self.config.error("Missing [ercf_encoder ercf_encoder] definition in ercf_hardware.cfg\nERCF UPGRADE requires slight modification to configuration\nPlease rename [filament_motion_sensor encoder_sensor] to [ercf_encoder ercf_encoder] in ercf_hardware.cfg and move the `encoder_pin` and `encoder_resolution` from ercf_parameters.cfg to [ercf_encoder] section of ercf_hardware.cfg")
+            raise self.config.error("Missing [ercf_encoder] definition in ercf_hardware.cfg\nDid you upgrade? Run Happy Hare './install.sh' again to fix configuration files and/or read https://github.com/moggieuk/ERCF-Software-V3")
         self.encoder_sensor.set_mode(self.enable_clog_detection)
 
         # See if we have a TMC controller capable of current control for filament collision method on gear_stepper 
@@ -473,24 +473,45 @@ class Ercf:
 
     def _load_persisted_state(self):
         self._log_debug("Loaded persisted ERCF state, level: %d" % self.persistence_level)
+        ignored_state = False
+        num_gates = len(self.selector_offsets)
         if self.persistence_level >= 4:
-            self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE='%s'" % (self.VARS_ERCF_TOOL_TO_GATE_MAP, self.tool_to_gate_map))
-            self.tool_selected = self.variables.get(self.VARS_ERCF_TOOL_SELECTED, self.tool_selected)
-            self.gate_selected = self.variables.get(self.VARS_ERCF_GATE_SELECTED, self.gate_selected)
-            if self.gate_selected >= 0:
-                offset = self.selector_offsets[self.gate_selected]
-                self.selector_stepper.do_set_position(offset)
-                self.is_homed = True
-            elif self.gate_selected == self.TOOL_BYPASS:
-                self.selector_stepper.do_set_position(self.bypass_offset)
-                self.is_homed = True
-            self.loaded_status = self.variables.get(self.VARS_ERCF_LOADED_STATUS, self.loaded_status)
+# PAUL            self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE='%s'" % (self.VARS_ERCF_TOOL_TO_GATE_MAP, self.tool_to_gate_map))
+            tool_selected = self.variables.get(self.VARS_ERCF_TOOL_SELECTED, self.tool_selected)
+            gate_selected = self.variables.get(self.VARS_ERCF_GATE_SELECTED, self.gate_selected)
+            if gate_selected < num_gates and tool_selected < num_gates:
+                self.tool_selected = tool_selected
+                self.gate_selected = gate_selected
+                if self.gate_selected >= 0:
+                    offset = self.selector_offsets[self.gate_selected]
+                    self.selector_stepper.do_set_position(offset)
+                    self.is_homed = True
+                elif self.gate_selected == self.TOOL_BYPASS:
+                    self.selector_stepper.do_set_position(self.bypass_offset)
+                    self.is_homed = True
+                self.loaded_status = self.variables.get(self.VARS_ERCF_LOADED_STATUS, self.loaded_status)
+            else:
+                ignored_state = True
         if self.persistence_level >= 3:
-            self.gate_status = self.variables.get(self.VARS_ERCF_GATE_STATUS, self.gate_status)
+            gate_status = self.variables.get(self.VARS_ERCF_GATE_STATUS, self.gate_status)
+            if len(gate_status) == num_gates:
+                self.gate_status = gate_status
+            else:
+                ignored_state = True
         if self.persistence_level >= 2:
-            self.tool_to_gate_map = self.variables.get(self.VARS_ERCF_TOOL_TO_GATE_MAP, self.tool_to_gate_map)
+            tool_to_gate_map = self.variables.get(self.VARS_ERCF_TOOL_TO_GATE_MAP, self.tool_to_gate_map)
+            if len(tool_to_gate_map) == num_gates:
+                self.tool_to_gate_map = tool_to_gate_map
+            else:
+                ignored_state = True
         if self.persistence_level >= 1:
-            self.endless_spool_groups = self.variables.get(self.VARS_ERCF_ENDLESS_SPOOL_GROUPS, self.endless_spool_groups)
+            endless_spool_groups = self.variables.get(self.VARS_ERCF_ENDLESS_SPOOL_GROUPS, self.endless_spool_groups)
+            if len(endless_spool_groups) == num_gates:
+                self.endless_spool_groups = endless_spool_groups
+            else:
+                ignored_state = True
+        if ignored_state:
+            self._log_info("Warning: Some persisted state was ignored because it contained errors")
 
         swap_stats = self.variables.get(self.VARS_ERCF_SWAP_STATISTICS, {})
         if swap_stats != {}:
@@ -508,9 +529,11 @@ class Ercf:
             self.queue_listener.stop()
 
     def handle_ready(self):
-        self.printer.register_event_handler("idle_timeout:printing", self._handle_idle_timeout_printing)
-        self.printer.register_event_handler("idle_timeout:ready", self._handle_idle_timeout_ready)
-        self.printer.register_event_handler("idle_timeout:idle", self._handle_idle_timeout_idle)
+# PAUL vv don't need these anymore
+#        self.printer.register_event_handler("idle_timeout:printing", self._handle_idle_timeout_printing)
+#        self.printer.register_event_handler("idle_timeout:ready", self._handle_idle_timeout_ready)
+#        self.printer.register_event_handler("idle_timeout:idle", self._handle_idle_timeout_idle)
+# PAUL ^^
         self._setup_heater_off_reactor()
         self.saved_toolhead_position = False
 
@@ -1022,7 +1045,7 @@ class Ercf:
                 self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%.1f" % (self.VARS_ERCF_CALIB_REF, average_reference))
                 self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s%d VALUE=1.0" % (self.VARS_ERCF_CALIB_PREFIX, 0))
                 self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=3" % self.VARS_ERCF_CALIB_VERSION)
-                self.encoder_sensor.set_calibration_clog_length(spring_based_detection_length)
+                self.encoder_sensor.set_clog_detection_length(spring_based_detection_length)
             else:
                 self._log_always("All %d attempts at homing failed. ERCF needs some adjustments!" % repeats)
         except ErcfError as ee:
@@ -1229,20 +1252,20 @@ class Ercf:
         return self.reactor.NEVER
 
 # PAUL vvv may not need these in ercf.py anymore
-    def _handle_idle_timeout_printing(self, eventtime):
-        if not self.is_enabled: return
-        self._log_trace("Processing idle_timeout Printing event")
-        self._enable_encoder_sensor()
-
-    def _handle_idle_timeout_ready(self, eventtime):
-        if not self.is_enabled: return
-        self._log_trace("Processing idle_timeout Ready event")
-        self._disable_encoder_sensor()
-
-    def _handle_idle_timeout_idle(self, eventtime):
-        if not self.is_enabled: return
-        self._log_trace("Processing idle_timeout Idle event")
-        self._disable_encoder_sensor()
+#    def _handle_idle_timeout_printing(self, eventtime):
+#        if not self.is_enabled: return
+#        self._log_trace("Processing idle_timeout Printing event")
+#        self._enable_encoder_sensor()
+#
+#    def _handle_idle_timeout_ready(self, eventtime):
+#        if not self.is_enabled: return
+#        self._log_trace("Processing idle_timeout Ready event")
+#        self._disable_encoder_sensor()
+#
+#    def _handle_idle_timeout_idle(self, eventtime):
+#        if not self.is_enabled: return
+#        self._log_trace("Processing idle_timeout Idle event")
+#        self._disable_encoder_sensor()
 # PAUL ^^^ may not need these in ercf.py anymore
 
     def _pause(self, reason, force_in_print=False):
@@ -1312,17 +1335,17 @@ class Ercf:
         self.saved_toolhead_position = False
 
     def _disable_encoder_sensor(self):
-        if self.encoder_sensor.enabled:
+        if self.encoder_sensor.is_enabled():
             self._log_debug("Disabled encoder sensor")
-            self.encoder_sensor.enabled = False
+            self.encoder_sensor.disable()
             return True
         return False
 
     def _enable_encoder_sensor(self, restore=False):
         if restore or self._is_in_print():
-            if not self.encoder_sensor.enabled:
+            if not self.encoder_sensor.is_enabled():
                 self._log_debug("Enabled encoder sensor")
-                self.encoder_sensor.enabled = True
+                self.encoder_sensor.enable()
 
     def _has_toolhead_sensor(self):
         return self.toolhead_sensor != None and self.toolhead_sensor.runout_helper.sensor_enabled
@@ -1816,7 +1839,7 @@ class Ercf:
         measured_movement = self.encoder_sensor.get_distance() - initial_encoder_position
         total_delta = self.home_position_to_nozzle - measured_movement
         self._log_debug("Total measured movement: %.1fmm, total delta: %.1fmm" % (measured_movement, total_delta))
-        tolerance = max(self.encoder_sensor.get_calibration_clog_length(), self.home_position_to_nozzle * 0.50)
+        tolerance = max(self.encoder_sensor.get_clog_detection_length(), self.home_position_to_nozzle * 0.50)
         if total_delta > tolerance:
             msg = "Move to nozzle failed (encoder not sensing sufficient movement). Extruder may not have picked up filament or filament did not home correctly"
             if not self.ignore_extruder_load_error:
@@ -2392,6 +2415,7 @@ class Ercf:
     # Not a user facing command - used in automatic wrapper
     cmd_ERCF_RESUME_help = "Wrapper around default RESUME macro"
     def cmd_ERCF_RESUME(self, gcmd):
+        # PAUL TODO. Somewhere in here sanity check the LOADED_STATUS - user could have messed it up
         if not self.is_enabled:
             self.gcode.run_script_from_command("__RESUME") # User defined or Klipper default
             return
@@ -2613,10 +2637,13 @@ class Ercf:
         self.nozzle_unload_speed = gcmd.get_float('NOZZLE_UNLOAD_SPEED', self.nozzle_unload_speed, minval=1., maxval=100)
         self.z_hop_height = gcmd.get_float('Z_HOP_HEIGHT', self.z_hop_height, minval=0.)
         self.z_hop_speed = gcmd.get_float('Z_HOP_SPEED', self.z_hop_speed, minval=1.)
+        self.log_level = gcmd.get_int('LOG_LEVEL', self.log_level, minval=0, maxval=4)
         self.log_visual = gcmd.get_int('LOG_VISUAL', self.log_visual, minval=0, maxval=2)
+        self.enable_clog_detection = gcmd.get_int('ENABLE_CLOG_DETECTION', self.enable_clog_detection, minval=0, maxval=2)
+        self.enable_endless_spool = gcmd.get_int('ENABLE_ENDLESS_SPOOL', self.enable_endless_spool, minval=0, maxval=1)
         self.variables[self.VARS_ERCF_CALIB_REF] = gcmd.get_float('ERCF_CALIB_REF', self._get_calibration_ref(), minval=10.)
-        clog_length = gcmd.get_float('ERCF_CALIB_CLOG_LENGTH', self.encoder_sensor.get_calibration_clog_length(), minval=1., maxval=100.)
-        self.encoder_sensor.set_calibration_clog_length(clog_length)
+        clog_length = gcmd.get_float('ERCF_CALIB_CLOG_LENGTH', self.encoder_sensor.get_clog_detection_length(), minval=1., maxval=100.)
+        self.encoder_sensor.set_clog_detection_length(clog_length)
         msg = "long_moves_speed = %.1f" % self.long_moves_speed
         msg += "\nshort_moves_speed = %.1f" % self.short_moves_speed
         msg += "\nhome_to_extruder = %d" % self.home_to_extruder
@@ -2640,7 +2667,10 @@ class Ercf:
         msg += "\nnozzle_unload_speed = %.1f" % self.nozzle_unload_speed
         msg += "\nz_hop_height = %.1f" % self.z_hop_height
         msg += "\nz_hop_speed = %.1f" % self.z_hop_speed
+        msg += "\nlog_level = %d" % self.log_level
         msg += "\nlog_visual = %d" % self.log_visual
+        msg += "\nenable_clog_detection = %d" % self.enable_clog_detection
+        msg += "\nenable_endless_spool = %d" % self.enable_endless_spool
         msg += "\nercf_calib_ref = %.1f" % self.variables[self.VARS_ERCF_CALIB_REF]
         msg += "\nercf_calib_clog_length = %.1f" % clog_length
         self._log_info(msg)
