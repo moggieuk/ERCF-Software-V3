@@ -70,6 +70,8 @@ class ErcfError(Exception):
 
 # Main ERCF klipper module
 class Ercf:
+    BOOT_DELAY = 3.0            # Delay before running bootup tasks
+
     LONG_MOVE_THRESHOLD = 70.   # This is also the initial move to load past encoder
     SERVO_DOWN_STATE = 1
     SERVO_UP_STATE = 0
@@ -368,6 +370,11 @@ class Ercf:
                     self.cmd_ERCF_CHECK_GATES,
                     desc = self.cmd_ERCF_CHECK_GATES_help)
 
+        # Internal functions
+        self.gcode.register_command('_ERCF_BOOT',
+                    self.cmd_ERCF_BOOT,
+                    desc = self.cmd_ERCF_BOOT_help)
+
 
     def handle_connect(self):
         # Setup background file based logging before logging any messages
@@ -560,12 +567,12 @@ class Ercf:
             if self.persistence_level >= 4:
                 self._display_visual_state()
 
-        waketime = self.reactor.monotonic() + 5.0
+        waketime = self.reactor.monotonic() + self.BOOT_DELAY
         self.reactor.register_callback(self._bootup_tasks, waketime)
 
     def _bootup_tasks(self, eventtime):
         self._log_trace("Running bootup tasks...")
-        self._servo_up()
+        self.gcode.run_script_from_command("_ERCF_BOOT") # Like this to allow user to override
 
 ####################################
 # LOGGING AND STATISTICS FUNCTIONS #
@@ -2628,7 +2635,8 @@ class Ercf:
         self.toolhead_homing_max = gcmd.get_float('TOOLHEAD_HOMING_MAX', self.toolhead_homing_max, minval=0.)
         self.toolhead_homing_step = gcmd.get_float('TOOLHEAD_HOMING_STEP', self.toolhead_homing_step, minval=0.5, maxval=5.)
         self.extruder_homing_current = gcmd.get_int('EXTRUDER_HOMING_CURRENT', self.extruder_homing_current, minval=10, maxval=100)
-        if self.extruder_homing_current == 0: self.extruder_homing_current = 100
+        if self.extruder_homing_current == 0:
+            self.extruder_homing_current = 100
         self.extruder_form_tip_current = gcmd.get_int('EXTRUDER_FORM_TIP_CURRENT', self.extruder_form_tip_current, minval=100, maxval=150)
         self.delay_servo_release = gcmd.get_float('DELAY_SERVO_RELEASE', self.delay_servo_release, minval=0., maxval=5.)
         self.sync_load_length = gcmd.get_float('SYNC_LOAD_LENGTH', self.sync_load_length, minval=0., maxval=50.)
@@ -2646,11 +2654,12 @@ class Ercf:
         self.log_level = gcmd.get_int('LOG_LEVEL', self.log_level, minval=0, maxval=4)
         self.log_visual = gcmd.get_int('LOG_VISUAL', self.log_visual, minval=0, maxval=2)
         self.enable_clog_detection = gcmd.get_int('ENABLE_CLOG_DETECTION', self.enable_clog_detection, minval=0, maxval=2)
-        self.encoder_sensor.set_mode(enable_clog_detection)
+        self.encoder_sensor.set_mode(self.enable_clog_detection)
         self.enable_endless_spool = gcmd.get_int('ENABLE_ENDLESS_SPOOL', self.enable_endless_spool, minval=0, maxval=1)
         self.variables[self.VARS_ERCF_CALIB_REF] = gcmd.get_float('ERCF_CALIB_REF', self._get_calibration_ref(), minval=10.)
         clog_length = gcmd.get_float('ERCF_CALIB_CLOG_LENGTH', self.encoder_sensor.get_clog_detection_length(), minval=1., maxval=100.)
-        self.encoder_sensor.set_clog_detection_length(clog_length)
+        if clog_length != self.encoder_sensor.get_clog_detection_length():
+            self.encoder_sensor.set_clog_detection_length(clog_length)
         msg = "long_moves_speed = %.1f" % self.long_moves_speed
         msg += "\nshort_moves_speed = %.1f" % self.short_moves_speed
         msg += "\nhome_to_extruder = %d" % self.home_to_extruder
@@ -3020,6 +3029,11 @@ class Ercf:
         finally:
             self.calibrating = False
             self._servo_up()
+
+    # Not a user facing command - used during bootup
+    cmd_ERCF_BOOT_help = "Run automatically on ERCF boot"
+    def cmd_ERCF_BOOT(self, gcmd):
+        self._servo_up()
 
 def load_config(config):
     return Ercf(config)
