@@ -238,9 +238,11 @@ upgrade_config_files() {
 
         update_encoder=$(grep -c '\encoder_pin:' ${dest_parameters} || true)
         if [ "${update_encoder}" -eq 1 ]; then
+            # These two settings have moved to ercf_hardware.cfg
             encoder_pin=$(egrep 'encoder_pin:' ${dest_parameters} | awk '{ sub("\^", "") ; print $2 }')
 	    encoder_resolution=$(egrep 'encoder_resolution:' ${dest_parameters} | awk '{ print $2 }')
-	    echo "encoder_pin=${encoder_pin}"
+
+	    # Comment out all old settings in ercf_parameters.cfg
             echo -e "${WARNING}Upgrading ${dest_parameters} to remove legacy servo and encoder settings..."
             cat ${dest_parameters} | sed -e " \
                 s/^encoder_pin:/#encoder_pin:/ ;
@@ -267,6 +269,7 @@ upgrade_config_files() {
             cp ${dest_hardware} ${dest_hardware}.servo_upgrade
         fi
 
+        # This is a little difficult to cleanly update, so try a couple of strategies
         update_encoder=$(grep -c '\[filament_motion_sensor encoder_sensor\]' ${dest_hardware}.servo_upgrade || true)
         if [ "${update_encoder}" -eq 1 ]; then
             magic_str2="# ERCF Clog detection"
@@ -277,23 +280,27 @@ upgrade_config_files() {
                 /pins:/d; \
                 /\[filament_motion_sensor encoder_sensor\]/,+6 d; \
                     " > ${dest_hardware} && rm ${dest_hardware}.servo_upgrade
-        else
-            # Encoder already upgraded or can't upgrade
-            mv ${dest_hardware}.servo_upgrade ${dest_hardware}
-        fi
 
-        cat << EOF >> ${dest_hardware}
+            # Finally add on the new encoder section
+            cat << EOF >> ${dest_hardware}
 
 ## ENCODER -----------------------------------------------------------------------------------------------------------------
 ## The encoder_resolution is determined by running the ERCF_CALIBRATE_ENCODER. Be sure to read the manual
 [ercf_encoder ercf_encoder]
 encoder_pin: ^${encoder_pin}			# EASY-BRD: ^ercf:PA6, Flytech ERB: ^ercf:gpio22
 encoder_resolution: ${encoder_resolution}		# Set AFTER 'rotation_distance' is tuned for gear stepper (see manual)
-detection_length: 10.0			# This is the default detection - it overridden during calibration with calculated length
 extruder: extruder			# The extruder to track with for runout/clog detection
-headroom: 5.0				# In automatic detection this is the runout headroom that will be maintained
+
+# These are advanced but settings for Automatic clog/runout detection mode. Make sure you understand or ask questions on Discord
+headroom: 5.0				# The runout headroom that ERCF will attempt to maintain (closest ERCF comes to triggering runout)
+calibration_length: 100			# The extrusion interval where new detection_length is calculated (also done on toolchange)
+average_samples: 4			# The "damping" effect of last measurement. Higher value means clog_length will be reduced more slowly
 
 EOF
+        else
+            # Encoder already upgraded or can't upgrade
+            mv ${dest_hardware}.servo_upgrade ${dest_hardware}
+        fi
     fi
 }
 

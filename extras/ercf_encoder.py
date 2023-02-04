@@ -27,6 +27,7 @@ class ErcfEncoder:
     VARS_ERCF_CALIB_CLOG_LENGTH = "ercf_calib_clog_length" # in ercf_vars.cfg variables because it is autotuned
 
     def __init__(self, config):
+        self.name = config.get_name().split()[-1]
         self.printer = config.get_printer()
         self.reactor = self.printer.get_reactor()
         self.gcode = self.printer.lookup_object('gcode')
@@ -44,21 +45,22 @@ class ErcfEncoder:
         self._movement = False
 
         # For clog/runout functionality
-        self.extruder_name = config.get('extruder', None) # PAUL, I could discover this and allow a hidden override?
+        self.extruder_name = config.get('extruder', None)
         self.desired_headroom = config.getfloat('headroom', 5., above=0.)
         self.average_samples = config.getint('average_samples', 4, minval=1)
-        self.next_calibration_point = self.calibration_length = config.getfloat('calibration_length', 200., above=50.)
-        self.detection_length = config.getfloat('detection_length', 8., above=5.)
+        self.next_calibration_point = self.calibration_length = config.getfloat('calibration_length', 100., minval=50.)
+        self.detection_length = config.getfloat('detection_length', 8., above=2.)
         self.event_delay = config.getfloat('event_delay', 3., above=0.)
         gcode_macro = self.printer.load_object(config, 'gcode_macro')
         self.runout_gcode = gcode_macro.load_template(config, 'runout_gcode', '_ERCF_ENCODER_RUNOUT')
-        self.insert_gcode = gcode_macro.load_template(config, 'insert_gcode', '_ERCF_ENCODER_DETECTION')
-        self._enabled = True # Additional method of enabling/disabling
+        self.insert_gcode = gcode_macro.load_template(config, 'insert_gcode', '_ERCF_ENCODER_INSERT')
+        self._enabled = True
         self.min_event_systime = self.reactor.NEVER
         self.extruder = self.estimated_print_time = None
         self.filament_detected = False
         self.detection_mode = self.RUNOUT_STATIC
         self.last_extruder_pos = 0.
+        self._logger = None
 
         # Register event handlers
         self.printer.register_event_handler('klippy:ready', self._handle_ready)
@@ -67,17 +69,9 @@ class ErcfEncoder:
         self.printer.register_event_handler('idle_timeout:ready', self._handle_not_printing)
         self.printer.register_event_handler('idle_timeout:idle', self._handle_not_printing)
 
-# PAUL vv temp
-        self.gcode.register_command('PAUL', self.cmd_PAUL)
-    def cmd_PAUL(self, gcmd):
-        mode = gcmd.get_int('MODE', 2, minval=0, maxval=2)
-        self.detection_mode = mode
-        self._update_detection_length()
-# PAUL ^^ temp
-
     def _handle_connect(self):
         self.variables = self.printer.lookup_object('save_variables').allVariables
-        self.detection_length = self.filament_runout_pos = self.min_headroom = self.get_clog_detection_length()
+        self.detection_length = self.filament_runout_pos = self.min_headroom = self.variables.get(self.VARS_ERCF_CALIB_CLOG_LENGTH, self.detection_length)
 
     def _handle_ready(self):
         self.min_event_systime = self.reactor.monotonic() + 2. # Don't process events too early
@@ -100,8 +94,7 @@ class ErcfEncoder:
 
     # Called periodically to check filament movement 
     def _extruder_pos_update_event(self, eventtime):
-#        if not self._enabled:
-#            retrun
+        if not self._enabled: return
         extruder_pos = self._get_extruder_pos(eventtime)
 
         # First lets see if we got encoder movement since last invocation
@@ -111,17 +104,23 @@ class ErcfEncoder:
 
         if extruder_pos >= self.next_calibration_point:
             if self.next_calibration_point > 0:
-                logging.info("PAUL: past calibration point. Recalibrating detection_length...")
+                logging.info("MOGGIE TEMP: past calibration point. Recalibrating detection_length...")
                 self._update_detection_length()
             self.next_calibration_point = extruder_pos + self.calibration_length
         if self.filament_runout_pos - extruder_pos < self.min_headroom:
             self.min_headroom = self.filament_runout_pos - extruder_pos
-            logging.info("PAUL: new min_headroom: %.1f" % self.min_headroom)
+            logging.info("MOGGIE TEMP: new min_headroom: %.1f" % self.min_headroom)
+            if self._logger:
+                if self.mode == self.RUNOUT_AUTOMATIC:
+                    self._logger("Automatic clog detection: new min_headroom: %.1f" % self.min_headroom)
+                elif self.mode == self.RUNOUT_STATIC:
+                    self._logger("Warning: Only %.1fmm of headroom to clog/runout" % self.min_headroom)
         self._handle_filament_event(extruder_pos < self.filament_runout_pos)
         self.last_extruder_pos = extruder_pos
         return eventtime + self.CHECK_MOVEMENT_TIMEOUT
 
     def _reset_filament_runout_params(self, eventtime=None):
+        logging.info("MOGGIE TEMP: _reset_filament_runout_params")
         if eventtime is None:
             eventtime = self.reactor.monotonic()
         self.last_extruder_pos = self._get_extruder_pos(eventtime)
@@ -129,54 +128,53 @@ class ErcfEncoder:
         self.min_headroom = self.detection_length
 
     # Called periodically to tune the clog detection length
-    def _update_detection_length(self):
-#        if not self._enabled:
-#            retrun
-        logging.info("PAUL: trace... _update_detection_length mode=%d, min_headroom=%.1f, headroom=%.1f" % (self.detection_mode, self.min_headroom, self.desired_headroom))
+    def _update_detection_length(self, increase_only=False):
+        if not self._enabled: return
+        logging.info("MOGGIE TEMP: trace... _update_detection_length mode=%d, increase_only=%s, min_headroom=%.1f, headroom=%.1f" % (self.detection_mode, increase_only, self.min_headroom, self.desired_headroom))
+        logging.info("MOGGIE TEMP: Status: %s" % self.get_status(0))
         if self.detection_mode != self.RUNOUT_AUTOMATIC:
             return
         current_detection_length = self.detection_length
-        logging.info("PAUL: current_detection_length=%.1f" % current_detection_length)
         if self.min_headroom < self.desired_headroom:
             # Maintain headroom
             self.detection_length += (self.desired_headroom - self.min_headroom)
-            logging.info("PAUL: maintaining headroom by adding %.1f to detection_length" % (self.desired_headroom - self.min_headroom))
-        else:
+            logging.info("MOGGIE TEMP: maintaining headroom by adding %.1f to detection_length, new detection_length=%.1f" % ((self.desired_headroom - self.min_headroom), self.detection_length))
+        elif not increase_only:
             # Average down
             sample = self.detection_length - (self.min_headroom - self.desired_headroom)
             self.detection_length = ((self.average_samples * self.detection_length) + self.desired_headroom - self.min_headroom) / self.average_samples
-            logging.info("PAUL: averaging down with %.1f sample, new_detection_length=%.1f" % (sample, self.detection_length))
+            logging.info("MOGGIE TEMP: averaging down with %.1f sample, new detection_length=%.1f" % (sample, self.detection_length))
+        else:
+            logging.info("MOGGIE TEMP: ignoring average down request")
+            return
+
         self.min_headroom = self.detection_length
-        if round(self.detection_length) != round(current_detection_length): # Persist if significant
-            logging.info("PAUL: new_detection_length=%.1f" % self.detection_length)
+        if round(self.detection_length, 1) != round(current_detection_length, 1): # Persist if significant
+            if self._logger:
+                self._logger("Automatic clog detection: reset detection_length to %.1fmm" % self.min_headroom)
             self.set_clog_detection_length(self.detection_length)
-# PAUL TODO
-# IF real runout detected, then detection_length is (kept same | increased a little)?
-# if kept same we might not get out of repetative trap of failing quickly.
-# so better to increase by a little on each failure (IF automatic)
 
     # Called to see if state update requires callback notification
     def _handle_filament_event(self, filament_detected):
         if self.filament_detected == filament_detected:
             return
         self.filament_detected = filament_detected
-        logging.info("PAUL: RUNOUT EVENT filament_detected: %s **************************************************************" % filament_detected)
+        logging.info("MOGGIE TEMP: RUNOUT EVENT filament_detected: %s **************************************************************" % filament_detected)
         eventtime = self.reactor.monotonic()
         if eventtime < self.min_event_systime or self.detection_mode == self.RUNOUT_DISABLED or not self._enabled:
-            # PAUL later add some debug logic here to see if we are called when disabled
             return
         is_printing = self.printer.lookup_object("idle_timeout").get_status(eventtime)["state"] == "Printing"
         if filament_detected:
             if not is_printing and self.insert_gcode is not None:
                 # Insert detected
                 self.min_event_systime = self.reactor.NEVER
-                logging.info("Filament Sensor %s: insert event detected, Time %.2f" % (self.name, eventtime))
+                logging.info("Encoder Sensor %s: insert event detected, Time %.2f" % (self.name, eventtime))
                 self.reactor.register_callback(self._insert_event_handler)
         else:
             if is_printing and self.runout_gcode is not None:
                 # Runout detected
                 self.min_event_systime = self.reactor.NEVER
-                logging.info("Filament Sensor %s: runout event detected, Time %.2f" % (self.name, eventtime))
+                logging.info("Encoder Sensor %s: runout event detected, Time %.2f" % (self.name, eventtime))
                 self.reactor.register_callback(self._runout_event_handler)
 
     def _runout_event_handler(self, eventtime):
@@ -193,23 +191,27 @@ class ErcfEncoder:
         self.min_event_systime = self.reactor.monotonic() + self.event_delay
 
     def get_clog_detection_length(self):
-        return max(self.variables.get(self.VARS_ERCF_CALIB_CLOG_LENGTH, self.detection_length), 5.) # Min 5mmm
+        return self.detection_length
 
     def set_clog_detection_length(self, clog_length):
-        clog_length = max(clog_length, 5.)
-        self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%.1f" % (self.VARS_ERCF_CALIB_CLOG_LENGTH, clog_length))
+        clog_length = max(clog_length, 2.)
         self.detection_length = clog_length
-        logging.info("PAUL: Clog detection length changed (and persisted) to %d mm" % round(clog_length))
+        self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%.1f" % (self.VARS_ERCF_CALIB_CLOG_LENGTH, clog_length))
+        logging.info("MOGGIE TEMP: Clog detection length changed (and persisted) as %.1f mm" % round(clog_length, 1))
         self._reset_filament_runout_params()
 
     def set_mode(self, mode):
         self.detection_mode = mode
+
+    def set_logger(self, log):
+        self._logger = log
 
     def enable(self):
         self._reset_filament_runout_params()
         self._enabled = True
 
     def disable(self):
+        self._update_detection_length(increase_only=True)
         self._enabled = False
 
     def is_enabled(self):

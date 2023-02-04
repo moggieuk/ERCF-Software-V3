@@ -352,9 +352,9 @@ class Ercf:
         self.gcode.register_command('_ERCF_ENCODER_RUNOUT',
                     self.cmd_ERCF_ENCODER_RUNOUT,
                     desc = self.cmd_ERCF_ENCODER_RUNOUT_help)
-        self.gcode.register_command('_ERCF_ENCODER_DETECTION',
-                    self.cmd_ERCF_ENCODER_DETECTION,
-                    desc = self.cmd_ERCF_ENCODER_DETECTION_help)
+        self.gcode.register_command('_ERCF_ENCODER_INSERT',
+                    self.cmd_ERCF_ENCODER_INSERT,
+                    desc = self.cmd_ERCF_ENCODER_INSERT_help)
         self.gcode.register_command('ERCF_DISPLAY_TTG_MAP',
                     self.cmd_ERCF_DISPLAY_TTG_MAP,
                     desc = self.cmd_ERCF_DISPLAY_TTG_MAP_help)
@@ -437,6 +437,7 @@ class Ercf:
             self.encoder_sensor = self.printer.lookup_object('ercf_encoder ercf_encoder')
         except:
             raise self.config.error("Missing [ercf_encoder] definition in ercf_hardware.cfg\nDid you upgrade? Run Happy Hare './install.sh' again to fix configuration files and/or read https://github.com/moggieuk/ERCF-Software-V3")
+        self.encoder_sensor.set_logger(self._log_debug)
         self.encoder_sensor.set_mode(self.enable_clog_detection)
 
         # See if we have a TMC controller capable of current control for filament collision method on gear_stepper 
@@ -476,7 +477,6 @@ class Ercf:
         ignored_state = False
         num_gates = len(self.selector_offsets)
         if self.persistence_level >= 4:
-# PAUL            self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE='%s'" % (self.VARS_ERCF_TOOL_TO_GATE_MAP, self.tool_to_gate_map))
             tool_selected = self.variables.get(self.VARS_ERCF_TOOL_SELECTED, self.tool_selected)
             gate_selected = self.variables.get(self.VARS_ERCF_GATE_SELECTED, self.gate_selected)
             if gate_selected < num_gates and tool_selected < num_gates:
@@ -529,11 +529,9 @@ class Ercf:
             self.queue_listener.stop()
 
     def handle_ready(self):
-# PAUL vv don't need these anymore
-#        self.printer.register_event_handler("idle_timeout:printing", self._handle_idle_timeout_printing)
-#        self.printer.register_event_handler("idle_timeout:ready", self._handle_idle_timeout_ready)
-#        self.printer.register_event_handler("idle_timeout:idle", self._handle_idle_timeout_idle)
-# PAUL ^^
+        self.printer.register_event_handler("idle_timeout:printing", self._handle_idle_timeout_printing)
+        self.printer.register_event_handler("idle_timeout:ready", self._handle_idle_timeout_ready)
+        self.printer.register_event_handler("idle_timeout:idle", self._handle_idle_timeout_idle)
         self._setup_heater_off_reactor()
         self.saved_toolhead_position = False
 
@@ -561,12 +559,13 @@ class Ercf:
             self._log_always(self._tool_to_gate_map_to_human_string(self.startup_status == 1))
             if self.persistence_level >= 4:
                 self._display_visual_state()
-#        self._servo_up()
-#        timer = self.reactor.register_timer(self._bootup_tasks)
-#
-#    def _bootup_tasks(self, eventtime):
-#        self.reactor.update_timer(timer, self.reactor.NOW) # Enabled
 
+        waketime = self.reactor.monotonic() + 5.0
+        self.reactor.register_callback(self._bootup_tasks, waketime)
+
+    def _bootup_tasks(self, eventtime):
+        self._log_trace("Running bootup tasks...")
+        self._servo_up()
 
 ####################################
 # LOGGING AND STATISTICS FUNCTIONS #
@@ -1040,7 +1039,7 @@ class Ercf:
                 spring_based_detection_length = spring_max * 3.0 # Theoretically this would be double the spring, but this provides safety margin
                 msg = "Recommended calibration reference is %.1fmm" % average_reference
                 if self.enable_clog_detection:
-                    msg += "Clog detection length set to: %.1fmm" % spring_based_detection_length
+                    msg += ". Clog detection length set to: %.1fmm" % spring_based_detection_length
                 self._log_always(msg)
                 self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%.1f" % (self.VARS_ERCF_CALIB_REF, average_reference))
                 self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s%d VALUE=1.0" % (self.VARS_ERCF_CALIB_PREFIX, 0))
@@ -1243,7 +1242,6 @@ class Ercf:
 ########################
 
     def _setup_heater_off_reactor(self):
-        self.reactor = self.printer.get_reactor()
         self.heater_off_handler = self.reactor.register_timer(self._handle_pause_timeout, self.reactor.NEVER)
 
     def _handle_pause_timeout(self, eventtime):
@@ -1251,22 +1249,20 @@ class Ercf:
         self.gcode.run_script_from_command("M104 S0")
         return self.reactor.NEVER
 
-# PAUL vvv may not need these in ercf.py anymore
-#    def _handle_idle_timeout_printing(self, eventtime):
-#        if not self.is_enabled: return
-#        self._log_trace("Processing idle_timeout Printing event")
-#        self._enable_encoder_sensor()
-#
-#    def _handle_idle_timeout_ready(self, eventtime):
-#        if not self.is_enabled: return
-#        self._log_trace("Processing idle_timeout Ready event")
-#        self._disable_encoder_sensor()
-#
-#    def _handle_idle_timeout_idle(self, eventtime):
-#        if not self.is_enabled: return
-#        self._log_trace("Processing idle_timeout Idle event")
-#        self._disable_encoder_sensor()
-# PAUL ^^^ may not need these in ercf.py anymore
+    def _handle_idle_timeout_printing(self, eventtime):
+        if not self.is_enabled: return
+        #self._log_trace("Processing idle_timeout Printing event")
+        self._enable_encoder_sensor()
+
+    def _handle_idle_timeout_ready(self, eventtime):
+        if not self.is_enabled: return
+        #self._log_trace("Processing idle_timeout Ready event")
+        self._disable_encoder_sensor()
+
+    def _handle_idle_timeout_idle(self, eventtime):
+        if not self.is_enabled: return
+        #self._log_trace("Processing idle_timeout Idle event")
+        self._disable_encoder_sensor()
 
     def _pause(self, reason, force_in_print=False):
         run_pause = False
@@ -1336,7 +1332,7 @@ class Ercf:
 
     def _disable_encoder_sensor(self):
         if self.encoder_sensor.is_enabled():
-            self._log_debug("Disabled encoder sensor")
+            self._log_debug("Disabled encoder sensor. Status: %s" % self.encoder_sensor.get_status(0))
             self.encoder_sensor.disable()
             return True
         return False
@@ -1344,8 +1340,8 @@ class Ercf:
     def _enable_encoder_sensor(self, restore=False):
         if restore or self._is_in_print():
             if not self.encoder_sensor.is_enabled():
-                self._log_debug("Enabled encoder sensor")
                 self.encoder_sensor.enable()
+                self._log_debug("Enabled encoder sensor. Status: %s" % self.encoder_sensor.get_status(0))
 
     def _has_toolhead_sensor(self):
         return self.toolhead_sensor != None and self.toolhead_sensor.runout_helper.sensor_enabled
@@ -2415,7 +2411,6 @@ class Ercf:
     # Not a user facing command - used in automatic wrapper
     cmd_ERCF_RESUME_help = "Wrapper around default RESUME macro"
     def cmd_ERCF_RESUME(self, gcmd):
-        # PAUL TODO. Somewhere in here sanity check the LOADED_STATUS - user could have messed it up
         if not self.is_enabled:
             self.gcode.run_script_from_command("__RESUME") # User defined or Klipper default
             return
@@ -2423,11 +2418,22 @@ class Ercf:
         if self.is_paused:
             self._log_always("You can't resume the print without unlocking the ERCF first")
             return
+
+        # Sanity check we are ready to go
+        if self.loaded_status != self.LOADED_STATUS_LOADED:
+            if self._check_toolhead_sensor() == 1:
+                self._set_loaded_status(self.LOADED_STATUS_FULL, silent=True)
+                self._log_always("Automatically set filament state to LOADED based on toolhead sensor")
+            else:
+                self._log_always("State does not indicate flament is LOADED.  Please run `ERCF_RECOVER LOADED=1` first")
+                return
+
         self._set_above_min_temp(max(self.paused_extruder_temp, self.min_temp_extruder))
         self.gcode.run_script_from_command("__RESUME")
         self._restore_toolhead_position()
         self.encoder_sensor.reset_counts()    # Encoder 0000
         self._enable_encoder_sensor(True)
+        # Continue printing...
 
     # Not a user facing command - used in automatic wrapper
     cmd_ERCF_CANCEL_PRINT_help = "Wrapper around default CANCEL_PRINT macro"
@@ -2640,6 +2646,7 @@ class Ercf:
         self.log_level = gcmd.get_int('LOG_LEVEL', self.log_level, minval=0, maxval=4)
         self.log_visual = gcmd.get_int('LOG_VISUAL', self.log_visual, minval=0, maxval=2)
         self.enable_clog_detection = gcmd.get_int('ENABLE_CLOG_DETECTION', self.enable_clog_detection, minval=0, maxval=2)
+        self.encoder_sensor.set_mode(enable_clog_detection)
         self.enable_endless_spool = gcmd.get_int('ENABLE_ENDLESS_SPOOL', self.enable_endless_spool, minval=0, maxval=1)
         self.variables[self.VARS_ERCF_CALIB_REF] = gcmd.get_float('ERCF_CALIB_REF', self._get_calibration_ref(), minval=10.)
         clog_length = gcmd.get_float('ERCF_CALIB_CLOG_LENGTH', self.encoder_sensor.get_clog_detection_length(), minval=1., maxval=100.)
@@ -2686,7 +2693,7 @@ class Ercf:
             raise ErcfError("Filament runout or clog on an unknown or bypass tool - manual intervention is required")
 
         self._log_info("Issue on tool T%d" % self.tool_selected)
-        self._disable_encoder_sensor() # Precaution to avoid duplicate firing during EndlessSpool
+        self._disable_encoder_sensor()
         self._save_toolhead_position_and_lift()
 
         # Check for clog by looking for filament in the encoder
@@ -2831,8 +2838,8 @@ class Ercf:
         except ErcfError as ee:
             self._pause(str(ee))
 
-    cmd_ERCF_ENCODER_DETECTION_help = "Internal encoder filament detection handler"
-    def cmd_ERCF_ENCODER_DETECTION(self, gcmd):
+    cmd_ERCF_ENCODER_INSERT_help = "Internal encoder filament detection handler"
+    def cmd_ERCF_ENCODER_INSERT(self, gcmd):
         if self._check_is_disabled(): return
         self._log_debug("Filament insertion not implemented yet! Check back later")
 # Future feature :-)
