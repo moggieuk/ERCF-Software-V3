@@ -70,7 +70,7 @@ class ErcfError(Exception):
 
 # Main ERCF klipper module
 class Ercf:
-    BOOT_DELAY = 3.0            # Delay before running bootup tasks
+    BOOT_DELAY = 1.0            # Delay before running bootup tasks
 
     LONG_MOVE_THRESHOLD = 70.   # This is also the initial move to load past encoder
     SERVO_DOWN_STATE = 1
@@ -370,11 +370,6 @@ class Ercf:
                     self.cmd_ERCF_CHECK_GATES,
                     desc = self.cmd_ERCF_CHECK_GATES_help)
 
-        # Internal functions
-        self.gcode.register_command('_ERCF_BOOT',
-                    self.cmd_ERCF_BOOT,
-                    desc = self.cmd_ERCF_BOOT_help)
-
 
     def handle_connect(self):
         # Setup background file based logging before logging any messages
@@ -533,7 +528,7 @@ class Ercf:
             self.gate_statistics[gate] = self.variables.get("%s%d" % (self.VARS_ERCF_GATE_STATISTICS_PREFIX, gate), self.EMPTY_GATE_STATS.copy())
 
     def handle_disconnect(self):
-        self._log_always('ERCF Shutdown')
+        self._log_debug('ERCF Shutdown')
         if self.queue_listener != None:
             self.queue_listener.stop()
 
@@ -562,19 +557,17 @@ class Ercf:
         except Exception as e:
             self._log_always('Warning: Error trying to wrap RESUME macro: %s' % str(e))
 
-        self._log_always('(\_/)\n( *,*)\n(")_(") ERCF Ready')
-        self._load_persisted_state()
-        if self.startup_status > 0:
-            self._log_always(self._tool_to_gate_map_to_human_string(self.startup_status == 1))
-            if self.persistence_level >= 4:
-                self._display_visual_state()
-
         waketime = self.reactor.monotonic() + self.BOOT_DELAY
         self.reactor.register_callback(self._bootup_tasks, waketime)
 
     def _bootup_tasks(self, eventtime):
-        self._log_trace("Running bootup tasks...")
-        self.gcode.run_script_from_command("_ERCF_BOOT") # Like this to allow user to override
+        self._load_persisted_state()
+        self._log_always('(\_/)\n( *,*)\n(")_(") ERCF Ready')
+        if self.startup_status > 0:
+            self._log_always(self._tool_to_gate_map_to_human_string(self.startup_status == 1))
+            if self.persistence_level >= 4:
+                self._display_visual_state()
+        self._servo_up
 
 ####################################
 # LOGGING AND STATISTICS FUNCTIONS #
@@ -3035,11 +3028,6 @@ class Ercf:
         finally:
             self.calibrating = False
             self._servo_up()
-
-    # Not a user facing command - used during bootup
-    cmd_ERCF_BOOT_help = "Run automatically on ERCF boot"
-    def cmd_ERCF_BOOT(self, gcmd):
-        self._servo_up()
 
 def load_config(config):
     return Ercf(config)
