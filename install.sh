@@ -292,8 +292,7 @@ encoder_resolution: ${encoder_resolution}		# Set AFTER 'rotation_distance' is tu
 extruder: extruder			# The extruder to track with for runout/clog detection
 
 # These are advanced but settings for Automatic clog/runout detection mode. Make sure you understand or ask questions on Discord
-headroom: 5.0				# The runout headroom that ERCF will attempt to maintain (closest ERCF comes to triggering runout)
-calibration_length: 200			# The extrusion interval where new detection_length is calculated (also done on toolchange)
+desired_headroom: 5.0				# The runout headroom that ERCF will attempt to maintain (closest ERCF comes to triggering runout)
 average_samples: 4			# The "damping" effect of last measurement. Higher value means clog_length will be reduced more slowly
 
 EOF

@@ -1046,15 +1046,15 @@ class Ercf:
     
             if successes > 0:
                 average_reference = reference_sum / successes
-                spring_based_detection_length = spring_max * 3.0 # Theoretically this would be double the spring, but this provides safety margin
+                detection_length = (average_reference * 2) / 100 + spring_max # 2% of bowden length plus spring seems to be good starting point
                 msg = "Recommended calibration reference is %.1fmm" % average_reference
                 if self.enable_clog_detection:
-                    msg += ". Clog detection length set to: %.1fmm" % spring_based_detection_length
+                    msg += ". Clog detection length set to: %.1fmm" % detection_length
                 self._log_always(msg)
                 self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%.1f" % (self.VARS_ERCF_CALIB_REF, average_reference))
                 self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s%d VALUE=1.0" % (self.VARS_ERCF_CALIB_PREFIX, 0))
                 self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=3" % self.VARS_ERCF_CALIB_VERSION)
-                self.encoder_sensor.set_clog_detection_length(spring_based_detection_length)
+                self.encoder_sensor.set_clog_detection_length(detection_length)
             else:
                 self._log_always("All %d attempts at homing failed. ERCF needs some adjustments!" % repeats)
         except ErcfError as ee:
@@ -1340,9 +1340,11 @@ class Ercf:
             self.gcode.run_script_from_command("RESTORE_GCODE_STATE NAME=ERCF_state MOVE=1 MOVE_SPEED=%.1f" % self.z_hop_speed)
         self.saved_toolhead_position = False
 
-    def _disable_encoder_sensor(self):
+    def _disable_encoder_sensor(self, update_clog_detection_length=False):
         if self.encoder_sensor.is_enabled():
             self._log_debug("Disabled encoder sensor. Status: %s" % self.encoder_sensor.get_status(0))
+            if update_clog_detection_length:
+                self.encoder_sensor.update_clog_detection_length()
             self.encoder_sensor.disable()
             return True
         return False
@@ -2359,7 +2361,7 @@ class Ercf:
             self._log_info("Unknown filament position, recovering state...")
             self._recover_loaded_state()
         try:
-            restore_encoder = self._disable_encoder_sensor() # Don't want runout accidently triggering during tool change
+            restore_encoder = self._disable_encoder_sensor(update_clog_detection_length=True) # Don't want runout accidently triggering during tool change
             self._change_tool(tool, skip_tip)
             self._enable_encoder_sensor(restore_encoder)
         except ErcfError as ee:
@@ -2705,7 +2707,6 @@ class Ercf:
             raise ErcfError("Filament runout or clog on an unknown or bypass tool - manual intervention is required")
 
         self._log_info("Issue on tool T%d" % self.tool_selected)
-        self._disable_encoder_sensor()
         self._save_toolhead_position_and_lift()
 
         # Check for clog by looking for filament in the encoder
@@ -2714,9 +2715,11 @@ class Ercf:
         found = self._buzz_gear_motor()
         self._servo_up()
         if found and not force_runout:
+            self._disable_encoder_sensor(update_clog_detection_length=True)
             raise ErcfError("A clog has been detected and requires manual intervention")
 
         # We have a filament runout
+        self._disable_encoder_sensor()
         self._log_always("A runout has been detected")
         if self.enable_endless_spool:
             group = self.endless_spool_groups[self.gate_selected]
