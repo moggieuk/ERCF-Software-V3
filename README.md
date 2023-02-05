@@ -201,8 +201,9 @@ This is much simplier than loading. The toolhead sensor, if installed, will auto
 ERCF can use its encoder to detect filament runout or clog conditions. This functionality is enabled with the `enable_clog_detection` in ercf_parameters.cfg. It works by monitoring how much filament the extruder is pushing and comparing it that measured by the encoder.  If the extruder ever gets ahead by more that the calibrated `clog_detection_length` the runout/clog detection logic is triggered.  If it is determined to be a clog, the printer will pause in the usual manner and require `ERCF_UNLOCK` & `RESUME` to continue.  If a runout and endless spool is enabled the tool with be remaped and printing will automatically continue.
 
 Setting this value to `1` enables clog detection employing the static clog detection length.  Setting it to `2` will enable automatic adjustment of the detection length. Whilst this doesn't guarantee you won't get a false trigger it will contiually tune until false triggers not longer occur.  The automatic algorithm is controlled by two variables in the `[ercf_encoder]` section:
- > desired_headroom: 5.0		# The runout headroom that ERCF will attempt to maintain (closest ERCF comes to triggering runout)
- > average_samples: 4		# The "damping" effect of last measurement. Higher value means clog_length will be reduced more slowly
+
+    desired_headroom: 5.0		# The runout headroom that ERCF will attempt to maintain (closest ERCF comes to triggering runout)
+    average_samples: 4		# The "damping" effect of last measurement. Higher value means clog_length will be reduced more slowly
 
 ### Tool-to-Gate (TTG) mapping and EndlessSpool application
 When changing a tool with the `Tx` command the ERCF will by default select the filament at the gate (spool) of the same number.  The mapping built into this *Happy Hare* driver allows you to modify that.  There are 3 primary use cases for this feature:
