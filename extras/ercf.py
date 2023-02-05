@@ -489,6 +489,7 @@ class Ercf:
             if gate_selected < num_gates and tool_selected < num_gates:
                 self.tool_selected = tool_selected
                 self.gate_selected = gate_selected
+
                 if self.gate_selected >= 0:
                     offset = self.selector_offsets[self.gate_selected]
                     self.selector_stepper.do_set_position(offset)
@@ -496,9 +497,10 @@ class Ercf:
                 elif self.gate_selected == self.TOOL_BYPASS:
                     self.selector_stepper.do_set_position(self.bypass_offset)
                     self.is_homed = True
-                self.loaded_status = self.variables.get(self.VARS_ERCF_LOADED_STATUS, self.loaded_status)
             else:
                 ignored_state = True
+            if gate_selected != self.GATE_UNKNOWN and tool_selected != self.TOOL_UNKNOWN:
+                self.loaded_status = self.variables.get(self.VARS_ERCF_LOADED_STATUS, self.loaded_status)
         if self.persistence_level >= 3:
             gate_status = self.variables.get(self.VARS_ERCF_GATE_STATUS, self.gate_status)
             if len(gate_status) == num_gates:
@@ -883,6 +885,7 @@ class Ercf:
             msg += ". Tip forming current is %d%%" % self.extruder_form_tip_current
             msg += "\nSelector homing is %s - blocked gate detection and recovery %s possible" % (("sensorless", "may be") if self.sensorless_selector else ("microswitch", "is not"))
             msg += "\nClog detection is %s" % ("AUTOMATIC" if self.enable_clog_detection == self.encoder_sensor.RUNOUT_AUTOMATIC else "ENABLED" if self.enable_clog_detection == self.encoder_sensor.RUNOUT_STATIC else "DISABLED")
+            msg += " (%.1fmm runout)" % self.encoder_sensor.get_clog_detection_length()
             msg += " and EndlessSpool is %s" % ("ENABLED" if self.enable_endless_spool else "DISABLED")
             p = self.persistence_level
             msg += ", %s state is persisted across restarts" % ("All" if p == 4 else "Gate status & TTG map & EndlessSpool groups" if p == 3 else "TTG map & EndlessSpool groups" if p == 2 else "EndlessSpool groups" if p == 1 else "No")
@@ -2427,7 +2430,7 @@ class Ercf:
             return
 
         # Sanity check we are ready to go
-        if self.loaded_status != self.LOADED_STATUS_LOADED:
+        if self.loaded_status != self.LOADED_STATUS_FULL:
             if self._check_toolhead_sensor() == 1:
                 self._set_loaded_status(self.LOADED_STATUS_FULL, silent=True)
                 self._log_always("Automatically set filament state to LOADED based on toolhead sensor")
@@ -2698,7 +2701,7 @@ class Ercf:
 
     def _handle_runout(self, force_runout):
         if self._check_is_paused(): return
-        if self.tool_selected < 0 or self.loaded_status != self.LOADED_STATUS_FULL:
+        if self.tool_selected < 0:
             raise ErcfError("Filament runout or clog on an unknown or bypass tool - manual intervention is required")
 
         self._log_info("Issue on tool T%d" % self.tool_selected)

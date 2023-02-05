@@ -110,10 +110,10 @@ class ErcfEncoder:
         if self.filament_runout_pos - extruder_pos < self.min_headroom:
             self.min_headroom = self.filament_runout_pos - extruder_pos
             logging.info("MOGGIE TEMP: new min_headroom: %.1f" % self.min_headroom)
-            if self._logger:
-                if self.mode == self.RUNOUT_AUTOMATIC:
+            if self._logger and self.min_headroom < self.desired_headroom:
+                if self.detection_mode == self.RUNOUT_AUTOMATIC:
                     self._logger("Automatic clog detection: new min_headroom: %.1f" % self.min_headroom)
-                elif self.mode == self.RUNOUT_STATIC:
+                elif self.detection_mode == self.RUNOUT_STATIC:
                     self._logger("Warning: Only %.1fmm of headroom to clog/runout" % self.min_headroom)
         self._handle_filament_event(extruder_pos < self.filament_runout_pos)
         self.last_extruder_pos = extruder_pos
@@ -137,8 +137,9 @@ class ErcfEncoder:
         current_detection_length = self.detection_length
         if self.min_headroom < self.desired_headroom:
             # Maintain headroom
-            self.detection_length += (self.desired_headroom - self.min_headroom)
-            logging.info("MOGGIE TEMP: maintaining headroom by adding %.1f to detection_length, new detection_length=%.1f" % ((self.desired_headroom - self.min_headroom), self.detection_length))
+            extra_length = min((self.desired_headroom - self.min_headroom), self.desired_headroom)
+            self.detection_length += extra_length
+            logging.info("MOGGIE TEMP: maintaining headroom by adding %.1f to detection_length, new detection_length=%.1f" % (extra_length, self.detection_length))
         elif not increase_only:
             # Average down
             sample = self.detection_length - (self.min_headroom - self.desired_headroom)

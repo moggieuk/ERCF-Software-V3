@@ -78,6 +78,8 @@ The configuration and setup of your ERCF using Happy Hare is 95% the same as doc
 <li> v1.1.8 - Enhanced ERCF_CHECK_GATES command; better configuraton of tip forming; Workarounds to Timer Too Close errors on selector; Fined grained current reduction control; less conservative restting of filament state; servo remains up on failed load; fixes typos and spelling mistakes. Full details here: https://discord.com/channels/460117602945990666/909743915475816458/1058586768791838791
 <li> v1.1.9 - Installer support for the Fytsec ERB Burrows board; Inclusion of display setup for 12864 mini displays; Bug fixes
 <li> v1.2.0 - Major new feature for being able to persist all ERCF state between restarts - now you can just turn on an print!; Various bug fixes, error message and status display improvements. SOME ADDITIONS TO `ercf_parameters.cfg` CONFIG FILE
+<li> v1.2.1 - MAJOR: Bundled servo driver with careful PWM synchronization to avoid servo kickback!!! (Requires re-running ./install.sh)
+<li> v1.2.2 - Automatic clog length setting. No more [filament_runout_sensor] or [duplicate_pin] setup (Required re-running ./install.sh)
 </ul>
 
 ## Summary of new commands (See the [command reference](#ercf-command-reference) for  options)
@@ -194,6 +196,10 @@ Regardless of loading settings above it is important to accurately set `home_to_
 #### Possible unloading options:
 This is much simplier than loading. The toolhead sensor, if installed, will automatically be leveraged as a checkpoint when extracting from the extruder.
 `sync_unload_length` controls the mm of synchronized movement at start of bowden unloading.  This can make unloading more reliable if the tip is caught in the gears and will act as what Ette refers to as a "hair pulling" step on unload.  This is an optional step, set to 0 to disable.
+
+### Clog/runout detection
+ERCF can use its encoder to detect filament runout or clog conditions. This functionality is enabled with the `enable_clog_detection` in ercf_parameters.cfg. It works by monitoring how much filament the extruder is pushing and comparing it that measured by the encoder.  If the extruder ever gets ahead by more that the calibrated `clog_detection_length` TODO finished me
+Setting this value to `1` causes ERCF to take action when 
 
 ### Tool-to-Gate (TTG) mapping and EndlessSpool application
 When changing a tool with the `Tx` command the ERCF will by default select the filament at the gate (spool) of the same number.  The mapping built into this *Happy Hare* driver allows you to modify that.  There are 3 primary use cases for this feature:

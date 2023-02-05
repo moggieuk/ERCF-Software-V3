@@ -293,7 +293,7 @@ extruder: extruder			# The extruder to track with for runout/clog detection
 
 # These are advanced but settings for Automatic clog/runout detection mode. Make sure you understand or ask questions on Discord
 headroom: 5.0				# The runout headroom that ERCF will attempt to maintain (closest ERCF comes to triggering runout)
-calibration_length: 100			# The extrusion interval where new detection_length is calculated (also done on toolchange)
+calibration_length: 200			# The extrusion interval where new detection_length is calculated (also done on toolchange)
 average_samples: 4			# The "damping" effect of last measurement. Higher value means clog_length will be reduced more slowly
 
 EOF
@@ -511,7 +511,7 @@ if [ "${INSTALL_TEMPLATES}" -eq 1 ]; then
     case $yn in
         y)
             clog_detection=1
-	    echo -e "${PROMPT}    Would you like ERCF to automatically adjust clog detection length (time saver)?${INPUT}"
+	    echo -e "${PROMPT}    Would you like ERCF to automatically adjust clog detection length (recommended)?${INPUT}"
             yn=$(prompt_yn "    Automatic")
             if [ "${yn}" == "y" ]; then
                 clog_detection=2
@@ -531,7 +531,7 @@ if [ "${INSTALL_TEMPLATES}" -eq 1 ]; then
             if [ "${clog_detection}" -eq 0 ]; then
                 echo
                 echo -e "${WARNING}    NOTE: I've re-enabled clog detection which is necessary for EndlessSpool to function"
-                clog_detection=1
+                clog_detection=2
             fi
             ;;
         n)
