@@ -174,7 +174,7 @@ class Ercf:
         # Options
         self.homing_method = config.getint('homing_method', 0, minval=0, maxval=1)
         self.sensorless_selector = config.getint('sensorless_selector', 0, minval=0, maxval=1)
-        self.enable_clog_detection = config.getint('enable_clog_detection', 1, minval=0, maxval=2)
+        self.enable_clog_detection = config.getint('enable_clog_detection', 2, minval=0, maxval=2)
         self.enable_endless_spool = config.getint('enable_endless_spool', 0, minval=0, maxval=1)
         self.default_endless_spool_groups = list(config.getintlist('endless_spool_groups', []))
         self.default_tool_to_gate_map = list(config.getintlist('tool_to_gate_map', []))
@@ -187,9 +187,6 @@ class Ercf:
         self.log_statistics = config.getint('log_statistics', 0, minval=0, maxval=1)
         self.log_visual = config.getint('log_visual', 1, minval=0, maxval=2)
         self.startup_status = config.getint('startup_status', 0, minval=0, maxval=2)
-
-        if self.enable_endless_spool == 1 and self.enable_clog_detection == 0:
-            raise self.config.error("EndlessSpool mode requires clog detection to be enabled")
 
         # The following lists are the defaults and may be overriden by values in ercf_vars.cfg
         if len(self.default_endless_spool_groups) > 0:
@@ -351,10 +348,10 @@ class Ercf:
                     desc = self.cmd_ERCF_TEST_CONFIG_help)
 
         # Runout, TTG and Endless spool
-        self.gcode.register_command('_ERCF_ENCODER_RUNOUT',
+        self.gcode.register_command('ERCF_ENCODER_RUNOUT',
                     self.cmd_ERCF_ENCODER_RUNOUT,
                     desc = self.cmd_ERCF_ENCODER_RUNOUT_help)
-        self.gcode.register_command('_ERCF_ENCODER_INSERT',
+        self.gcode.register_command('ERCF_ENCODER_INSERT',
                     self.cmd_ERCF_ENCODER_INSERT,
                     desc = self.cmd_ERCF_ENCODER_INSERT_help)
         self.gcode.register_command('ERCF_DISPLAY_TTG_MAP',
@@ -453,6 +450,9 @@ class Ercf:
             self.extruder_tmc = self.printer.lookup_object('tmc2209 extruder')
         except:
             self._log_debug("TMC2209 driver not found for extruder, cannot use current increase for tip forming move")
+
+        if self.enable_endless_spool == 1 and self.enable_clog_detection == 0:
+            self._log_info("Warning: EndlessSpool mode requires clog detection to be enabled")
 
         self.ref_step_dist=self.gear_stepper.steppers[0].get_step_dist()
         self.variables = self.printer.lookup_object('save_variables').allVariables
@@ -557,11 +557,11 @@ class Ercf:
         except Exception as e:
             self._log_always('Warning: Error trying to wrap RESUME macro: %s' % str(e))
 
+        self._load_persisted_state()
         waketime = self.reactor.monotonic() + self.BOOT_DELAY
         self.reactor.register_callback(self._bootup_tasks, waketime)
 
     def _bootup_tasks(self, eventtime):
-        self._load_persisted_state()
         self._log_always('(\_/)\n( *,*)\n(")_(") ERCF Ready')
         if self.startup_status > 0:
             self._log_always(self._tool_to_gate_map_to_human_string(self.startup_status == 1))
@@ -2720,16 +2720,14 @@ class Ercf:
             num_gates = len(self.selector_offsets)
             self._set_gate_status(self.gate_selected, self.GATE_EMPTY) # Indicate current gate is empty
             next_gate = -1
-            check = self.gate_selected + 1
             checked_gates = []
-            while check != self.gate_selected:
-                check = check % num_gates
+            for i in range(num_gates - 1):
+                check = (self.gate_selected + i + 1) % num_gates
                 if self.endless_spool_groups[check] == group:
                     checked_gates.append(check)
                     if self.gate_status[check] != self.GATE_EMPTY:
                         next_gate = check
                         break
-                check += 1
             if next_gate == -1:
                 self._log_info("No more available spools found in Group_%d - manual intervention is required" % self.endless_spool_groups[self.tool_selected])
                 self._log_info(self._tool_to_gate_map_to_human_string())

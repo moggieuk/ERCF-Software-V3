@@ -213,7 +213,8 @@ class ErcfEncoder:
         self._update_detection_length()
 
     def set_mode(self, mode):
-        self.detection_mode = mode
+        if mode >= self.RUNOUT_DISABLED and mode <= self.RUNOUT_AUTOMATIC:
+            self.detection_mode = mode
 
     def set_logger(self, log):
         self._logger = log
