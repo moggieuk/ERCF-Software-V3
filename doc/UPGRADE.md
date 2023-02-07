@@ -71,4 +71,7 @@ Finally remove the section that looks like this from `ercf_parameters.cfg`
     encoder_pin: ^ercf:PA6           # EASY-BRD: ^ercf:PA6, Flytech ERB: ^ercf:gpio22
     encoder_resolution: 1.339226     # Set AFTER 'rotation_distance' is tuned for gear stepper (see manual)
 
+And note that `enable_clog_detection` now has 3 possible values (2 is recommended):
+
+    enable_clog_detection: 2         # 0 = disable, 1 = static length clog detection, 2 = automatic length clog detection
 
