@@ -367,6 +367,40 @@ class Ercf:
                     self.cmd_ERCF_CHECK_GATES,
                     desc = self.cmd_ERCF_CHECK_GATES_help)
 
+# PAUL vvv
+        self.gcode.register_command('PAUL', self.cmd_PAUL)
+        self.gcode.register_command('PAUL2', self.cmd_PAUL2)
+    def cmd_PAUL(self, gcmd):
+        repeat = gcmd.get_int('REPEAT', 10)
+        try:
+            for i in range(repeat):
+                self._log_always("Homing...")
+                self._home_selector()
+                for j in range(3):
+                    if randint(0, len(self.selector_offsets)-1) < 5:
+                        self._select_tool(0)
+                    while True:
+                        tool = randint(0, len(self.selector_offsets)-1)
+                        if tool != self.tool_selected: break
+                    self._select_tool(tool)
+        except ErcfError as ee:
+            self._log_info("Exception: %s" % str(ee))
+    def cmd_PAUL2(self, gcmd):
+        repeat = gcmd.get_int('REPEAT', 10)
+        for i in range(repeat):
+            self._log_always("Homing...")
+            self._home_selector()
+            self._log_always("Tool 5...")
+            self._select_tool(5)
+            self._log_always("Bypass...")
+            try:
+                self._select_bypass()
+            except ErcfError as ee:
+                self._log_always("Exception: %s" % str(ee))
+            self._log_always("Tool 5...")
+            self._select_tool(5)
+# PAUL ^^^
+
 
     def handle_connect(self):
         # Setup background file based logging before logging any messages
@@ -1223,15 +1257,25 @@ class Ercf:
             init_position = self.selector_stepper.get_position()[0]
             init_mcu_pos = self.selector_stepper.steppers[0].get_mcu_position()
             self.selector_stepper.do_set_position(0.)
-            self._selector_stepper_move_wait(-move_length, speed=60, homing_move=2)
+            found_home = False
+            try:
+                self._selector_stepper_move_wait(-move_length, speed=60, homing_move=1)
+                if self.sensorless_selector == 1:
+                    found_home = self._check_selector_endstop()
+                else:
+                    found_home = True
+            except Exception as e:
+                # Home definitely not found
+                pass
             mcu_position = self.selector_stepper.steppers[0].get_mcu_position()
             traveled = abs(mcu_position - init_mcu_pos) * selector_steps
 
             # Test we actually homed, if not we didn't move far enough
-            if not self._check_selector_endstop():
-                self._log_always("Selector didn't find home position. Are you sure you selected the correct gate?")
+            if not found_home:
+                self._log_always("Selector didn't find home position. Are you sure you selected the correct tool/gate?")
             else:
                 self._log_always("Selector position = %.1fmm" % traveled)
+                # TODO this could be persisted automatically in ercf_vars.cfg (and override defaults in params)
         except ErcfError as ee:
             self._pause(str(ee))
         finally:
@@ -2112,27 +2156,37 @@ class Ercf:
         self._log_debug("Moving up to %.1fmm to home a %d channel ERCF" % (selector_length, num_channels))
         self.toolhead.wait_moves()
         if self.sensorless_selector == 1:
-            self.selector_stepper.do_set_position(0.)
-            self._selector_stepper_move_wait(2)                             # Ensure some bump space
-            self.selector_stepper.do_set_position(0.)
-            self._selector_stepper_move_wait(-selector_length, speed=75, homing_move=2)
+            try:
+                self.selector_stepper.do_set_position(0.)
+                self._selector_stepper_move_wait(2)                             # Ensure some bump space
+                self.selector_stepper.do_set_position(0.)
+                self._selector_stepper_move_wait(-selector_length, speed=75, homing_move=1)
+                self.is_homed = self._check_selector_endstop()
+                if not self.is_homed:
+                    self._set_tool_selected(self.TOOL_UNKNOWN)
+                    raise ErcfError("Homing selector failed because of blockage")
+            except Exception as e:
+                # Error, stallguard didn't trigger
+                raise ErcfError("Homing selector failed because error (perhaps stallguard setup)")
         else:
-            self.selector_stepper.do_set_position(0.)
-            self._selector_stepper_move_wait(-selector_length, speed=100, homing_move=2)   # Fast homing move
-            self.selector_stepper.do_set_position(0.)
-            self._selector_stepper_move_wait(5, False)                      # Ensure some bump space
-            self.selector_stepper.do_set_position(0.)
-            self._selector_stepper_move_wait(-10, speed=10, homing_move=2)  # Slower more accurate homing move
-
-        self.is_homed = self._check_selector_endstop()
-        if not self.is_homed:
-            self._set_tool_selected(self.TOOL_UNKNOWN)
-            raise ErcfError("Homing selector failed because of blockage or error")
+            try:
+                self.selector_stepper.do_set_position(0.)
+                self._selector_stepper_move_wait(-selector_length, speed=100, homing_move=1)   # Fast homing move
+                self.selector_stepper.do_set_position(0.)
+                self._selector_stepper_move_wait(5, False)                      # Ensure some bump space
+                self.selector_stepper.do_set_position(0.)
+                self._selector_stepper_move_wait(-10, speed=10, homing_move=1)  # Slower more accurate homing move
+                self.is_homed = True
+            except Exception as e:
+                # Homing failed
+                self._set_tool_selected(self.TOOL_UNKNOWN)
+                raise ErcfError("Homing selector failed because of blockage")
         self.selector_stepper.do_set_position(0.)
 
     # Give Klipper several chances to give the right answer
     # No idea what's going on with Klipper but it can give erroneous not TRIGGERED readings
     # (perhaps because of bounce in switch or message delays) so this is a workaround
+    # TODO: check if this is still required after homing logic change
     def _check_selector_endstop(self):
         homed = False
         for i in range(4):

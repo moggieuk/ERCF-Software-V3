@@ -126,7 +126,6 @@ class ErcfEncoder:
         return eventtime + self.CHECK_MOVEMENT_TIMEOUT
 
     def _reset_filament_runout_params(self, eventtime=None):
-        logging.info("MOGGIE TEMP: _reset_filament_runout_params")
         if eventtime is None:
             eventtime = self.reactor.monotonic()
         self.last_extruder_pos = self._get_extruder_pos(eventtime)
@@ -146,14 +145,15 @@ class ErcfEncoder:
             # Maintain headroom
             extra_length = min((self.desired_headroom - self.min_headroom), self.desired_headroom)
             self.detection_length += extra_length
-            logging.info("MOGGIE TEMP: maintaining headroom by adding %.1f to detection_length, new detection_length=%.1f" % (extra_length, self.detection_length))
+            if self._logger:
+                self._logger("Automatic clog detection: maintaining headroom by adding %.1fmm to detection_length" % extra_length)
         elif not increase_only:
             # Average down
             sample = self.detection_length - (self.min_headroom - self.desired_headroom)
             self.detection_length = ((self.average_samples * self.detection_length) + self.desired_headroom - self.min_headroom) / self.average_samples
-            logging.info("MOGGIE TEMP: averaging down with %.1f sample, new detection_length=%.1f" % (sample, self.detection_length))
+            if self._logger:
+                self._logger("Automatic clog detection: averaging down detection_length with new %.1fmm measurement" % sample)
         else:
-            logging.info("MOGGIE TEMP: ignoring average down request")
             return
 
         self.min_headroom = self.detection_length
@@ -206,7 +206,6 @@ class ErcfEncoder:
         clog_length = max(clog_length, 2.)
         self.detection_length = clog_length
         self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%.1f" % (self.VARS_ERCF_CALIB_CLOG_LENGTH, clog_length))
-        logging.info("MOGGIE TEMP: Clog detection length changed (and persisted) as %.1f mm" % round(clog_length, 1))
         self._reset_filament_runout_params()
 
     def update_clog_detection_length(self):
