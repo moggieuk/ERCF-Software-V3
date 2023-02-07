@@ -81,6 +81,7 @@ The configuration and setup of your ERCF using Happy Hare is 95% the same as doc
 <li> v1.2.1 - MAJOR: Bundled servo driver with careful PWM synchronization to avoid servo kickback!!! (Requires re-running ./install.sh)
 <li> v1.2.2 - Automatic clog length setting. No more [filament_runout_sensor] or [duplicate_pin] setup (Required re-running ./install.sh)
 </ul>
+Note: versions v1.2.0 and later required the running of ./install.sh.  See [update notes](doc/UPGRADE.md) for more information
 
 ## Summary of new commands (See the [command reference](#ercf-command-reference) for  options)
   | Commmand | Description |

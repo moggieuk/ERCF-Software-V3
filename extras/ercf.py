@@ -73,6 +73,7 @@ class Ercf:
     BOOT_DELAY = 1.0            # Delay before running bootup tasks
 
     LONG_MOVE_THRESHOLD = 70.   # This is also the initial move to load past encoder
+    ENCODER_MIN = 0.7           # The threshold (mm) that determines real encoder movement (ignore erroneous pulse)
     SERVO_DOWN_STATE = 1
     SERVO_UP_STATE = 0
     SERVO_UNKNOWN_STATE = -1
@@ -366,40 +367,6 @@ class Ercf:
         self.gcode.register_command('ERCF_CHECK_GATES',
                     self.cmd_ERCF_CHECK_GATES,
                     desc = self.cmd_ERCF_CHECK_GATES_help)
-
-# PAUL vvv
-        self.gcode.register_command('PAUL', self.cmd_PAUL)
-        self.gcode.register_command('PAUL2', self.cmd_PAUL2)
-    def cmd_PAUL(self, gcmd):
-        repeat = gcmd.get_int('REPEAT', 10)
-        try:
-            for i in range(repeat):
-                self._log_always("Homing...")
-                self._home_selector()
-                for j in range(3):
-                    if randint(0, len(self.selector_offsets)-1) < 5:
-                        self._select_tool(0)
-                    while True:
-                        tool = randint(0, len(self.selector_offsets)-1)
-                        if tool != self.tool_selected: break
-                    self._select_tool(tool)
-        except ErcfError as ee:
-            self._log_info("Exception: %s" % str(ee))
-    def cmd_PAUL2(self, gcmd):
-        repeat = gcmd.get_int('REPEAT', 10)
-        for i in range(repeat):
-            self._log_always("Homing...")
-            self._home_selector()
-            self._log_always("Tool 5...")
-            self._select_tool(5)
-            self._log_always("Bypass...")
-            try:
-                self._select_bypass()
-            except ErcfError as ee:
-                self._log_always("Exception: %s" % str(ee))
-            self._log_always("Tool 5...")
-            self._select_tool(5)
-# PAUL ^^^
 
 
     def handle_connect(self):
@@ -1619,7 +1586,7 @@ class Ercf:
         delta = self.encoder_sensor.get_distance() - initial_encoder_position
         self._log_trace("After buzzing gear motor, encoder moved %.2f" % delta)
         self.encoder_sensor.set_distance(initial_encoder_position)
-        return delta > 0.0
+        return delta > self.ENCODER_MIN
 
     # Check for filament in encoder by wiggling ERCF gear stepper and looking for movement on encoder
     def _check_filament_in_encoder(self):
@@ -2125,7 +2092,7 @@ class Ercf:
         if self.extruder_tmc and self.extruder_form_tip_current > 100:
             self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=extruder CURRENT=%.2f" % extruder_run_current)
 
-        return delta > 0.0
+        return delta > self.ENCODER_MIN
 
 
 #################################################
@@ -2157,8 +2124,6 @@ class Ercf:
         self.toolhead.wait_moves()
         if self.sensorless_selector == 1:
             try:
-                self.selector_stepper.do_set_position(0.)
-                self._selector_stepper_move_wait(2)                             # Ensure some bump space
                 self.selector_stepper.do_set_position(0.)
                 self._selector_stepper_move_wait(-selector_length, speed=75, homing_move=1)
                 self.is_homed = self._check_selector_endstop()
@@ -3010,7 +2975,7 @@ class Ercf:
                     self._log_info("Gate #%d - filament detected. Marked available" % gate)
                 self._set_gate_status(gate, self.GATE_AVAILABLE)
                 try:
-                    if encoder_moved > 0:
+                    if encoder_moved > self.ENCODER_MIN:
                         self._unload_encoder(self.unload_buffer)
                     else:
                         self._set_loaded_status(self.LOADED_STATUS_UNLOADED, silent=True)
