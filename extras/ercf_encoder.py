@@ -110,12 +110,10 @@ class ErcfEncoder:
 
             if extruder_pos >= self.next_calibration_point:
                 if self.next_calibration_point > 0:
-                    logging.info("MOGGIE TEMP: past calibration point. Recalibrating detection_length...")
                     self._update_detection_length()
                 self.next_calibration_point = extruder_pos + self.calibration_length
             if self.filament_runout_pos - extruder_pos < self.min_headroom:
                 self.min_headroom = self.filament_runout_pos - extruder_pos
-                logging.info("MOGGIE TEMP: new min_headroom: %.1f" % self.min_headroom)
                 if self._logger and self.min_headroom < self.desired_headroom:
                     if self.detection_mode == self.RUNOUT_AUTOMATIC:
                         self._logger("Automatic clog detection: new min_headroom (< %.1fmm desired): %.1fmm" % (self.desired_headroom, self.min_headroom))
@@ -136,8 +134,6 @@ class ErcfEncoder:
     # Called periodically to tune the clog detection length
     def _update_detection_length(self, increase_only=False):
         if not self._enabled: return
-        logging.info("MOGGIE TEMP: trace... _update_detection_length mode=%d, increase_only=%s, min_headroom=%.1f, headroom=%.1f" % (self.detection_mode, increase_only, self.min_headroom, self.desired_headroom))
-        logging.info("MOGGIE TEMP: Status: %s" % self.get_status(0))
         if self.detection_mode != self.RUNOUT_AUTOMATIC:
             return
         current_detection_length = self.detection_length
@@ -168,7 +164,6 @@ class ErcfEncoder:
         if self.filament_detected == filament_detected:
             return
         self.filament_detected = filament_detected
-        logging.info("MOGGIE TEMP: RUNOUT EVENT filament_detected: %s **************************************************************" % filament_detected)
         eventtime = self.reactor.monotonic()
         if eventtime < self.min_event_systime or self.detection_mode == self.RUNOUT_DISABLED or not self._enabled:
             return

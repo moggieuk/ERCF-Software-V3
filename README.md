@@ -15,6 +15,8 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 <li>No need to do anything custom in your existing macros
 <li>Moonraker update-manager support
 <li>Complete persitance of state and statistics across restarts!
+<li>Reliable servo operation - no more "kickback" problems
+<li>Integrated encoder driver that implements filament measurement and automatic clog detection
 </ul>
 
 ## Other features:
@@ -24,9 +26,8 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 <li>Workaround to some of the ways to provoke Klipper “Timer too close” errors (although there are definitely bugs in the Klipper firmware)
 <li>Measures “spring” in filament after extruder homing for more accurate calibration reference
 <li>Adds servo_up delay making the gear to extruder transition of filament more reliable (maintains pressure)
-<li>New "TEST" commands to help diagnose issues with encoder
-<li>Logic to use stallguard filament homing (Caveat: not easy to setup using EASY-BRD and not compatible with sensorless selector homing option)
-<li>The clog detection runout distance is now set based on measurements of the filament "spring" i.e. the maximum the extruder can move before encoder sees it.
+<li>New "TEST_TRACKING" commands to help diagnose issues with encoder
+<li>Experimental logic to use stallguard filament homing (Caveat: not easy to setup using EASY-BRD and not compatible with sensorless selector homing option)
 </ul>
   
 ## Other benefits of the code rewrite:
@@ -34,7 +35,7 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 <li>Vastly increased error detection/checking of supplied parameters and configurations
 <li>Consistent handling of errors. E.g. use exceptions to avoid multiple calls to "pause"
 <li>Wrapping of all stepper movements to facilitate “DEVELOPER” logging level and easier debugging
-<li>Renewed load and unload sequences (to support all build configurations) and effectively combine the sensor and sensorless logic
+<li>New load and unload sequences (to support all build configurations) and effectively combine the sensor and sensorless logic
 </ul>
   
 ## Installation
@@ -61,7 +62,7 @@ Pro tip: If you are concerned about running `install.sh -i` then run like this: 
 Also be sure to read my [notes on Encoder problems](doc/ENCODER.md) - the better the encoder the better this software will work.
 <br>
 
-The configuration and setup of your ERCF using Happy Hare is 95% the same as documented in the [newer V2 Manual](https://github.com/EtteGit/EnragedRabbitProject/raw/no_toolhead_sensor/Documentation/ERCF_Manual.pdf).  Be sure to read this README and the installed 'ercf_*.cfg' to understand any differences.
+The configuration and setup of your ERCF using Happy Hare is 95% the same as documented in the [newer V2 Manual](https://github.com/EtteGit/EnragedRabbitProject/raw/no_toolhead_sensor/Documentation/ERCF_Manual.pdf).  Be sure to read this README and the installed 'ercf_*.cfg' files to understand any difference.  Read a [SUMMARY OF DIFFERENCES](doc/DIFFERENCES.md) here.
   
 ## Revision History
 <ul>

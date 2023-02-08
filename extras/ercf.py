@@ -2407,7 +2407,6 @@ class Ercf:
         if self._check_not_bypass(): return
         try:
             self._load_extruder(True)
-            self._set_loaded_status(self.LOADED_STATUS_FULL)
         except ErcfError as ee:
             self._set_loaded_status(self.LOADED_STATUS_UNKNOWN)
             self._pause(str(ee))
@@ -2421,6 +2420,7 @@ class Ercf:
             if self._form_tip_standalone():
                 self._unload_extruder()
             self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
+            self._log_always("Please pull the filament out clear of the ERCF selector")
         except ErcfError as ee:
             self._pause(str(ee))
 
