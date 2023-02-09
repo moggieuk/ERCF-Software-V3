@@ -1938,17 +1938,19 @@ class Ercf:
         toolhead_sensor_state = self._check_toolhead_sensor()
         if toolhead_sensor_state == -1:     # Not installed
             if self._check_filament_in_encoder():
+                # Definitely now just in extruder
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
             else:
+                # No movement means we can safely assume we are somewhere in the bowden
                 self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
         elif toolhead_sensor_state == 1:    # Filament detected in toolhead
             self._set_loaded_status(self.LOADED_STATUS_FULL)
         else:                               # Filament not detected in toolhead
             if self._check_filament_in_encoder():
-                if not self._check_filament_stuck_in_extruder():
-                    self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN) # This prevents fast unload move
-                else:
+                if self._check_filament_stuck_in_extruder():
                     self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
+                else:
+                    self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN) # This prevents fast unload move
             else:
                 self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
 
@@ -2015,8 +2017,7 @@ class Ercf:
                 delta = self._trace_filament_move("Unload", -initial_move, speed=self.sync_unload_speed, motor="gear", track=True)
 
             if delta > max(initial_move * 0.2, 1): # 20% slippage
-                self._log_always("Error unloading filament - not enough detected at encoder. Suspect servo not properly down")
-                self._log_always("Adjusting 'extra_servo_dwell_down' may help. Retrying...")
+                self._log_always("Error unloading filament - not enough detected at encoder. Suspect servo not properly down. Retrying...")
                 self._track_gate_statistics('servo_retries', self.gate_selected)
                 self._servo_up()
                 self._servo_down()
