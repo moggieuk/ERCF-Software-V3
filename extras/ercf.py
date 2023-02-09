@@ -349,10 +349,10 @@ class Ercf:
                     desc = self.cmd_ERCF_TEST_CONFIG_help)
 
         # Runout, TTG and Endless spool
-        self.gcode.register_command('ERCF_ENCODER_RUNOUT',
+        self.gcode.register_command('_ERCF_ENCODER_RUNOUT',
                     self.cmd_ERCF_ENCODER_RUNOUT,
                     desc = self.cmd_ERCF_ENCODER_RUNOUT_help)
-        self.gcode.register_command('ERCF_ENCODER_INSERT',
+        self.gcode.register_command('_ERCF_ENCODER_INSERT',
                     self.cmd_ERCF_ENCODER_INSERT,
                     desc = self.cmd_ERCF_ENCODER_INSERT_help)
         self.gcode.register_command('ERCF_DISPLAY_TTG_MAP',
