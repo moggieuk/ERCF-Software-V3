@@ -1186,7 +1186,7 @@ class Ercf:
                 return
 
             resolution = dist / half_mean
-            old_result = half_mean * self.encoder_resolution
+            old_result = half_mean * self.encoder_sensor.resolution
             new_result = half_mean * resolution
 
             # Sanity check to ensure all teeth are reflecting
@@ -1198,7 +1198,7 @@ class Ercf:
             msg += "\nResulting resolution for the encoder = %.6f" % resolution
             msg += "\nAfter calibration measured length = %.6f" % new_result
             self._log_always(msg)
-            self._log_always("IMPORTANT: Don't forget to update 'encoder_resolution: %.6f' in your ercf_parameters.cfg file and restart Klipper" % resolution)
+            self._log_always("IMPORTANT: Don't forget to update 'encoder_resolution: %.6f' in your ercf_hardware.cfg file and restart Klipper" % resolution)
         except ErcfError as ee:
             self._pause(str(ee))
         finally:
