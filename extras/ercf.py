@@ -1288,22 +1288,25 @@ class Ercf:
             self.gcode.run_script_from_command("SET_IDLE_TIMEOUT TIMEOUT=%d" % self.timeout_pause)
             self.reactor.update_timer(self.heater_off_handler, self.reactor.monotonic() + self.disable_heater)
             self._save_toolhead_position_and_lift()
-            msg = "An issue with the ERCF has been detected during print and it has been locked. The print has been paused"
+            msg = "An issue with the ERCF has been detected. The print has been paused"
             reason = "Reason: %s" % reason
-            reason += "\nWhen you intervene to fix the issue, first call \'ERCF_UNLOCK\'"
+            extra = "When you intervene to fix the issue, first call \'ERCF_UNLOCK\'"
             run_pause = True
         elif self._is_in_pause():
             msg = "An issue with the ERCF has been detected whilst printer is paused"
             reason = "Reason: %s" % reason
+            extra = ""
         else:
             msg = "An issue with the ERCF has been detected whilst out of a print"
             reason = "Reason: %s" % reason
+            extra = ""
 
         self._servo_up()
-        self.gcode.respond_raw("!! %s" % msg)   # non highlighted alternative self._log_always(msg)
+        self.gcode.respond_raw("!! %s\n%s" % (msg, reason))
         if self.ercf_logger:
-            self.ercf_logger.info(msg)
-        self._log_always(reason)
+            self.ercf_logger.info("%s\n%s" % (msg, reason))
+        if extra != "":
+            self._log_always(extra)
         if run_pause:
             self.gcode.run_script_from_command("PAUSE")
 
@@ -2100,16 +2103,18 @@ class Ercf:
 # TOOL SELECTION AND SELECTOR CONTROL FUNCTIONS #
 #################################################
 
-    def _home(self, tool = -1, force_unload = False):
+    def _home(self, tool = -1, force_unload = -1):
         if self._check_in_bypass(): return
         if self._get_calibration_version() != 3:
             self._log_info("You are running an old calibration version.\nIt is strongly recommended that you rerun 'ERCF_CALIBRATE_SINGLE TOOL=0' to generate updated calibration values")
         self._log_info("Homing ERCF...")
+        if force_unload != -1:
+            self._log_debug("(asked to %s)" % ("force unload" if force_unload == 1 else "not unload"))
         if self.is_paused:
             self._log_debug("ERCF is locked, unlocking it before continuing...")
             self._unlock()
 
-        if force_unload or self.loaded_status != self.LOADED_STATUS_UNLOADED:
+        if force_unload == 1 or (force_unload == -1 and self.loaded_status != self.LOADED_STATUS_UNLOADED):
             self._unload_sequence(self._get_calibration_ref(), check_state=True)
         self._unselect_tool()
         self._home_selector()
@@ -2336,6 +2341,9 @@ class Ercf:
     cmd_ERCF_UNLOCK_help = "Unlock ERCF operations"
     def cmd_ERCF_UNLOCK(self, gcmd):        
         if self._check_is_disabled(): return
+        if not self.is_paused:
+            self._log_info("ERCF is not locked")
+            return
         self._log_info("Unlocking the ERCF")
         self._unlock()
         self._log_info("When the issue is addressed you can resume print")
@@ -2344,7 +2352,7 @@ class Ercf:
     def cmd_ERCF_HOME(self, gcmd):
         if self._check_is_disabled(): return
         tool = gcmd.get_int('TOOL', 0, minval=0, maxval=len(self.selector_offsets)-1)
-        force_unload = bool(gcmd.get_int('FORCE_UNLOAD', 0, minval=0, maxval=1))
+        force_unload = gcmd.get_int('FORCE_UNLOAD', -1, minval=0, maxval=1)
         try:
             self._home(tool, force_unload)
         except ErcfError as ee:
@@ -2840,7 +2848,7 @@ class Ercf:
             msg += "|\n"
             msg += msg_selct
             msg += "|" if self.gate_selected == len(self.selector_offsets) - 1 else "-"
-            msg += " Bypass selected" if self.gate_selected == self.TOOL_BYPASS else (" T%d" % self.tool_selected) if self.tool_selected >= 0 else ""
+            msg += " Bypass" if self.gate_selected == self.TOOL_BYPASS else (" T%d" % self.tool_selected) if self.tool_selected >= 0 else ""
         return msg
 
     def _remap_tool(self, tool, gate, available):

@@ -420,7 +420,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ------- | ----------- | ---------- |
   | ERCF_PRELOAD | Helper for filament loading. Feed filament into gate, ERCF will catch it and correctly position at the specified gate | GATE=\[0..n\] The specific gate to preload. If omitted the currently selected gate can be loaded |
   | ERCF_UNLOCK | Unlock ERCF operations after a pause caused by error condition | None |
-  | ERCF_HOME | Home the ERCF selector and optionally selects gate associated with the specified tool | TOOL=\[0..n\] After homing, select this gate as if ERCF_SELECT_GATE was called <br>FORCE_UNLOAD=\[0\|1\] ERCF will try to unload filament if it thinks it has to but this option will force it to check and attempt unload |
+  | ERCF_HOME | Home the ERCF selector and optionally selects gate associated with the specified tool | TOOL=\[0..n\] After homing, select this gate as if ERCF_SELECT_GATE was called <br>FORCE_UNLOAD=\[0\|1\] Optional. If specified will override default intelligent filament unload behavior prior to homing |
   | ERCF_SELECT_TOOL | Selects the gate associated with the specified tool | TOOL=\[0..n\] The tool to be selected (technically the gate associated with this tool will be selected) |
   | ERCF_SELECT_BYPASS | Unload and select the bypass selector position if configured | None |
   | ERCF_LOAD_BYPASS | After inserting filament to the extruder gear this will perform the extruder loading part of the load sequence - designed for bypass filament loading | None |
