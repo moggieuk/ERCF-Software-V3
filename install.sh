@@ -323,6 +323,52 @@ install_update_manager() {
     fi
 }
 
+install_klipper_screen() {
+    echo -e "${INFO}Adding KlipperScreen support for ERCF"
+    do_install=0
+    ks_config="$KLIPPER_CONFIG_HOME/KlipperScreen.conf"
+    if [ -f "${KLIPPER_CONFIG_HOME}/KlipperScreen.conf" ]; then
+        update_section=$(grep -c '# ERCF Happy Hare' \
+        ${KLIPPER_CONFIG_HOME}/KlipperScreen.conf || true)
+        if [ "${update_section}" -eq 0 ]; then
+            next_ks_config="$(nextsuffix "$ks_config")"
+            echo -e "${INFO}Pre upgrade config file ${ks_config} moved to ${next_ks_config} for reference"
+            cp ${ks_config} ${next_ks_config}
+            do_install=1
+        else
+            echo -e "${INFO}KlipperSreen ERCF menus may already exist - skipping install"
+        fi
+    else
+        echo -e "${WARNING}KlipperScreen.conf not found, will create new one"
+        touch ${KLIPPER_CONFIG_HOME}/KlipperScreen.conf
+        do_install=1
+    fi
+
+    if [ "${do_install}" -eq 1 ]; then
+        max_gate=$(expr $num_gates - 1)
+        cp ${SRCDIR}/klipper_screen/menus.conf /tmp/KlipperScreen.hh
+        cat ${KLIPPER_CONFIG_HOME}/KlipperScreen.conf >> /tmp/KlipperScreen.hh && mv /tmp/KlipperScreen.hh ${KLIPPER_CONFIG_HOME}/KlipperScreen.conf
+
+        for file in `ls ${SRCDIR}/klipper_screen/iter*.conf`; do
+            token=`basename $file .conf`
+            expanded=$(for i in {0..8..1}; do
+                cat ${SRCDIR}/klipper_screen/${token}.conf | sed -e "s/{i}/${i}/g"
+            done)
+            expanded="# Generated menus for each tool/gate..\n${expanded}"
+            awk -v r="$expanded" "{gsub(/ERCF_${token}/,r)}1" "${KLIPPER_CONFIG_HOME}/KlipperScreen.conf" > /tmp/KlipperScreen.hh && mv /tmp/KlipperScreen.hh "${KLIPPER_CONFIG_HOME}/KlipperScreen.conf"
+        done
+    fi
+
+    # Always ensure images are linked for every style
+    for style in `ls -d ${HOME}/KlipperScreen/styles/*/images`; do
+        for img in `ls ${SRCDIR}/klipper_screen/images`; do
+            ln -sf "${SRCDIR}/klipper_screen/images/${img}" "${style}/${img}"
+        done
+    done
+
+    restart_klipperscreen
+}
+
 restart_klipper() {
     echo -e "${INFO}Restarting Klipper..."
     sudo systemctl restart klipper
@@ -331,6 +377,11 @@ restart_klipper() {
 restart_moonraker() {
     echo -e "${INFO}Restarting Moonraker..."
     sudo systemctl restart moonraker
+}
+
+restart_klipperscreen() {
+    echo -e "${INFO}Restarting KlipperScreen..."
+    sudo systemctl restart KlipperScreen
 }
 
 prompt_yn() {
@@ -347,6 +398,240 @@ prompt_yn() {
 		;;
         esac
     done
+}
+
+questionaire() {
+    if [ "${INSTALL_TEMPLATES}" -eq 1 ]; then
+        echo
+        echo -e "${INFO}Let me see if I can help you with initial config (you will still have some manual config to perform)...${INPUT}"
+        echo
+        brd_type="unknown"
+        yn=$(prompt_yn "Are you using the EASY-BRD or Fysetc Burrows ERB controller?")
+        case $yn in
+            y)
+                echo -e "${INFO}Great, I can setup almost everything for you. Let's get started"
+                serial=""
+                echo
+                for line in `ls /dev/serial/by-id | egrep "Klipper_samd21|Klipper_rp2040"`; do
+                    if echo ${line} | grep --quiet "Klipper_samd21"; then
+                        brd_type="EASY-BRD"
+                    else
+                        brd_type="ERB"
+    		fi
+                    echo -e "${PROMPT}This looks like your ${EMPHASIZE}${brd_type}${PROMPT} controller serial port. Is that correct?${INPUT}"
+    		yn=$(prompt_yn "/dev/serial/by-id/${line}")
+                    case $yn in
+                        y)
+                            serial="/dev/serial/by-id/${line}"
+                            break
+                            ;;
+                        n)
+                            brd_type="unknown"
+                            ;;
+                    esac
+                done
+                if [ "${serial}" == "" ]; then
+    		echo
+                    echo -e "${PROMPT}Couldn't find your serial port, but no worries - I'll configure the default and you can manually change later${INPUT}"
+    		yn=$(prompt_yn "Setup for EASY-BRD? (Answer 'N' for Fysetc Burrows ERB)")
+                    case $yn in
+                        y)
+                            brd_type="EASY-BRD"
+                            ;;
+                        n)
+                            brd_type="ERB"
+                            ;;
+                    esac
+                    serial='/dev/ttyACM1 # Config guess. Run ls -l /dev/serial/by-id and set manually'
+    	    fi
+    
+                # PAUL TODO.. number of selectors...
+                num_selectors = 9
+    
+                echo
+                echo -e "${PROMPT}Sensorless selector operation? This allows for additional selector recovery steps but disables the 'extra' input on the EASY-BRD.${INPUT}"
+                yn=$(prompt_yn "Enable sensorless selector operation")
+                case $yn in
+                    y)
+                        if [ "${brd_type}" == "EASY-BRD" ]; then
+                            echo
+    	                echo -e "${WARNING}    IMPORTANT: Set the J6 jumper pins to 2-3 and 4-5, i.e. .[..][..]  MAKE A NOTE NOW!!"
+    		    fi
+    	            sensorless_selector=1
+                        ;;
+                    n)
+                        if [ "${brd_type}" == "EASY-BRD" ]; then
+                            echo
+    	                echo -e "${WARNING}    IMPORTANT: Set the J6 jumper pins to 1-2 and 4-5, i.e. [..].[..]  MAKE A NOTE NOW!!"
+    		    fi
+    	            sensorless_selector=0
+                        ;;
+    	    esac
+                ;;
+    
+            n)
+                easy_brd=0
+                echo -e "${INFO}Ok, I can only partially setup non EASY-BRD/ERB installations, but lets see what I can help with"
+                serial=""
+                echo
+                for line in `ls /dev/serial/by-id`; do
+                    echo -e "${PROMPT}Is this the serial port to your ERCF mcu?${INPUT}"
+    		yn=$(prompt_yn "/dev/serial/by-id/${line}")
+                    case $yn in
+                        y)
+                            serial="/dev/serial/by-id/${line}"
+                            break
+                            ;;
+                        n)
+                            ;;
+                    esac
+                done
+                if [ "${serial}" = "" ]; then
+                    echo -e "${INFO}Couldn't find your serial port, but no worries - I'll configure the default and you can manually change later as per the docs"
+                    serial='/dev/ttyACM1 # Config guess. Run ls -l /dev/serial/by-id and set manually'
+    	    fi
+    
+                echo
+                echo -e "${PROMPT}Sensorless selector operation? This allows for additional selector recovery steps${INPUT}"
+                yn=$(prompt_yn "Enable sensorless selector operation")
+                case $yn in
+                    y)
+    	            sensorless_selector=1
+                        ;;
+                    n)
+    	            sensorless_selector=0
+                        ;;
+    	    esac
+    	    ;;
+        esac
+    
+        echo
+        echo -e "${PROMPT}Do you have a toolhead sensor you would like to use? If reliable this provides the smoothest and most reliable loading and unloading operation${INPUT}"
+        yn=$(prompt_yn "Enable toolhead sensor")
+        case $yn in
+    	y)
+    	    toolhead_sensor=1
+    	    echo -e "${PROMPT}    What is the mcu pin name that your toolhead sensor is connected too?"
+    	    echo -e "${PROMPT}    If you don't know just hit return, I can enter a default and you can change later${INPUT}"
+                read -p "    Toolhead sensor pin name? " toolhead_sensor_pin
+                if [ "${toolhead_sensor_pin}" = "" ]; then
+                    toolhead_sensor_pin="{dummy_pin_must_set_me}"
+                fi
+                ;;
+            n)
+    	    toolhead_sensor=0
+                toolhead_sensor_pin="{dummy_pin_must_set_me}"
+                ;;
+        esac
+    
+        echo
+        echo -e "${PROMPT}Using default MG-90S servo? (Answer 'N' for Savox SH0255MG, you can always change it later)${INPUT}"
+        yn=$(prompt_yn "MG-90S Servo?")
+        case $yn in
+            y)
+    	    servo_up_angle=30
+    	    servo_down_angle=140
+                ;;
+            n)
+    	    servo_up_angle=140
+    	    servo_down_angle=30
+                ;;
+        esac
+    
+        echo
+        echo -e "${PROMPT}Clog detection? This uses the ERCF encoder movement to detect clogs and can call your filament runout logic${INPUT}"
+        yn=$(prompt_yn "Enable clog detection")
+        case $yn in
+            y)
+                clog_detection=1
+    	    echo -e "${PROMPT}    Would you like ERCF to automatically adjust clog detection length (recommended)?${INPUT}"
+                yn=$(prompt_yn "    Automatic")
+                if [ "${yn}" == "y" ]; then
+                    clog_detection=2
+                fi
+                ;;
+            n)
+                clog_detection=0
+                ;;
+        esac
+    
+        echo
+        echo -e "${PROMPT}EndlessSpool? This uses filament runout detection to automate switching to new spool without interruption${INPUT}"
+        yn=$(prompt_yn "Enable EndlessSpool")
+        case $yn in
+            y)
+                endless_spool=1
+                if [ "${clog_detection}" -eq 0 ]; then
+                    echo
+                    echo -e "${WARNING}    NOTE: I've re-enabled clog detection which is necessary for EndlessSpool to function"
+                    clog_detection=2
+                fi
+                ;;
+            n)
+    	    endless_spool=0
+               ;;
+        esac
+    
+        echo
+        echo -e "${PROMPT}What is the length of your reverse bowden tube in mm?"
+        echo -e "${PROMPT}(This is just to speed up calibration and needs to be approximately right but not longer than the real length)${INPUT}"
+        while true; do
+            read -p "Reverse bowden length in mm? " calibration_bowden_length
+            if ! [ "${calibration_bowden_length}" -ge 1 ] 2> /dev/null ;then
+                echo -e "${INFO}Positive integer value only"
+           else
+               break
+           fi
+        done
+    
+        echo
+        menu_12864=0
+        echo -e "${PROMPT}Finally, would you like me to include all the ERCF config files into your printer.cfg file${INPUT}"
+        yn=$(prompt_yn "Add include?")
+        case $yn in
+            y)
+                add_includes=1
+                echo -e "${PROMPT}    Would you like to include Mini 12864 menu configuration extension for ERCF${INPUT}"
+                yn=$(prompt_yn "    Include menu")
+                case $yn in
+                    y)
+                        menu_12864=1
+                        ;;
+                    n)
+            	    menu_12864=0
+                       ;;
+                esac
+                ;;
+            n)
+    	    add_includes=0
+               ;;
+        esac
+    
+        echo
+        echo -e "${INFO}"
+        echo "    vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"
+        echo
+        echo "    NOTES:"
+        echo "     What still needs to be done:"
+        if [ "${brd_type}" == "unknown" ]; then
+            echo "     * Edit *.cfg files and substitute all \{xxx\} tokens to match or setup"
+            echo "     * Review all pin configuration and change to match your mcu"
+        else
+            echo "     * Tweak motor speeds and current, especially if using non BOM motors"
+            echo "     * Adjust motor direction with '!' on pin if necessary. No way to know here"
+        fi
+        echo "     * Adjust your config for loading and unloading preferences"
+        echo "     * Adjust toolhead distances 'home_to_extruder' for your particular setup"
+        echo 
+        echo "    Advanced:"
+        echo "         * Tweak configurations like speed and distance in ercf_parameter.cfg"
+        echo 
+        echo "    Good luck! ERCF is complex to setup. Remember Discord is your friend.."
+        echo
+        echo "    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
+        echo
+    
+    fi
 }
 
 # Force script to exit if an error occurs
@@ -367,238 +652,14 @@ done
 
 verify_not_root
 verify_home_dirs
+questionaire
+# PAUL vvv Eventually move after copy_template_files
+num_gates=9
+install_klipper_screen
+exit 0
+# PAUL ^^^
 check_klipper
 link_ercf_plugin
-
-if [ "${INSTALL_TEMPLATES}" -eq 1 ]; then
-    echo
-    echo -e "${INFO}Let me see if I can help you with initial config (you will still have some manual config to perform)...${INPUT}"
-    echo
-    brd_type="unknown"
-    yn=$(prompt_yn "Are you using the EASY-BRD or Fysetc Burrows ERB controller?")
-    case $yn in
-        y)
-            echo -e "${INFO}Great, I can setup almost everything for you. Let's get started"
-            serial=""
-            echo
-            for line in `ls /dev/serial/by-id | egrep "Klipper_samd21|Klipper_rp2040"`; do
-                if echo ${line} | grep --quiet "Klipper_samd21"; then
-                    brd_type="EASY-BRD"
-                else
-                    brd_type="ERB"
-		fi
-                echo -e "${PROMPT}This looks like your ${EMPHASIZE}${brd_type}${PROMPT} controller serial port. Is that correct?${INPUT}"
-		yn=$(prompt_yn "/dev/serial/by-id/${line}")
-                case $yn in
-                    y)
-                        serial="/dev/serial/by-id/${line}"
-                        break
-                        ;;
-                    n)
-                        brd_type="unknown"
-                        ;;
-                esac
-            done
-            if [ "${serial}" == "" ]; then
-		echo
-                echo -e "${PROMPT}Couldn't find your serial port, but no worries - I'll configure the default and you can manually change later${INPUT}"
-		yn=$(prompt_yn "Setup for EASY-BRD? (Answer 'N' for Fysetc Burrows ERB)")
-                case $yn in
-                    y)
-                        brd_type="EASY-BRD"
-                        ;;
-                    n)
-                        brd_type="ERB"
-                        ;;
-                esac
-                serial='/dev/ttyACM1 # Config guess. Run ls -l /dev/serial/by-id and set manually'
-	    fi
-
-            echo
-            echo -e "${PROMPT}Sensorless selector operation? This allows for additional selector recovery steps but disables the 'extra' input on the EASY-BRD.${INPUT}"
-            yn=$(prompt_yn "Enable sensorless selector operation")
-            case $yn in
-                y)
-                    if [ "${brd_type}" == "EASY-BRD" ]; then
-                        echo
-	                echo -e "${WARNING}    IMPORTANT: Set the J6 jumper pins to 2-3 and 4-5, i.e. .[..][..]  MAKE A NOTE NOW!!"
-		    fi
-	            sensorless_selector=1
-                    ;;
-                n)
-                    if [ "${brd_type}" == "EASY-BRD" ]; then
-                        echo
-	                echo -e "${WARNING}    IMPORTANT: Set the J6 jumper pins to 1-2 and 4-5, i.e. [..].[..]  MAKE A NOTE NOW!!"
-		    fi
-	            sensorless_selector=0
-                    ;;
-	    esac
-            ;;
-
-        n)
-            easy_brd=0
-            echo -e "${INFO}Ok, I can only partially setup non EASY-BRD/ERB installations, but lets see what I can help with"
-            serial=""
-            echo
-            for line in `ls /dev/serial/by-id`; do
-                echo -e "${PROMPT}Is this the serial port to your ERCF mcu?${INPUT}"
-		yn=$(prompt_yn "/dev/serial/by-id/${line}")
-                case $yn in
-                    y)
-                        serial="/dev/serial/by-id/${line}"
-                        break
-                        ;;
-                    n)
-                        ;;
-                esac
-            done
-            if [ "${serial}" = "" ]; then
-                echo -e "${INFO}Couldn't find your serial port, but no worries - I'll configure the default and you can manually change later as per the docs"
-                serial='/dev/ttyACM1 # Config guess. Run ls -l /dev/serial/by-id and set manually'
-	    fi
-
-            echo
-            echo -e "${PROMPT}Sensorless selector operation? This allows for additional selector recovery steps${INPUT}"
-            yn=$(prompt_yn "Enable sensorless selector operation")
-            case $yn in
-                y)
-	            sensorless_selector=1
-                    ;;
-                n)
-	            sensorless_selector=0
-                    ;;
-	    esac
-	    ;;
-    esac
-
-    echo
-    echo -e "${PROMPT}Do you have a toolhead sensor you would like to use? If reliable this provides the smoothest and most reliable loading and unloading operation${INPUT}"
-    yn=$(prompt_yn "Enable toolhead sensor")
-    case $yn in
-	y)
-	    toolhead_sensor=1
-	    echo -e "${PROMPT}    What is the mcu pin name that your toolhead sensor is connected too?"
-	    echo -e "${PROMPT}    If you don't know just hit return, I can enter a default and you can change later${INPUT}"
-            read -p "    Toolhead sensor pin name? " toolhead_sensor_pin
-            if [ "${toolhead_sensor_pin}" = "" ]; then
-                toolhead_sensor_pin="{dummy_pin_must_set_me}"
-            fi
-            ;;
-        n)
-	    toolhead_sensor=0
-            toolhead_sensor_pin="{dummy_pin_must_set_me}"
-            ;;
-    esac
-
-    echo
-    echo -e "${PROMPT}Using default MG-90S servo? (Answer 'N' for Savox SH0255MG, you can always change it later)${INPUT}"
-    yn=$(prompt_yn "MG-90S Servo?")
-    case $yn in
-        y)
-	    servo_up_angle=30
-	    servo_down_angle=140
-            ;;
-        n)
-	    servo_up_angle=140
-	    servo_down_angle=30
-            ;;
-    esac
-
-    echo
-    echo -e "${PROMPT}Clog detection? This uses the ERCF encoder movement to detect clogs and can call your filament runout logic${INPUT}"
-    yn=$(prompt_yn "Enable clog detection")
-    case $yn in
-        y)
-            clog_detection=1
-	    echo -e "${PROMPT}    Would you like ERCF to automatically adjust clog detection length (recommended)?${INPUT}"
-            yn=$(prompt_yn "    Automatic")
-            if [ "${yn}" == "y" ]; then
-                clog_detection=2
-            fi
-            ;;
-        n)
-            clog_detection=0
-            ;;
-    esac
-
-    echo
-    echo -e "${PROMPT}EndlessSpool? This uses filament runout detection to automate switching to new spool without interruption${INPUT}"
-    yn=$(prompt_yn "Enable EndlessSpool")
-    case $yn in
-        y)
-            endless_spool=1
-            if [ "${clog_detection}" -eq 0 ]; then
-                echo
-                echo -e "${WARNING}    NOTE: I've re-enabled clog detection which is necessary for EndlessSpool to function"
-                clog_detection=2
-            fi
-            ;;
-        n)
-	    endless_spool=0
-           ;;
-    esac
-
-    echo
-    echo -e "${PROMPT}What is the length of your reverse bowden tube in mm?"
-    echo -e "${PROMPT}(This is just to speed up calibration and needs to be approximately right but not longer than the real length)${INPUT}"
-    while true; do
-        read -p "Reverse bowden length in mm? " calibration_bowden_length
-        if ! [ "${calibration_bowden_length}" -ge 1 ] 2> /dev/null ;then
-            echo -e "${INFO}Positive integer value only"
-       else
-           break
-       fi
-    done
-
-    echo
-    menu_12864=0
-    echo -e "${PROMPT}Finally, would you like me to include all the ERCF config files into your printer.cfg file${INPUT}"
-    yn=$(prompt_yn "Add include?")
-    case $yn in
-        y)
-            add_includes=1
-            echo -e "${PROMPT}    Would you like to include Mini 12864 menu configuration extension for ERCF${INPUT}"
-            yn=$(prompt_yn "    Include menu")
-            case $yn in
-                y)
-                    menu_12864=1
-                    ;;
-                n)
-        	    menu_12864=0
-                   ;;
-            esac
-            ;;
-        n)
-	    add_includes=0
-           ;;
-    esac
-
-    echo
-    echo -e "${INFO}"
-    echo "    vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"
-    echo
-    echo "    NOTES:"
-    echo "     What still needs to be done:"
-    if [ "${brd_type}" == "unknown" ]; then
-        echo "     * Edit *.cfg files and substitute all \{xxx\} tokens to match or setup"
-        echo "     * Review all pin configuration and change to match your mcu"
-    else
-        echo "     * Tweak motor speeds and current, especially if using non BOM motors"
-        echo "     * Adjust motor direction with '!' on pin if necessary. No way to know here"
-    fi
-    echo "     * Adjust your config for loading and unloading preferences"
-    echo "     * Adjust toolhead distances 'home_to_extruder' for your particular setup"
-    echo 
-    echo "    Advanced:"
-    echo "         * Tweak configurations like speed and distance in ercf_parameter.cfg"
-    echo 
-    echo "    Good luck! ERCF is complex to setup. Remember Discord is your friend.."
-    echo
-    echo "    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
-    echo
-
-fi
-
 copy_template_files
 install_update_manager
 restart_klipper
