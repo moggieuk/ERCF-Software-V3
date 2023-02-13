@@ -2197,7 +2197,7 @@ class Ercf:
                     self._unload_sequence(self._get_calibration_ref(), check_state=True)
                 except ErcfError as ee:
                     # Add some more context to the error and re-raise
-                    raise ErcfError("Selector recovery failed because: %s" % (tool, str(ee)))
+                    raise ErcfError("Selector recovery failed because: %s" % (str(ee)))
                 
                 # Ok, now check if selector can now reach proper target
                 self._home_selector()
