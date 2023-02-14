@@ -104,6 +104,7 @@ class Ercf:
     EXTRUDER_STALLGUARD = 1
 
     # ercf_vars.cfg variables
+    VARS_ERCF_CALIB_CLOG_LENGTH = "ercf_calib_clog_length"
     VARS_ERCF_ENDLESS_SPOOL_GROUPS = "ercf_state_endless_spool_groups"
     VARS_ERCF_TOOL_TO_GATE_MAP = "ercf_state_tool_to_gate_map"
     VARS_ERCF_GATE_STATUS = "ercf_state_gate_status"
@@ -361,9 +362,9 @@ class Ercf:
         self.gcode.register_command('ERCF_REMAP_TTG',
                     self.cmd_ERCF_REMAP_TTG,
                     desc = self.cmd_ERCF_REMAP_TTG_help)
-        self.gcode.register_command('ERCF_ENDLESS_SPOOL_GROUPS',
-                    self.cmd_ERCF_ENDLESS_SPOOL_GROUPS,
-                    desc = self.cmd_ERCF_ENDLESS_SPOOL_GROUPS_help)
+        self.gcode.register_command('ERCF_ENDLESS_SPOOL',
+                    self.cmd_ERCF_ENDLESS_SPOOL,
+                    desc = self.cmd_ERCF_ENDLESS_SPOOL_help)
         self.gcode.register_command('ERCF_CHECK_GATES',
                     self.cmd_ERCF_CHECK_GATES,
                     desc = self.cmd_ERCF_CHECK_GATES_help)
@@ -426,19 +427,15 @@ class Ercf:
         if self.sensorless_selector and self.gear_endstop == None:
             raise self.config.error("Gear stepper endstop must be configured for sensorless selector operation")
 
-        # Get servo
+        # Get servo and encoder
         try:
             self.servo = self.printer.lookup_object('ercf_servo ercf_servo')
         except:
             raise self.config.error("Missing [ercf_servo] definition in ercf_hardware.cfg\nDid you upgrade? Run Happy Hare './install.sh' again to fix configuration files and/or read https://github.com/moggieuk/ERCF-Software-V3/blob/master/doc/UPGRADE.md")
-
-        # Get and configure encoder
         try:
             self.encoder_sensor = self.printer.lookup_object('ercf_encoder ercf_encoder')
         except:
             raise self.config.error("Missing [ercf_encoder] definition in ercf_hardware.cfg\nDid you upgrade? Run Happy Hare './install.sh' again to fix configuration files and/or read https://github.com/moggieuk/ERCF-Software-V3")
-        self.encoder_sensor.set_logger(self._log_debug)
-        self.encoder_sensor.set_mode(self.enable_clog_detection)
 
         # See if we have a TMC controller capable of current control for filament collision method on gear_stepper 
         # and tip forming on extruder (just 2209 for now)
@@ -460,6 +457,10 @@ class Ercf:
         # Sanity check to see that ercf_vars.cfg is included
         if self.variables == {}:
             raise self.config.error("Calibration settings in ercf_vars.cfg not found.  Did you include it in your klipper config directory?")
+
+        # Configure encoder
+        self.encoder_sensor.set_logger(self._log_debug)
+        self.encoder_sensor.set_mode(self.enable_clog_detection)
 
     def _initialize_state(self):
         self.is_enabled = True
@@ -563,6 +564,7 @@ class Ercf:
         self.reactor.register_callback(self._bootup_tasks, waketime)
 
     def _bootup_tasks(self, eventtime):
+        self.encoder_sensor.set_clog_detection_length(self.variables.get(self.VARS_ERCF_CALIB_CLOG_LENGTH))
         self._log_always('(\_/)\n( *,*)\n(")_(") ERCF Ready')
         if self.startup_status > 0:
             self._log_always(self._tool_to_gate_map_to_human_string(self.startup_status == 1))
@@ -701,6 +703,8 @@ class Ercf:
     def _persist_gate_statistics(self):
         for gate in range(len(self.selector_offsets)):
             self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s%d VALUE=\"%s\"" % (self.VARS_ERCF_GATE_STATISTICS_PREFIX, gate, self.gate_statistics[gate]))
+        # Good place to persist current clog length
+        self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%.1f" % (self.VARS_ERCF_CALIB_CLOG_LENGTH, self.encoder_sensor.get_clog_detection_length()))
 
     def _persist_swap_statistics(self):
         swap_stats = {
@@ -1048,6 +1052,7 @@ class Ercf:
                 self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%.1f" % (self.VARS_ERCF_CALIB_REF, average_reference))
                 self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s%d VALUE=1.0" % (self.VARS_ERCF_CALIB_PREFIX, 0))
                 self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=3" % self.VARS_ERCF_CALIB_VERSION)
+                self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%.1f" % (self.VARS_ERCF_CALIB_CLOG_LENGTH, detection_length))
                 self.encoder_sensor.set_clog_detection_length(detection_length)
             else:
                 self._log_always("All %d attempts at homing failed. ERCF needs some adjustments!" % repeats)
@@ -1288,7 +1293,7 @@ class Ercf:
             self.gcode.run_script_from_command("SET_IDLE_TIMEOUT TIMEOUT=%d" % self.timeout_pause)
             self.reactor.update_timer(self.heater_off_handler, self.reactor.monotonic() + self.disable_heater)
             self._save_toolhead_position_and_lift()
-            msg = "An issue with the ERCF has been detected. The print has been paused"
+            msg = "An issue with the ERCF has been detected. Print paused"
             reason = "Reason: %s" % reason
             extra = "When you intervene to fix the issue, first call \'ERCF_UNLOCK\'"
             run_pause = True
@@ -2451,6 +2456,9 @@ class Ercf:
         if self.is_paused:
             self._log_always("You can't resume the print without unlocking the ERCF first")
             return
+        if not self.printer.lookup_object("pause_resume").is_paused:
+            self._log_always("Print is not paused")
+            return
 
         # Sanity check we are ready to go
         if self.loaded_status != self.LOADED_STATUS_FULL:
@@ -2461,7 +2469,7 @@ class Ercf:
                 self._log_always("State does not indicate flament is LOADED.  Please run `ERCF_RECOVER LOADED=1` first")
                 return
 
-        self._set_above_min_temp(max(self.paused_extruder_temp, self.min_temp_extruder))
+        self._set_above_min_temp(self.paused_extruder_temp) # PAUL
         self.gcode.run_script_from_command("__RESUME")
         self._restore_toolhead_position()
         self.encoder_sensor.reset_counts()    # Encoder 0000
@@ -2906,8 +2914,8 @@ class Ercf:
                 self._remap_tool(tool, gate, available)
         self._log_info(self._tool_to_gate_map_to_human_string())
 
-    cmd_ERCF_ENDLESS_SPOOL_GROUPS_help = "Redefine the EndlessSpool groups"
-    def cmd_ERCF_ENDLESS_SPOOL_GROUPS(self, gcmd):
+    cmd_ERCF_ENDLESS_SPOOL_help = "Redefine the EndlessSpool groups"
+    def cmd_ERCF_ENDLESS_SPOOL(self, gcmd):
         if self._check_is_disabled(): return
         if not self.enable_endless_spool:
             self._log_always("EndlessSpool is disabled")
