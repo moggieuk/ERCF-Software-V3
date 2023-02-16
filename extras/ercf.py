@@ -464,7 +464,7 @@ class Ercf:
 
     def _initialize_state(self):
         self.is_enabled = True
-        self.is_paused = False
+        self.is_paused_locked = False
         self.is_homed = False
         self.paused_extruder_temp = 0.
         self.tool_selected = self.TOOL_UNKNOWN
@@ -577,21 +577,27 @@ class Ercf:
 ####################################
 
     def get_status(self, eventtime):
-        encoder_pos = float(self.encoder_sensor.get_distance())
+        encoder_pos = 0.0
+        if self.encoder_sensor:
+            encoder_pos = float(self.encoder_sensor.get_distance())
         return {
+                'enabled': self.is_enabled,
                 'encoder_pos': encoder_pos,
-                'is_paused': self.is_paused,
+                'is_paused': self.is_paused_locked, # TODO This is confusing and should be deprecated
+                'is_locked': self.is_paused_locked,
+                'is_homed': self.is_homed,
                 'tool': self.tool_selected,
                 'gate': self.gate_selected,
                 'clog_detection': self.enable_clog_detection,
-                'enabled': self.is_enabled,
+                'endless_spool': self.enable_endless_spool,
                 'filament': "Loaded" if self.loaded_status == self.LOADED_STATUS_FULL else
                             "Unloaded" if self.loaded_status == self.LOADED_STATUS_UNLOADED else
                             "Unknown",
                 'servo': "Up" if self.servo_state == self.SERVO_UP_STATE else
-                            "Down" if self.servo_state == self.SERVO_DOWN_STATE else
-                            "Unknown"
+                         "Down" if self.servo_state == self.SERVO_DOWN_STATE else
+                         "Unknown"
                 }
+        # TODO? 'gate_status': self.gate_status
 
     def _reset_statistics(self):
         self.total_swaps = 0
@@ -846,7 +852,7 @@ class Ercf:
     def cmd_ERCF_STATUS(self, gcmd):
         config = gcmd.get_int('SHOWCONFIG', 0, minval=0, maxval=1)
         msg = "ERCF with %d gates" % (len(self.selector_offsets))
-        msg += " is %s" % ("DISABLED" if not self.is_enabled else "PAUSED/LOCKED" if self.is_paused else "OPERATIONAL")
+        msg += " is %s" % ("DISABLED" if not self.is_enabled else "PAUSED/LOCKED" if self.is_paused_locked else "OPERATIONAL")
         msg += " with the servo in a %s position" % ("UP" if self.servo_state == self.SERVO_UP_STATE else "DOWN" if self.servo_state == self.SERVO_DOWN_STATE else "unknown")
         msg += ", Encoder reads %.2fmm" % self.encoder_sensor.get_distance()
         msg += "\nSelector is %shomed" % ("" if self.is_homed else "NOT ")
@@ -1287,8 +1293,8 @@ class Ercf:
         run_pause = False
         self.paused_extruder_temp = self.printer.lookup_object("extruder").heater.target_temp
         if self._is_in_print() or force_in_print:
-            if self.is_paused: return
-            self.is_paused = True
+            if self.is_paused_locked: return
+            self.is_paused_locked = True
             self._track_pause_start()
             self.gcode.run_script_from_command("SET_IDLE_TIMEOUT TIMEOUT=%d" % self.timeout_pause)
             self.reactor.update_timer(self.heater_off_handler, self.reactor.monotonic() + self.disable_heater)
@@ -1316,14 +1322,14 @@ class Ercf:
             self.gcode.run_script_from_command("PAUSE")
 
     def _unlock(self):
-        if not self.is_paused: return
+        if not self.is_paused_locked: return
         self.reactor.update_timer(self.heater_off_handler, self.reactor.NEVER)
         if not self.printer.lookup_object("extruder").heater.can_extrude and self.paused_extruder_temp > 0:
             self._log_info("Enabling extruder heater (%.1f)" % self.paused_extruder_temp)
         self.gcode.run_script_from_command("M104 S%.1f" % self.paused_extruder_temp)
         self.encoder_sensor.reset_counts()    # Encoder 0000
         self._track_pause_end()
-        self.is_paused = False
+        self.is_paused_locked = False
         self._disable_encoder_sensor() # Precautionary, should already be disabled
 
     def _save_toolhead_position_and_lift(self, remember=True):
@@ -1380,7 +1386,7 @@ class Ercf:
         return False
 
     def _check_is_paused(self):
-        if self.is_paused:
+        if self.is_paused_locked:
             self._log_always("ERCF is currently locked/paused. Please use \'ERCF_UNLOCK\'")
             return True
         return False
@@ -2115,7 +2121,7 @@ class Ercf:
         self._log_info("Homing ERCF...")
         if force_unload != -1:
             self._log_debug("(asked to %s)" % ("force unload" if force_unload == 1 else "not unload"))
-        if self.is_paused:
+        if self.is_paused_locked:
             self._log_debug("ERCF is locked, unlocking it before continuing...")
             self._unlock()
 
@@ -2346,7 +2352,7 @@ class Ercf:
     cmd_ERCF_UNLOCK_help = "Unlock ERCF operations"
     def cmd_ERCF_UNLOCK(self, gcmd):        
         if self._check_is_disabled(): return
-        if not self.is_paused:
+        if not self.is_paused_locked:
             self._log_info("ERCF is not locked")
             return
         self._log_info("Unlocking the ERCF")
@@ -2453,7 +2459,7 @@ class Ercf:
             self.gcode.run_script_from_command("__RESUME") # User defined or Klipper default
             return
         self._log_debug("ERCF_RESUME wrapper called")
-        if self.is_paused:
+        if self.is_paused_locked:
             self._log_always("You can't resume the print without unlocking the ERCF first")
             return
         if not self.printer.lookup_object("pause_resume").is_paused:
@@ -2483,9 +2489,9 @@ class Ercf:
             self.gcode.run_script_from_command("__CANCEL_PRINT") # User defined or Klipper default
             return
         self._log_debug("ERCF_CANCEL_PRINT wrapper called")
-        if self.is_paused:
+        if self.is_paused_locked:
             self._track_pause_end()
-            self.is_paused = False
+            self.is_paused_locked = False
         self._save_toolhead_position_and_lift(False)
         self.gcode.run_script_from_command("__CANCEL_PRINT")
 
