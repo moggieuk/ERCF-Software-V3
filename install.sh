@@ -355,7 +355,7 @@ install_klipper_screen() {
                 cat ${SRCDIR}/klipper_screen/${token}.conf | sed -e "s/{i}/${i}/g"
             done)
             expanded="# Generated menus for each tool/gate..\n${expanded}"
-            awk -v r="$expanded" "{gsub(/ERCF_${token}/,r)}1" "${KLIPPER_CONFIG_HOME}/KlipperScreen.conf" > /tmp/KlipperScreen.hh && mv /tmp/KlipperScreen.hh "${KLIPPER_CONFIG_HOME}/KlipperScreen.conf"
+            awk -v r="$expanded" "{gsub(/^ERCF_${token}/,r)}1" "${KLIPPER_CONFIG_HOME}/KlipperScreen.conf" > /tmp/KlipperScreen.hh && mv /tmp/KlipperScreen.hh "${KLIPPER_CONFIG_HOME}/KlipperScreen.conf"
         done
     fi
 
