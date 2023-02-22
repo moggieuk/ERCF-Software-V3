@@ -570,19 +570,19 @@ class Ercf:
             self._log_always(self._tool_to_gate_map_to_human_string(self.startup_status == 1))
             if self.persistence_level >= 4:
                 self._display_visual_state()
-        self._servo_up
+        self._servo_up() # PAUL
 
 ####################################
 # LOGGING AND STATISTICS FUNCTIONS #
 ####################################
 
     def get_status(self, eventtime):
-        encoder_pos = 0.0
-        if self.encoder_sensor:
-            encoder_pos = float(self.encoder_sensor.get_distance())
+#        encoder_pos = 0.0 PAUL
+#        if self.encoder_sensor:
+#            encoder_pos = float(self.encoder_sensor.get_distance())
         return {
                 'enabled': self.is_enabled,
-                'encoder_pos': encoder_pos,
+#                'encoder_pos': encoder_pos, # PAUL
                 'is_paused': self.is_paused_locked, # TODO This is confusing and should be deprecated
                 'is_locked': self.is_paused_locked,
                 'is_homed': self.is_homed,
