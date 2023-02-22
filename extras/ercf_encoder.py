@@ -6,7 +6,7 @@
 # Based on:
 # Original Enraged Rabbit Carrot Feeder Project  Copyright (C) 2021  Ette
 # Generic Filament Sensor Module                 Copyright (C) 2019  Eric Callahan <arksine.code@gmail.com>
-# Filament Motion Sensor Module                  Copyright (C) 2021 Joshua Wherrett <thejoshw.code@gmail.com>
+# Filament Motion Sensor Module                  Copyright (C) 2021  Joshua Wherrett <thejoshw.code@gmail.com>
 #
 # (\_/)
 # ( *,*)
@@ -23,8 +23,6 @@ class ErcfEncoder:
     RUNOUT_DISABLED = 0
     RUNOUT_STATIC = 1
     RUNOUT_AUTOMATIC = 2
-
-    VARS_ERCF_CALIB_CLOG_LENGTH = "ercf_calib_clog_length" # in ercf_vars.cfg variables because it is autotuned
 
     def __init__(self, config):
         self.name = config.get_name().split()[-1]
@@ -77,8 +75,7 @@ class ErcfEncoder:
         self.extruder = self.printer.lookup_object(self.extruder_name)
         if not self.extruder:
             raise self.config.error("Extruder named `%s` not found" % self.extruder_name)
-        self.variables = self.printer.lookup_object('save_variables').allVariables
-        self.detection_length = self.filament_runout_pos = self.min_headroom = self.variables.get(self.VARS_ERCF_CALIB_CLOG_LENGTH, self.detection_length)
+        self.filament_runout_pos = self.min_headroom = self.detection_length
 
     def _handle_ready(self):
         self.min_event_systime = self.reactor.monotonic() + 2. # Don't process events too early
@@ -200,7 +197,6 @@ class ErcfEncoder:
     def set_clog_detection_length(self, clog_length):
         clog_length = max(clog_length, 2.)
         self.detection_length = clog_length
-        self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%.1f" % (self.VARS_ERCF_CALIB_CLOG_LENGTH, clog_length))
         self._reset_filament_runout_params()
 
     def update_clog_detection_length(self):
