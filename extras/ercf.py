@@ -70,7 +70,7 @@ class ErcfError(Exception):
 
 # Main ERCF klipper module
 class Ercf:
-    BOOT_DELAY = 1.0            # Delay before running bootup tasks
+    BOOT_DELAY = 1.5            # Delay before running bootup tasks
 
     LONG_MOVE_THRESHOLD = 70.   # This is also the initial move to load past encoder
     ENCODER_MIN = 0.7           # The threshold (mm) that determines real encoder movement (ignore erroneous pulse)
@@ -286,9 +286,12 @@ class Ercf:
         self.gcode.register_command('ERCF_HOME',
                     self.cmd_ERCF_HOME,
                     desc = self.cmd_ERCF_HOME_help)
+        self.gcode.register_command('ERCF_SELECT',
+                    self.cmd_ERCF_SELECT,
+                    desc = self.cmd_ERCF_SELECT_help)
         self.gcode.register_command('ERCF_SELECT_TOOL',
-                    self.cmd_ERCF_SELECT_TOOL,
-                    desc = self.cmd_ERCF_SELECT_TOOL_help)
+                    self.cmd_ERCF_SELECT,
+                    desc = self.cmd_ERCF_SELECT_help) # For backwards compatibility, but ERCF_SELECT is preferred
         self.gcode.register_command('ERCF_PRELOAD',
                     self.cmd_ERCF_PRELOAD,
                     desc = self.cmd_ERCF_PRELOAD_help)
@@ -368,82 +371,6 @@ class Ercf:
         self.gcode.register_command('ERCF_CHECK_GATES',
                     self.cmd_ERCF_CHECK_GATES,
                     desc = self.cmd_ERCF_CHECK_GATES_help)
-
-# PAUL TEMP for testing new encoder vvv
-        self.gcode.register_command('TEST_ENCODER', self.cmd_TEST_ENCODER)
-
-    def cmd_TEST_ENCODER(self, gcmd):
-        self.calibrating = True
-        try:
-            repeats = gcmd.get_int('REPEATS', 10, minval=1)
-            test = gcmd.get('TEST', "freewheel")
-            speed = gcmd.get_float('SPEED', self.long_moves_speed, above=0.)
-            self._select_tool(0)
-            self._unload_tool()
-            if test == "freewheel":
-                for i in range(repeats):
-                    self.encoder_sensor.reset_counts()    # Encoder 0000
-                    encoder_moved = self._load_encoder(retry=False)
-                    self.encoder_sensor.reset_counts()    # Encoder 0000
-                    old_short_moves_speed = self.short_moves_speed
-                    self.short_moves_speed = speed
-                    self._unload_encoder(self.unload_buffer)
-                    self.short_moves_speed = old_short_moves_speed
-                    unload_dist = self.encoder_sensor.get_distance()
-                    if abs(unload_dist - encoder_moved) > 1.0:
-                        warning = ", Possible freewheeling detected"
-                    else:
-                        warning = ""
-                    self._log_always('Test #%d, Load: %.1fmm, Unload: %.1fmm %s' % (i, encoder_moved, unload_dist, warning))
-            else:
-                dist = gcmd.get_float('DIST', 500., above=0.)
-                repeats = gcmd.get_int('REPEATS', 3, minval=1, maxval=10)
-                min_speed = gcmd.get_float('MINSPEED', speed, above=0.)
-                max_speed = gcmd.get_float('MAXSPEED', speed, above=0.)
-                accel = gcmd.get_float('ACCEL', self.gear_stepper.accel, minval=0.)
-                self._load_sequence(100, no_extruder=True)
-                plus_values, min_values = [], []
-                test_speed = min_speed
-                speed_incr = (max_speed - min_speed) / repeats
-                for x in range(repeats):
-                    self._log_always("Test run #%d, speed=%.1f" % (x, test_speed))
-                    # Move forward
-                    self.encoder_sensor.reset_counts()    # Encoder 0000
-                    self._gear_stepper_move_wait(dist, True, test_speed, accel)
-                    counts = self.encoder_sensor.get_counts()
-                    plus_values.append(counts)
-                    self._log_always("+ counts =  %d" % counts)
-                    # Move backward
-                    self.encoder_sensor.reset_counts()    # Encoder 0000
-                    self._gear_stepper_move_wait(-dist, True, test_speed, accel)
-                    counts = self.encoder_sensor.get_counts()
-                    min_values.append(counts)
-                    self._log_always("- counts =  %d" % counts)
-                    if counts == 0: break
-                    test_speed += speed_incr
-    
-                self._log_always("Load direction: mean=%(mean).2f stdev=%(stdev).2f"
-                                  " min=%(min)d max=%(max)d range=%(range)d"
-                                  % self._sample_stats(plus_values))
-                self._log_always("Unload direction: mean=%(mean).2f stdev=%(stdev).2f"
-                                  " min=%(min)d max=%(max)d range=%(range)d"
-                                  % self._sample_stats(min_values))
-    
-                mean_plus = self._sample_stats(plus_values)['mean']
-                mean_minus = self._sample_stats(min_values)['mean']
-                half_mean = (float(mean_plus) + float(mean_minus)) / 4
-    
-                if half_mean == 0:
-                    self._log_always("No counts measured")
-                else:
-                    result = half_mean * self.encoder_sensor.resolution
-                    self._log_always("Measured length = %.6f" % result)
-        except ErcfError as ee:
-            self._pause(str(ee))
-        finally:
-            self._set_loaded_status(self.LOADED_STATUS_UNKNOWN)
-            self.calibrating = False
-# PAUL TEMP for testing new encoder ^^^
 
 
     def handle_connect(self):
@@ -565,9 +492,12 @@ class Ercf:
 
                 if self.gate_selected >= 0:
                     offset = self.selector_offsets[self.gate_selected]
+                    if self.tool_selected == self.TOOL_BYPASS: # Sanity check
+                        self.tool_selected = self.TOOL_UNKNOWN
                     self.selector_stepper.do_set_position(offset)
                     self.is_homed = True
                 elif self.gate_selected == self.TOOL_BYPASS:
+                    self.tool_selected = self.TOOL_BYPASS # Sanity check
                     self.selector_stepper.do_set_position(self.bypass_offset)
                     self.is_homed = True
             else:
@@ -670,9 +600,9 @@ class Ercf:
                             "Unknown",
                 'servo': "Up" if self.servo_state == self.SERVO_UP_STATE else
                          "Down" if self.servo_state == self.SERVO_DOWN_STATE else
-                         "Unknown"
-                }
-        # TODO? 'gate_status': self.gate_status
+                         "Unknown",
+                'gate_status': self.gate_status
+        }
 
     def _reset_statistics(self):
         self.total_swaps = 0
@@ -843,8 +773,10 @@ class Ercf:
         visual = ""
         if self.tool_selected == self.TOOL_BYPASS and self.loaded_status == self.LOADED_STATUS_FULL:
             visual = "ERCF BYPASS ----- [encoder] ----------->> [nozzle] LOADED"
-        elif self.tool_selected == self.TOOL_BYPASS:
+        elif self.tool_selected == self.TOOL_BYPASS and self.loaded_status == self.LOADED_STATUS_UNLOADED:
             visual = "ERCF BYPASS >.... [encoder] ............. [nozzle] UNLOADED"
+        elif self.tool_selected == self.TOOL_BYPASS:
+            visual = "ERCF BYPASS >.... [encoder] ............. [nozzle] UNKNOWN"
         elif self.loaded_status == self.LOADED_STATUS_UNKNOWN:
             visual = "ERCF [T%s] ..... [encoder] ............. [extruder] ...%s... [nozzle] UNKNOWN" % (tool_str, sensor_str)
         elif self.loaded_status == self.LOADED_STATUS_UNLOADED:
@@ -988,7 +920,8 @@ class Ercf:
 
     def _servo_down(self):
         if self.servo_state == self.SERVO_DOWN_STATE: return
-        if self.tool_selected == self.TOOL_BYPASS: return
+#        if self.tool_selected == self.TOOL_BYPASS: return PAUL
+        if self.gate_selected == self.TOOL_BYPASS: return
         self._log_debug("Setting servo to down angle: %d" % (self.servo_down_angle))
         self.toolhead.wait_moves()
         self.servo.set_value(angle=self.servo_down_angle, duration=self.servo_duration)
@@ -1235,24 +1168,31 @@ class Ercf:
         dist = gcmd.get_float('DIST', 500., above=0.)
         repeats = gcmd.get_int('REPEATS', 3, minval=1, maxval=10)
         speed = gcmd.get_float('SPEED', self.long_moves_speed, above=0.)
+        min_speed = gcmd.get_float('MINSPEED', speed, above=0.)
+        max_speed = gcmd.get_float('MAXSPEED', speed, above=0.)
         accel = gcmd.get_float('ACCEL', self.gear_stepper.accel, minval=0.)
+        test_speed = min_speed
+        speed_incr = (max_speed - min_speed) / repeats
         try:
             self.calibrating = True
             plus_values, min_values = [], []
             for x in range(repeats):
+                if (speed_incr > 0.):
+                    self._log_always("Test run #%d, Speed=%.1f mm/s" % (x, test_speed))
                 # Move forward
                 self.encoder_sensor.reset_counts()    # Encoder 0000
-                self._gear_stepper_move_wait(dist, True, speed, accel)
+                self._gear_stepper_move_wait(dist, True, test_speed, accel)
                 counts = self.encoder_sensor.get_counts()
                 plus_values.append(counts)
                 self._log_always("+ counts =  %d" % counts)
                 # Move backward
                 self.encoder_sensor.reset_counts()    # Encoder 0000
-                self._gear_stepper_move_wait(-dist, True, speed, accel)
+                self._gear_stepper_move_wait(-dist, True, test_speed, accel)
                 counts = self.encoder_sensor.get_counts()
                 min_values.append(counts)
                 self._log_always("- counts =  %d" % counts)
                 if counts == 0: break
+                test_speed += speed_incr
     
             self._log_always("Load direction: mean=%(mean).2f stdev=%(stdev).2f"
                               " min=%(min)d max=%(max)d range=%(range)d"
@@ -1547,7 +1487,7 @@ class Ercf:
             return "T%d" % self.tool_selected
 
     def _selected_gate_string(self):
-        if self.tool_selected == self.TOOL_BYPASS:
+        if self.gate_selected == self.TOOL_BYPASS:
             return "bypass"
         elif self.gate_selected == self.GATE_UNKNOWN:
             return "unknown"
@@ -2224,7 +2164,7 @@ class Ercf:
                     raise ErcfError("Homing selector failed because of blockage")
             except Exception as e:
                 # Error, stallguard didn't trigger
-                raise ErcfError("Homing selector failed because error (perhaps stallguard setup)")
+                raise ErcfError("Homing selector failed because error. Klipper reports: %s" % str(e))
         else:
             try:
                 self.selector_stepper.do_set_position(0.)
@@ -2370,7 +2310,10 @@ class Ercf:
     def _select_gate(self, gate):
         if gate == self.gate_selected: return
         self._servo_up()
-        offset = self.selector_offsets[gate]
+        if gate == self.TOOL_BYPASS:
+            offset = self.bypass_offset
+        else:
+            offset = self.selector_offsets[gate]
         if self.sensorless_selector == 1:
             self._move_selector_sensorless(offset)
         else:
@@ -2378,20 +2321,15 @@ class Ercf:
         self._set_gate_selected(gate)
 
     def _select_bypass(self):
-        if self.tool_selected == self.TOOL_BYPASS: return
+        if self.tool_selected == self.TOOL_BYPASS and self.gate_selected == self.TOOL_BYPASS: return
         if self.bypass_offset == 0:
             self._log_always("Bypass not configured")
             return
 
         self._log_info("Selecting filament bypass...")
-        self._servo_up()
-        if self.sensorless_selector == 1:
-            self._move_selector_sensorless(self.bypass_offset)
-        else:
-            self._selector_stepper_move_wait(self.bypass_offset)
+        self._select_gate(self.TOOL_BYPASS)
         self.filament_direction = self.DIRECTION_LOAD
         self._set_tool_selected(self.TOOL_BYPASS)
-        self._set_gate_selected(self.TOOL_BYPASS)
         self._log_info("Bypass enabled")
 
     def _set_gate_selected(self, gate):
@@ -2402,7 +2340,6 @@ class Ercf:
             self.tool_selected = tool
             self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%d" % (self.VARS_ERCF_TOOL_SELECTED, self.tool_selected))
             if tool == self.TOOL_UNKNOWN or tool == self.TOOL_BYPASS:
-                self._set_gate_selected(self.GATE_UNKNOWN)
                 self._set_steps(1.)
             else:
                 self._set_steps(self._get_gate_ratio(self.gate_selected))
@@ -2444,17 +2381,37 @@ class Ercf:
         except ErcfError as ee:
             self._pause(str(ee))
 
-    cmd_ERCF_SELECT_TOOL_help = "Select the specified tool"
-    def cmd_ERCF_SELECT_TOOL(self, gcmd):
+    cmd_ERCF_SELECT_help = "Select the specified tool or gate"
+    def cmd_ERCF_SELECT(self, gcmd):
         if self._check_is_disabled(): return
         if self._check_is_paused(): return
         if self._check_not_homed(): return
         if self._check_is_loaded(): return
-        tool = gcmd.get_int('TOOL', minval=0, maxval=len(self.selector_offsets)-1)
+        tool = gcmd.get_int('TOOL', -1, minval=0, maxval=len(self.selector_offsets)-1)
+        gate = gcmd.get_int('GATE', -1, minval=0, maxval=len(self.selector_offsets)-1)
+        if tool == -1 and gate == -1:
+            raise gcmd.error("Error on 'ERCF_SELECT': missing TOOL or GATE")
         try:
-            self._select_tool(tool)
+            if tool != -1:
+                self._select_tool(tool)
+            else:
+                self._select_gate(gate)
+                self.tool_selected = self.TOOL_UNKNOWN
         except ErcfError as ee:
             self._pause(str(ee))
+
+# PAUL replaced with above
+#    cmd_ERCF_SELECT_TOOL_help = "Select the specified tool"
+#    def cmd_ERCF_SELECT_TOOL(self, gcmd):
+#        if self._check_is_disabled(): return
+#        if self._check_is_paused(): return
+#        if self._check_not_homed(): return
+#        if self._check_is_loaded(): return
+#        tool = gcmd.get_int('TOOL', minval=0, maxval=len(self.selector_offsets)-1)
+#        try:
+#            self._select_tool(tool)
+#        except ErcfError as ee:
+#            self._pause(str(ee))
 
     cmd_ERCF_CHANGE_TOOL_help = "Perform a tool swap"
     def cmd_ERCF_CHANGE_TOOL(self, gcmd):
@@ -2480,7 +2437,9 @@ class Ercf:
         if self._check_is_paused(): return
         if self._check_in_bypass(): return
         try:
+            restore_encoder = self._disable_encoder_sensor() # Don't want runout accidently triggering during filament unload
             self._unload_tool()
+            self._enable_encoder_sensor(restore_encoder)
         except ErcfError as ee:
             self._pause(str(ee))
 
@@ -2587,7 +2546,12 @@ class Ercf:
             if gate >= 0:
                 self.is_homed = False
                 self._set_gate_selected(gate)
-        if tool == -1 and self._check_in_bypass(): return
+#        if tool == -1 and self._check_in_bypass(): return # PAUL ... need a way to get out of bypass..
+        if tool == -1 and self.tool_selected == self.TOOL_BYPASS:
+                # This is to be able to get out of "stuck in bypass" state
+                self._log_info("Making assumptiion that bypass is unloaded")
+                self._set_loaded_status(self.LOADED_STATUS_UNLOADED, silent=True)
+                return
         if loaded == 1:
             self.filament_direction = self.DIRECTION_LOAD
             self._set_loaded_status(self.LOADED_STATUS_FULL, silent=True)
@@ -2904,8 +2868,9 @@ class Ercf:
                         tool_str += "%sT%d" % (prefix, t)
                         prefix = ","
                 msg += tool_str
+                msg += "?" if prefix == "" else ""
                 if gate == self.gate_selected:
-                    msg += " [SELECTED supporting tool T%d]" % self.tool_selected
+                    msg += " [SELECTED%s]" % ((" supporting tool T%d" % self.tool_selected) if self.tool_selected >= 0 else "")
         else:
             multi_tool = False
             msg_gates = "Gates: "
@@ -3061,9 +3026,9 @@ class Ercf:
                 gates_tools.append([gate, -1])
 
         for gate, tool in gates_tools:
-            self._select_gate(gate)
-            self.encoder_sensor.reset_counts()    # Encoder 0000
             try:
+                self._select_gate(gate)
+                self.encoder_sensor.reset_counts()    # Encoder 0000
                 self.calibrating = True # To suppress visual filament position
                 self._log_info("Checking gate #%d..." % gate)
                 encoder_moved = self._load_encoder(retry=False)
@@ -3101,7 +3066,9 @@ class Ercf:
                 self.calibrating = False
 
         try:
-            if tool_selected != self.TOOL_UNKNOWN:
+            if tool_selected == self.TOOL_BYPASS:
+                self._select_bypass()
+            elif tool_selected != self.TOOL_UNKNOWN:
                 self._select_tool(tool_selected)
         except ErcfError as ee:
             self._log_always("Failure re-selecting Tool %d: %s" % (tool_selected, str(ee)))

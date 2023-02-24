@@ -324,7 +324,12 @@ install_update_manager() {
 }
 
 install_klipper_screen() {
-    echo -e "${INFO}Adding KlipperScreen support for ERCF"
+    KLIPPERSCREEN_HOME="${SRCDIR}/Klipper"
+    if [ ! -d "${KLIPPERSCREEN_HOME}" ]; then
+        echo -e "${ERROR}KlipperScreen is not installed! Install it first then rerun this script"
+        return
+    fi
+    echo -e "${INFO}Adding KlipperScreen support for ERCF (${num_gates} gates)"
     do_install=0
     ks_config="$KLIPPER_CONFIG_HOME/KlipperScreen.conf"
     if [ -f "${KLIPPER_CONFIG_HOME}/KlipperScreen.conf" ]; then
@@ -336,7 +341,7 @@ install_klipper_screen() {
             cp ${ks_config} ${next_ks_config}
             do_install=1
         else
-            echo -e "${INFO}KlipperSreen ERCF menus may already exist - skipping install"
+            echo -e "${INFO}KlipperScreen ERCF menus may already exist - skipping install"
         fi
     else
         echo -e "${WARNING}KlipperScreen.conf not found, will create new one"
@@ -360,7 +365,7 @@ install_klipper_screen() {
     fi
 
     # Always ensure images are linked for every style
-    for style in `ls -d ${HOME}/KlipperScreen/styles/*/images`; do
+    for style in `ls -d ${KLIPPERSCREEN_HOME}/styles/*/images`; do
         for img in `ls ${SRCDIR}/klipper_screen/images`; do
             ln -sf "${SRCDIR}/klipper_screen/images/${img}" "${style}/${img}"
         done
@@ -634,6 +639,15 @@ questionaire() {
     fi
 }
 
+usage() {
+    echo -e "${EMPHASIZE}"
+    echo "Usage: $0 [-k <klipper_home_dir>] [-c <klipper_config_dir>] [-i] [-d <num_gates>]"
+    echo
+    echo "-i for interactive; -d to force just KlipperScreen install"
+    echo
+    exit 1
+}
+
 # Force script to exit if an error occurs
 set -e
 clear
@@ -642,27 +656,32 @@ clear
 SRCDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/ && pwd )"
 
 INSTALL_TEMPLATES=0
-while getopts "k:c:i" arg; do
+INSTALL_KLIPPER_SCREEN_ONLY=0
+while getopts "k:c:d:i" arg; do
     case $arg in
-        k) KLIPPER_HOME=$OPTARG;;
-        c) KLIPPER_CONFIG_HOME=$OPTARG;;
+        k) KLIPPER_HOME=${OPTARG};;
+        c) KLIPPER_CONFIG_HOME=${OPTARG};;
         i) INSTALL_TEMPLATES=1;;
+        d) INSTALL_KLIPPER_SCREEN_ONLY=1
+           num_gates=${OPTARG};;
+	*) usage;;
     esac
 done
 
 verify_not_root
 verify_home_dirs
-questionaire
-# PAUL vvv Eventually move after copy_template_files
-num_gates=9
-install_klipper_screen
-exit 0
-# PAUL ^^^
 check_klipper
-link_ercf_plugin
-copy_template_files
-install_update_manager
-restart_klipper
+
+if [ ! "$INSTALL_KLIPPER_SCREEN_ONLY" -eq 0 ]; then
+    install_klipper_screen
+else
+    questionaire
+    link_ercf_plugin
+    copy_template_files
+    install_klipper_screen
+    install_update_manager
+    restart_klipper
+fi
 
 echo -e "${EMPHASIZE}"
 echo "Done.  Enjoy ERCF (and thank you Ette for a wonderful design)..."

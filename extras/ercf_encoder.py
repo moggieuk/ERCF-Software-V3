@@ -247,7 +247,7 @@ class ErcfEncoder:
     def get_status(self, eventtime):
         return {
                 'encoder_pos': round(self.get_distance(), 1),
-                'detetion_length': round(self.detection_length, 1),
+                'detection_length': round(self.detection_length, 1),
                 'min_headroom': round(self.min_headroom, 1),
                 'headroom': round(self.filament_runout_pos - self.last_extruder_pos, 1)
                 }
