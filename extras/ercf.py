@@ -164,9 +164,9 @@ class Ercf:
         self.extruder_form_tip_current = config.getint('extruder_form_tip_current', 100, minval=100, maxval=150)
         self.toolhead_homing_max = config.getfloat('toolhead_homing_max', 20., minval=0.)
         self.toolhead_homing_step = config.getfloat('toolhead_homing_step', 1., minval=0.5, maxval=5.)
-        self.sync_load_length = config.getfloat('sync_load_length', 8., minval=0., maxval=50.)
+        self.sync_load_length = config.getfloat('sync_load_length', 8., minval=0., maxval=100.)
         self.sync_load_speed = config.getfloat('sync_load_speed', 10., minval=1., maxval=100.)
-        self.sync_unload_length = config.getfloat('sync_unload_length', 10., minval=0., maxval=50.)
+        self.sync_unload_length = config.getfloat('sync_unload_length', 10., minval=0., maxval=100.)
         self.sync_unload_speed = config.getfloat('sync_unload_speed', 10., minval=1., maxval=100.)
         self.delay_servo_release =config.getfloat('delay_servo_release', 2., minval=0., maxval=5.)
         self.home_position_to_nozzle = config.getfloat('home_position_to_nozzle', minval=5.)
@@ -371,12 +371,6 @@ class Ercf:
         self.gcode.register_command('ERCF_CHECK_GATES',
                     self.cmd_ERCF_CHECK_GATES,
                     desc = self.cmd_ERCF_CHECK_GATES_help)
-        self.gcode.register_command('PAUL', self.cmd_PAUL)
-    def cmd_PAUL(self, gcmd):
-        random = randint(0, len(self.selector_offsets)-1) + 100
-        self._log_info("Random=%d" % random)
-        self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=PAUL VALUE=%s" % random)
-        self._log_info("Done")
 
 
     def handle_connect(self):
@@ -934,7 +928,6 @@ class Ercf:
 
     def _servo_down(self):
         if self.servo_state == self.SERVO_DOWN_STATE: return
-#        if self.tool_selected == self.TOOL_BYPASS: return PAUL
         if self.gate_selected == self.TOOL_BYPASS: return
         self._log_debug("Setting servo to down angle: %d" % (self.servo_down_angle))
         self.toolhead.wait_moves()
@@ -2416,19 +2409,6 @@ class Ercf:
         except ErcfError as ee:
             self._pause(str(ee))
 
-# PAUL replaced with above
-#    cmd_ERCF_SELECT_TOOL_help = "Select the specified tool"
-#    def cmd_ERCF_SELECT_TOOL(self, gcmd):
-#        if self._check_is_disabled(): return
-#        if self._check_is_paused(): return
-#        if self._check_not_homed(): return
-#        if self._check_is_loaded(): return
-#        tool = gcmd.get_int('TOOL', minval=0, maxval=len(self.selector_offsets)-1)
-#        try:
-#            self._select_tool(tool)
-#        except ErcfError as ee:
-#            self._pause(str(ee))
-
     cmd_ERCF_CHANGE_TOOL_help = "Perform a tool swap"
     def cmd_ERCF_CHANGE_TOOL(self, gcmd):
         if self._check_is_disabled(): return
@@ -2442,29 +2422,31 @@ class Ercf:
             self._recover_loaded_state()
         try:
             restore_encoder = self._disable_encoder_sensor(update_clog_detection_length=True) # Don't want runout accidently triggering during tool change
-            self._next_tool = tool # PAUL new
+            self._next_tool = tool
             self._change_tool(tool, skip_tip)
             self._enable_encoder_sensor(restore_encoder)
         except ErcfError as ee:
             self._pause(str(ee))
         finally:
-            self._next_tool = self.TOOL_UNKNOWN # PAUL new
+            self._next_tool = self.TOOL_UNKNOWN
 
     cmd_ERCF_EJECT_help = "Eject filament and park it in the ERCF"
     def cmd_ERCF_EJECT(self, gcmd):
         if self._check_is_disabled(): return
         if self._check_is_paused(): return
-# PAUL        if self._check_in_bypass(): return
+        extruder_only = bool(gcmd.get_int('EXTRUDER_ONLY', 0, minval=0, maxval=1))
         try:
             restore_encoder = self._disable_encoder_sensor() # Don't want runout accidently triggering during filament unload
-            if self.tool_selected != self.TOOL_BYPASS:
+            if self.tool_selected != self.TOOL_BYPASS and not extruder_only:
                 self._unload_tool()
                 self._enable_encoder_sensor(restore_encoder)
-            elif self.loaded_status != self.LOADED_STATUS_UNLOADED:
+            elif self.loaded_status != self.LOADED_STATUS_UNLOADED or extruder_only:
                 if self._form_tip_standalone():
                     self._unload_extruder()
                 self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
                 self._log_always("Please pull the filament out clear of the ERCF selector")
+            else:
+                self._log_always("Filament not loaded")
         except ErcfError as ee:
             self._pause(str(ee))
 
@@ -2492,18 +2474,7 @@ class Ercf:
 
     cmd_ERCF_UNLOAD_BYPASS_help = "Smart unload of extruder. Designed for bypass usage"
     def cmd_ERCF_UNLOAD_BYPASS(self, gcmd):
-        self._log_always("ERCF_UNLOAD_BYPASS is now deprecated. Please update to simply use `ERCF_EJECT` instead")
-# PAUL deprecated
-#        if self._check_is_disabled(): return
-#        if self._check_is_paused(): return
-#        if self._check_not_bypass(): return
-#        try:
-#            if self._form_tip_standalone():
-#                self._unload_extruder()
-#            self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
-#            self._log_always("Please pull the filament out clear of the ERCF selector")
-#        except ErcfError as ee:
-#            self._pause(str(ee))
+        self._log_always("ERCF_UNLOAD_BYPASS is now deprecated. Please simply use `ERCF_EJECT` instead")
 
     cmd_ERCF_PAUSE_help = "Pause the current print and lock the ERCF operations"
     def cmd_ERCF_PAUSE(self, gcmd):
@@ -2560,35 +2531,38 @@ class Ercf:
     def cmd_ERCF_RECOVER(self, gcmd):
         if self._check_is_disabled(): return
         if self._check_is_paused(): return
-        tool = gcmd.get_int('TOOL', -1, minval=-2, maxval=len(self.selector_offsets)-1)
-        mod_gate = gcmd.get_int('GATE', -1, minval=0, maxval=len(self.selector_offsets)-1)
+        tool = gcmd.get_int('TOOL', self.TOOL_UNKNOWN, minval=-2, maxval=len(self.selector_offsets)-1)
+        mod_gate = gcmd.get_int('GATE', self.TOOL_UNKNOWN, minval=0, maxval=len(self.selector_offsets)-1)
         loaded = gcmd.get_int('LOADED', -1, minval=0, maxval=1)
+
         if tool == self.TOOL_BYPASS:
-            self._set_tool_selected(tool)
-            return
-        if tool >= 0:
+            self._set_tool_selected(self.TOOL_BYPASS, silent=True)
+            self._set_gate_selected(self.TOOL_BYPASS)
+        elif tool >= 0: # If tool is specified then use and optionally override the gate
+            self._set_tool_selected(tool, silent=True)
             gate = self.tool_to_gate_map[tool]
             if mod_gate >= 0:
                 gate = mod_gate
             if gate >= 0:
                 self.is_homed = False
                 self._set_gate_selected(gate)
-#        if tool == -1 and self._check_in_bypass(): return # PAUL ... need a way to get out of bypass..
-        if tool == -1 and self.tool_selected == self.TOOL_BYPASS and loaded == -1:
-                # This is to be able to get out of "stuck in bypass" state
-                self._log_info("Making assumptiion that bypass is unloaded")
-                self._set_loaded_status(self.LOADED_STATUS_UNLOADED, silent=True)
-                return
+        elif tool == self.TOOL_UNKNOWN and self.tool_selected == self.TOOL_BYPASS and loaded == -1:
+            # This is to be able to get out of "stuck in bypass" state
+            self._log_info("Warning: Making assumptiion that bypass is unloaded")
+            self.filament_direction = self.DIRECTION_LOAD
+            self._set_loaded_status(self.LOADED_STATUS_UNLOADED, silent=True)
+            return
+
         if loaded == 1:
             self.filament_direction = self.DIRECTION_LOAD
-            self._set_loaded_status(self.LOADED_STATUS_FULL, silent=True)
-            self._set_tool_selected(tool)
+            self._set_loaded_status(self.LOADED_STATUS_FULL)
             return
         elif loaded == 0:
             self.filament_direction = self.DIRECTION_LOAD
-            self._set_loaded_status(self.LOADED_STATUS_UNLOADED, silent=True)
-            self._set_tool_selected(tool)
+            self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
             return
+
+        # Filament position not specified so auto recover
         self._log_info("Recovering filament position/state...")
         self._recover_loaded_state()
 
@@ -2745,9 +2719,9 @@ class Ercf:
             self.extruder_homing_current = 100
         self.extruder_form_tip_current = gcmd.get_int('EXTRUDER_FORM_TIP_CURRENT', self.extruder_form_tip_current, minval=100, maxval=150)
         self.delay_servo_release = gcmd.get_float('DELAY_SERVO_RELEASE', self.delay_servo_release, minval=0., maxval=5.)
-        self.sync_load_length = gcmd.get_float('SYNC_LOAD_LENGTH', self.sync_load_length, minval=0., maxval=50.)
+        self.sync_load_length = gcmd.get_float('SYNC_LOAD_LENGTH', self.sync_load_length, minval=0., maxval=100.)
         self.sync_load_speed = gcmd.get_float('SYNC_LOAD_SPEED', self.sync_load_speed, minval=1., maxval=100.)
-        self.sync_unload_length = gcmd.get_float('SYNC_UNLOAD_LENGTH', self.sync_unload_length, minval=0., maxval=50.)
+        self.sync_unload_length = gcmd.get_float('SYNC_UNLOAD_LENGTH', self.sync_unload_length, minval=0., maxval=100.)
         self.sync_unload_speed = gcmd.get_float('SYNC_UNLOAD_SPEED', self.sync_unload_speed, minval=1., maxval=100.)
         self.num_moves = gcmd.get_int('NUM_MOVES', self.num_moves, minval=1)
         self.apply_bowden_correction = gcmd.get_int('APPLY_BOWDEN_CORRECTION', self.apply_bowden_correction, minval=0, maxval=1)
