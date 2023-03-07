@@ -135,6 +135,11 @@ copy_template_files() {
        fi
        available=0
     done
+    if [ "${has_bypass}" -eq 1 ]; then
+        bypass_comment=""
+    else
+        bypass_comment="#"
+    fi
 
     echo -e "${INFO}Copying configuration files to ${KLIPPER_CONFIG_HOME}"
     for file in `cd ${SRCDIR} ; ls *.cfg`; do
@@ -221,6 +226,7 @@ copy_template_files() {
 		s/gate_status:.*/${gate_status}/; \
 		s/tool_to_gate_map:.*/${tool_to_gate_map}/; \
 		s/endless_spool_groups:.*/${endless_spool_groups}/; \
+		s/#bypass_selector:/${bypass_comment}bypass_selector:/; \
                     " > ${dest} && rm ${dest}.tmp
         fi
     done
@@ -498,6 +504,19 @@ questionaire() {
                break
            fi
         done
+
+        echo
+        echo -e "${PROMPT}Have you built with a selector bypass? (in one of the selector separators)${INPUT}"
+        yn=$(prompt_yn "Selector bypass")
+        case $yn in
+            y)
+                has_bypass=1
+                echo -e "${INFO}    NOTE: You will need to set the bypass selector offset manually"
+                ;;
+            n)
+                has_bypass=0
+                ;;
+        esac
 
         echo
         echo -e "${PROMPT}Do you have a toolhead sensor you would like to use? If reliable this provides the smoothest and most reliable loading and unloading operation${INPUT}"
