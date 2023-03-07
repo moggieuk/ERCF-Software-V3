@@ -81,8 +81,9 @@ The configuration and setup of your ERCF using Happy Hare is 95% the same as doc
 <li> v1.2.0 - Major new feature for being able to persist all ERCF state between restarts - now you can just turn on an print!; Various bug fixes, error message and status display improvements. SOME ADDITIONS TO `ercf_parameters.cfg` CONFIG FILE
 <li> v1.2.1 - MAJOR: Bundled servo driver with careful PWM synchronization to avoid servo kickback!!! (Requires re-running ./install.sh)
 <li> v1.2.2 - Automatic clog length setting. No more [filament_runout_sensor] or [duplicate_pin] setup (Required re-running ./install.sh)
+<li> v1.2.3 - Update to support KlipperScreen; Additional printer variables exposed; Cleanup of bypass commands; Bug fixes
 </ul>
-Note: versions v1.2.0 and later required the running of ./install.sh.  See [update notes](doc/UPGRADE.md) for more information
+Note: Upgrade from versions prior to v1.2.0 requires the re-running of ./install.sh.  See [update notes](doc/UPGRADE.md) for more information
 
 ## Summary of new commands (See the [command reference](#ercf-command-reference) for  options)
   | Commmand | Description |
@@ -143,11 +144,12 @@ The "visual log" above shows individual steps of the loading process:
   <ol>
     <li>Starting with filament loaded in tool 1. This example is taken from an unload that is not under control of the slicer, so the first thing that happens is that a tip is formed on the end of the filament which ends with filament in the cooling zone of the extruder. This operation is controlled but the user edited '_ERCF_FORM_TIP_STANDALONE' macro in 'ercf_software.cfg'
     <li>This step only occurs with toolhead sensor. The filament is withdrawn until it no longer detected by toolhead sensor. This is done at the 'nozzle_unload_speed' and provides a more accurate determination of how much further to retract and a safety check that the filament is not stuck in the nozzle
-    <li>ERCF then moves the filament out of the extruder at 'nozzle_unload_speed'. Once at where it believes is the gear entrance to the extruder an optional short synchronized (gear and extruder) move can be configured. This is controlled by 'sync_unload_speed' and 'sync_unload_length'.  This is a great safely step and "hair pull" operation but also serves to ensure that the ERCF gear has a grip on the filament.  If synchronized unload is not configured ERCF will still perform the bowden unload with an initial short move with gear motor only, again to ensure filament is gripped
-    <li>The filament is now extracted quickly through the bowden. The speed is controlled by 'long_moves_speed' and the movement can be broken up with 'num_moves' similar to when loading.
+    <li>ERCF then moves the filament out of the extruder at 'nozzle_unload_speed'. This is approximate for sensorless but the distance moved can be optimized if using a toolhead sensor by the setting of 'extruder_to_nozzle' and 'sensor_to_nozzle' (the difference represents the distance moved)
+    <li>Once at where it believes is the gear entrance to the extruder an optional short synchronized (gear and extruder) move can be configured. This is controlled by 'sync_unload_speed' and 'sync_unload_length'.  This is a great safely step and "hair pull" operation but also serves to ensure that the ERCF gear has a grip on the filament.  If synchronized unload is not configured ERCF will still perform the bowden unload with an initial short move with gear motor only, again to ensure filament is gripped
+    <li>The filament is now extracted quickly through the bowden. The speed is controlled by 'long_moves_speed' and the movement can be broken up with 'num_moves' similar to when loading
     <li>Completion of the the fast bowden move
     <li>At this point ERCF performs a series of short moves looking for when the filament exits the encoder.  The speed is controlled by 'short_moves_speed'
-    <li>When the filament is released from the encoder, the remainder of the distance to the park position is moved at 'short_moves_speed'.  The filament is now unloaded.
+    <li>When the filament is released from the encoder, the remainder of the distance to the park position is moved at 'short_moves_speed'.  The filament is now unloaded
   </ol>
 
 When the state of ERCF is unknown, ERCF will perform other movements and look at its sensors to try to ascertain filament location. This may modify the above sequence and result in the omission of the fast bowden move for unloads.
@@ -183,6 +185,16 @@ When the state of ERCF is unknown, ERCF will perform other movements and look at
     This value will depend on your extruder, hotend and nozzle setup.
 
         home_position_to_nozzle: 72        # E.g. Revo Voron with CW2 extruder using extruder homing
+
+    Advanced and optional. If you regularly switch between sensorless and toolhead sensor or you want to optimize extruder
+    unload when using toolhead sensor you can override 'home_position_to_nozzle' with these more specific values
+    (Note that the difference between these two represents the extruder to sensor distance and is used as the final
+    unload distance from extruder. An accurate setting can reduce tip noise/grinding on exit from extruder)
+
+        extruder_to_nozzle: 72		# E.g. Revo Voron with CW2 extruder using extruder homing
+        sensor_to_nozzle: 62		# E.g. Revo Voron with CW2 extruder using toolhead sensor homing
+
+    Again, these last two settings are optional and can be omitted
 
 *Obviously the actual distances shown above may be customized*
   
@@ -359,12 +371,21 @@ Happy Hare exposes the following 'printer' variables:
 
     printer.ercf.encoder_pos : {float}
     printer.ercf.tool : {int} 0..n | -1 for unknown | -2 for bypass
+    printer.ercf.next_tool : {int} 0..n | -1 for unknown | -2 for bypass
     printer.ercf.gate : {int} 0..n | -1 for unknown
     printer.ercf.filament : {string} Loaded | Unloaded | Unknown
-    printer.ercf.is_paused : {bool}
+    printer.ercf.is_locked : {bool}
+    printer.ercf.is_homed : {bool}
     printer.ercf.enabled : {bool}
-    printer.ercf.clog_detection : {int} 0 | 1
+    printer.ercf.clog_detection : {int} 0 (off) | 1 (manual) | 2 (auto)
+    printer.ercf.endless_spool : {int} 0 (disabled) | 1 (enabled)
     printer.ercf.servo : {string} Up | Down | Unknown
+    printer.ercf.gate_status : {list} 0 empty | 1 available | -1 unknown
+    printer.ercf.ttg_map : {list} defined gate for each tool
+    printer.ercf.endless_spool_groups : {list} group membership for each tool
+    printer.ercf.filament_visual : {string} representation of filament location
+    printer.ercf.action : {string} Idle | Busy | Loading | Unloading | Forming Tip | Unknown
+
 
 ## My Testing:
 This software is largely rewritten as well as being extended and so, despite best efforts, has probably introduced some bugs that may not exist in the official driver.  It also lacks extensive testing on different configurations that will stress the corner cases.  I have been using successfully on Voron 2.4 / ERCF with EASY-BRD.  I use a self-modified CW2 extruder with foolproof microswitch toolhead sensor. My day-to-day configuration is to load the filament to the extruder in a single movement (`num_moves=1`) at 200mm/s, then home to toolhead sensor with synchronous gear/extruder movement (option #1 explained above).  I use the sensorless selector and have runout and EndlessSpool enabled.
@@ -423,7 +444,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_SELECT_TOOL | Deprecated but included as alias to 'ERCF_SELECT TOOL=' to be compatible with current documentation |
   | ERCF_SELECT | Selects the gate associated with the specified tool (TTG map) or the specific gate regardless of TTG map | TOOL=\[0..n\] The tool to be selected <br>GATE=\[0..n\] The gate to be selected (ignores TTG map) |
   | ERCF_SELECT_BYPASS | Unload and select the bypass selector position if configured | None |
-  | ERCF_LOAD | Loads filament in currently selected tool/gate to extruder. Optionally performs just the extruder load part of the sequence - designed for bypass unloading | EXTRUDER_ONLY=\[0|1\] To force just the extruder loading (automatic if in bypass) |
+  | ERCF_LOAD | Loads filament in currently selected tool/gate to extruder. Optionally performs just the extruder load part of the sequence - designed for bypass unloading | EXTRUDER_ONLY=\[0|1\] To force just the extruder loading (automatic if in bypass) <br>NOTE: Owing to current documented use for test loading (correctly ERCF_TEST_LOAD) it is necessary to pass `TEST=0` to force the loading of current tool/gate. This will be updated in the future |
   | ERCF_CHANGE_TOOL | Perform a tool swap (generally called from 'Tx' macros) | TOOL=\[0..n\] <br>STANDALONE=\[0\|1\] Optional to force standalone logic (tip forming) |
   | ERCF_EJECT | Eject filament and park it in the ERCF gate or does the extruder unloading part of the unload sequence if in bypass | EXTRUDER_ONLY=\[0|1\] To force just the extruder unloading (automatic if in bypass) |
   | ERCF_PAUSE | Pause the current print and lock the ERCF operations | FORCE_IN_PRINT=\[0\|1\] This option forces the handling of pause as if it occurred in print and is useful for testing |
