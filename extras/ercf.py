@@ -1382,11 +1382,14 @@ class Ercf:
 
         # Immediately lift toolhead off print
         if self.z_hop_height > 0:
-            self._log_debug("Lifting toolhead %.1fmm" % self.z_hop_height)
-            act_z = self.toolhead.get_position()[2]
-            max_z = self.toolhead.get_status(self.printer.get_reactor().monotonic())['axis_maximum'].z
-            safe_z = self.z_hop_height if (act_z < (max_z - self.z_hop_height)) else (max_z - act_z)
-            self.toolhead.manual_move([None, None, act_z + safe_z], self.z_hop_speed)
+            if 'z' not in self.toolhead.get_status(self.printer.get_reactor().monotonic())['homed_axes']:
+                self._log_info("Warning: ERCF cannot lift toolhead because toolhead not homed!")
+            else:
+                self._log_debug("Lifting toolhead %.1fmm" % self.z_hop_height)
+                act_z = self.toolhead.get_position()[2]
+                max_z = self.toolhead.get_status(self.printer.get_reactor().monotonic())['axis_maximum'].z
+                safe_z = self.z_hop_height if (act_z < (max_z - self.z_hop_height)) else (max_z - act_z)
+                self.toolhead.manual_move([None, None, act_z + safe_z], self.z_hop_speed)
 
     def _restore_toolhead_position(self):
         if self.saved_toolhead_position:
@@ -2597,6 +2600,7 @@ class Ercf:
         if self.is_paused_locked:
             self._track_pause_end()
             self.is_paused_locked = False
+        self.reactor.update_timer(self.heater_off_handler, self.reactor.NEVER)
         self._save_toolhead_position_and_lift(False)
         self.gcode.run_script_from_command("__CANCEL_PRINT")
 
@@ -2621,6 +2625,7 @@ class Ercf:
             if mod_gate >= 0:
                 gate = mod_gate
             if gate >= 0:
+                self._remap_tool(tool, gate, loaded)
                 self._set_gate_selected(gate)
         elif tool == self.TOOL_UNKNOWN and self.tool_selected == self.TOOL_BYPASS and loaded == -1:
             # This is to be able to get out of "stuck in bypass" state
