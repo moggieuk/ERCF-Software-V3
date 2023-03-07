@@ -1,7 +1,7 @@
 # Happy Hare ERCF Software
 # Main module
 #
-# Copyright (C) 2022  moggieuk#6538 (discord)
+# Copyright (C) 2022  moggieuk#6538 (discord) moggieuk@hotmail.com
 #
 # Inspired by original ERCF software
 # Enraged Rabbit Carrot Feeder Project           Copyright (C) 2021  Ette
@@ -170,7 +170,6 @@ class Ercf:
         self.extruder_form_tip_current = config.getint('extruder_form_tip_current', 100, minval=100, maxval=150)
         self.toolhead_homing_max = config.getfloat('toolhead_homing_max', 20., minval=0.)
         self.toolhead_homing_step = config.getfloat('toolhead_homing_step', 1., minval=0.5, maxval=5.)
-        self.extruder_to_sensor = config.getfloat('extruder_to_sensor', self.toolhead_homing_max, above=0.)
         self.sync_load_length = config.getfloat('sync_load_length', 8., minval=0., maxval=100.)
         self.sync_load_speed = config.getfloat('sync_load_speed', 10., minval=1., maxval=100.)
         self.sync_unload_length = config.getfloat('sync_unload_length', 10., minval=0., maxval=100.)
@@ -586,8 +585,7 @@ class Ercf:
             self._log_always('(\_/)\n( *,*)\n(")_(") ERCF Ready')
             if self.startup_status > 0:
                 self._log_always(self._tool_to_gate_map_to_human_string(self.startup_status == 1))
-                if self.persistence_level >= 4:
-                    self._display_visual_state()
+                self._display_visual_state(silent=(self.persistence_level < 4))
             self._servo_up()
         except Exception as e:
             self._log_always('Warning: Error booting up ERCF: %s' % str(e))
@@ -781,11 +779,11 @@ class Ercf:
             self.gcode.respond_info(message)
 
     # Fun visual display of ERCF state
-    def _display_visual_state(self, direction=None):
+    def _display_visual_state(self, direction=None, silent=False):
         if not direction == None:
             self.filament_direction = direction
         visual_str = self._state_to_human_string() # Always call to set printer variable
-        if self.log_visual > 0 and not self.calibrating:
+        if not silent and self.log_visual > 0 and not self.calibrating:
             self._log_always(visual_str)
 
     def _state_to_human_string(self, direction=None):
@@ -1491,15 +1489,14 @@ class Ercf:
                 self.gcode.run_script_from_command("M109 S%.1f" % temp)
 
     def _set_loaded_status(self, state, silent=False):
-            self.loaded_status = state
-            if not silent:
-                self._display_visual_state()
+        self.loaded_status = state
+        self._display_visual_state(silent=silent)
 
-            # Minimal save_variable writes
-            if state == self.LOADED_STATUS_FULL or state == self.LOADED_STATUS_UNLOADED:
-                self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%d" % (self.VARS_ERCF_LOADED_STATUS, state))
-            elif self.variables.get(self.VARS_ERCF_LOADED_STATUS, 0) != self.LOADED_STATUS_UNKNOWN:
-                self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%d" % (self.VARS_ERCF_LOADED_STATUS, self.LOADED_STATUS_UNKNOWN))
+        # Minimal save_variable writes
+        if state == self.LOADED_STATUS_FULL or state == self.LOADED_STATUS_UNLOADED:
+            self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%d" % (self.VARS_ERCF_LOADED_STATUS, state))
+        elif self.variables.get(self.VARS_ERCF_LOADED_STATUS, 0) != self.LOADED_STATUS_UNKNOWN:
+            self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%d" % (self.VARS_ERCF_LOADED_STATUS, self.LOADED_STATUS_UNKNOWN))
 
     def _selected_tool_string(self):
         if self.tool_selected == self.TOOL_BYPASS:
@@ -2038,7 +2035,7 @@ class Ercf:
 
         # Goal is to exit extruder. Two strategies depending on availability of toolhead sensor
         out_of_extruder = False
-        safety_margin = 10.
+        safety_margin = 5.
         if self._has_toolhead_sensor():
             #step = self.toolhead_homing_step # Too slow
             step = 3.
@@ -2052,7 +2049,10 @@ class Ercf:
                     self._set_loaded_status(self.LOADED_STATUS_PARTIAL_HOMED_SENSOR)
                     self._log_debug("Toolhead sensor reached after %d moves" % (i+1))
                     # Last move to ensure we are really free because of small space between sensor and extruder gears
-                    delta = self._trace_filament_move("Move from toolhead sensor to exit", -self.extruder_to_sensor, speed=speed, motor="extruder")
+                    final_move = self.toolhead_homing_max
+                    if self.sensor_to_nozzle > 0. and self.extruder_to_nozzle > 0.:
+                        final_move = self.extruder_to_nozzle - self.sensor_to_nozzle + safety_margin
+                    delta = self._trace_filament_move("Move from toolhead sensor to exit", -final_move, speed=speed, motor="extruder")
                     out_of_extruder = True
                     break
         else:
@@ -2206,6 +2206,7 @@ class Ercf:
 
     def _home_selector(self):
         self.is_homed = False
+        self.gate_selected = self.TOOL_UNKNOWN
         self._servo_up()
         num_channels = len(self.selector_offsets)
         selector_length = 10. + (num_channels-1)*21. + ((num_channels-1)//3)*5. + (self.bypass_offset > 0)
@@ -2234,13 +2235,13 @@ class Ercf:
             except Exception as e:
                 # Homing failed
                 self._set_tool_selected(self.TOOL_UNKNOWN)
-                raise ErcfError("Homing selector failed because of blockage")
+                raise ErcfError("Homing selector failed because of blockage or malfunction")
         self.selector_stepper.do_set_position(0.)
 
     # Give Klipper several chances to give the right answer
     # No idea what's going on with Klipper but it can give erroneous not TRIGGERED readings
     # (perhaps because of bounce in switch or message delays) so this is a workaround
-    # TODO: check if this is still required after homing logic change
+    # TODO: check if this is still required after homing logic change and Klipper bug fix
     def _check_selector_endstop(self):
         homed = False
         for i in range(4):
@@ -2394,14 +2395,13 @@ class Ercf:
         self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%d" % (self.VARS_ERCF_GATE_SELECTED, self.gate_selected))
 
     def _set_tool_selected(self, tool, silent=False):
-            self.tool_selected = tool
-            self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%d" % (self.VARS_ERCF_TOOL_SELECTED, self.tool_selected))
-            if tool == self.TOOL_UNKNOWN or tool == self.TOOL_BYPASS:
-                self._set_steps(1.)
-            else:
-                self._set_steps(self._get_gate_ratio(self.gate_selected))
-            if not silent:
-                self._display_visual_state()
+        self.tool_selected = tool
+        self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%d" % (self.VARS_ERCF_TOOL_SELECTED, self.tool_selected))
+        if tool == self.TOOL_UNKNOWN or tool == self.TOOL_BYPASS:
+            self._set_steps(1.)
+        else:
+            self._set_steps(self._get_gate_ratio(self.gate_selected))
+        self._display_visual_state(silent=silent)
 
     # Note that rotational steps are set in the above tool selection or calibration functions
     def _set_steps(self, ratio=1.):
@@ -2484,22 +2484,25 @@ class Ercf:
         if self._check_is_paused(): return
         extruder_only = bool(gcmd.get_int('EXTRUDER_ONLY', 0, minval=0, maxval=1) or bypass)
 
+        # Manual currently documents `ERCF_LOAD` for setup so this tries to supoort that but forces real
+        # use to also set the parameter `TEST=0`
         length = gcmd.get_float('LENGTH', -1) # Test for legacy use
-        if length != -1:
-            self._log_always("Deprecated. For setup/test purposes Please use 'ERCF_TEST_LOAD' instead")
-            return
+        test = gcmd.get_float('TEST', 1) # Test for legacy use
+        if not extruder_only and (test == 1 or length != -1):
+            self._log_always("Deprecated. For setup/test purposes please use 'ERCF_TEST_LOAD' instead")
+            return self.cmd_ERCF_TEST_LOAD(gcmd)
 
         restore_encoder = self._disable_encoder_sensor() # Don't want runout accidently triggering during filament load
         try:
             if self.tool_selected != self.TOOL_BYPASS and not extruder_only:
-                self._select_and_load_tool(self.tool_selected)
+                self._select_and_load_tool(self.tool_selected) # TODO this could change gate which might not be what is intended
             elif self.loaded_status != self.LOADED_STATUS_FULL or extruder_only:
                 self._load_extruder(True)
             else:
                 self._log_always("Filament already loaded")
         except ErcfError as ee:
             self._pause(str(ee))
-            if self.tool_selected == self.TOOL_BYPASS: # PAUL test me
+            if self.tool_selected == self.TOOL_BYPASS:
                 self._set_loaded_status(self.LOADED_STATUS_UNKNOWN)
         finally:
             self._enable_encoder_sensor(restore_encoder)
@@ -2540,15 +2543,6 @@ class Ercf:
     def cmd_ERCF_LOAD_BYPASS(self, gcmd):
         self._log_always("Warning: ERCF_LOAD_BYPASS is now deprecated. Please simply use the bypass aware `ERCF_LOAD` instead")
         self.cmd_ERCF_LOAD(gcmd, bypass=True)
-# PAUL cleanup after validation
-#        if self._check_is_disabled(): return
-#        if self._check_is_paused(): return
-#        if self._check_not_bypass(): return
-#        try:
-#            self._load_extruder(True)
-#        except ErcfError as ee:
-#            self._set_loaded_status(self.LOADED_STATUS_UNKNOWN)
-#            self._pause(str(ee))
 
     cmd_ERCF_UNLOAD_BYPASS_help = "Deprecated. Use bypass aware ERCF_EJECT instead"
     def cmd_ERCF_UNLOAD_BYPASS(self, gcmd):
@@ -2613,6 +2607,10 @@ class Ercf:
         tool = gcmd.get_int('TOOL', self.TOOL_UNKNOWN, minval=-2, maxval=len(self.selector_offsets)-1)
         mod_gate = gcmd.get_int('GATE', self.TOOL_UNKNOWN, minval=-2, maxval=len(self.selector_offsets)-1)
         loaded = gcmd.get_int('LOADED', -1, minval=0, maxval=1)
+
+        if (tool == self.TOOL_BYPASS or mod_gate == self.TOOL_BYPASS) and self.bypass_offset == 0:
+            self._log_always("Bypass not configured")
+            return
 
         if tool == self.TOOL_BYPASS:
             self._set_tool_selected(self.TOOL_BYPASS, silent=True)

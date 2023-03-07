@@ -1,4 +1,9 @@
 #!/bin/bash
+# Happy Hare ERCF Software
+# Installer
+#
+# Copyright (C) 2022  moggieuk#6538 (discord) moggieuk@hotmail.com
+#
 KLIPPER_HOME="${HOME}/klipper"
 KLIPPER_CONFIG_HOME="${HOME}/klipper_config"
 PRINTER_DATA_CONFIG_HOME="${HOME}/printer_data/config"
@@ -105,6 +110,32 @@ copy_template_files() {
         return
     fi
 
+    # Generate sample colorselector, gate_status, endless_spool_groups based on number of gates
+    colorselector="colorselector: "
+    gate_status="gate_status: "
+    tool_to_gate_map="tool_to_gate_map: "
+    endless_spool_groups="endless_spool_groups: "
+    offset_x10=23
+    available=1
+    for (( i=0; i<=$(expr $num_gates - 1); i++ ))
+    do
+       if [ "${i}" -ne 0 ]; then
+           colorselector="${colorselector}, "
+           gate_status="${gate_status}, "
+           tool_to_gate_map="${tool_to_gate_map}, "
+           endless_spool_groups="${endless_spool_groups}, "
+       fi
+       colorselector="${colorselector}$(echo $offset_x10 | sed -e 's/.$/.&/;t' -e 's/.$/.0&/')"
+       gate_status="${gate_status}${available}"
+       tool_to_gate_map="${tool_to_gate_map}${i}"
+       endless_spool_groups="${endless_spool_groups}$(expr $i % 3 + 1)"
+       offset_x10=$(expr $offset_x10 + 210)
+       if [ "$(expr $i % 3)" -eq 2 ]; then
+           offset_x10=$(expr $offset_x10 + 51)
+       fi
+       available=0
+    done
+
     echo -e "${INFO}Copying configuration files to ${KLIPPER_CONFIG_HOME}"
     for file in `cd ${SRCDIR} ; ls *.cfg`; do
         dest=${KLIPPER_CONFIG_HOME}/${file}
@@ -121,9 +152,9 @@ copy_template_files() {
             else
                 magic_str1="NO TOOLHEAD"
             fi
-	    uart_comment=""
+            uart_comment=""
             if [ "${brd_type}" == "ERB" ]; then
-	        uart_comment="#"
+                uart_comment="#"
             fi
 
             if [ "${sensorless_selector}" -eq 1 ]; then
@@ -141,7 +172,7 @@ copy_template_files() {
                 cat ${SRCDIR}/${file} | sed -e "\
                     s/^uart_address:/${uart_comment}uart_address:/; \
                         " > ${dest}.tmp
-	    fi
+            fi
 
             # Now substitute pin tokens for correct brd_type
             if [ "${brd_type}" == "unknown" ]; then
@@ -171,6 +202,7 @@ copy_template_files() {
                     /^${magic_str1} START/,/${magic_str1} END/ s/^#//; \
                         " > ${dest} && rm ${dest}.tmp
             fi
+
         elif [ "${file}" == "ercf_software.cfg" ]; then
             cat ${SRCDIR}/${file} | sed -e "\
                 s%{klipper_config_home}%${KLIPPER_CONFIG_HOME}%g; \
@@ -185,6 +217,10 @@ copy_template_files() {
                 s/{servo_up_angle}/${servo_up_angle}/g; \
                 s/{servo_down_angle}/${servo_down_angle}/g; \
                 s/{calibration_bowden_length}/${calibration_bowden_length}/g; \
+		s/colorselector:.*/${colorselector}/; \
+		s/gate_status:.*/${gate_status}/; \
+		s/tool_to_gate_map:.*/${tool_to_gate_map}/; \
+		s/endless_spool_groups:.*/${endless_spool_groups}/; \
                     " > ${dest} && rm ${dest}.tmp
         fi
     done
@@ -240,9 +276,9 @@ upgrade_config_files() {
         if [ "${update_encoder}" -eq 1 ]; then
             # These two settings have moved to ercf_hardware.cfg
             encoder_pin=$(egrep 'encoder_pin:' ${dest_parameters} | awk '{ sub("\^", "") ; print $2 }')
-	    encoder_resolution=$(egrep 'encoder_resolution:' ${dest_parameters} | awk '{ print $2 }')
+            encoder_resolution=$(egrep 'encoder_resolution:' ${dest_parameters} | awk '{ print $2 }')
 
-	    # Comment out all old settings in ercf_parameters.cfg
+            # Comment out all old settings in ercf_parameters.cfg
             echo -e "${WARNING}Upgrading ${dest_parameters} to remove legacy servo and encoder settings..."
             cat ${dest_parameters} | sed -e " \
                 s/^encoder_pin:/#encoder_pin:/ ;
@@ -323,57 +359,6 @@ install_update_manager() {
     fi
 }
 
-install_klipper_screen() {
-    KLIPPERSCREEN_HOME="${SRCDIR}/Klipper"
-    if [ ! -d "${KLIPPERSCREEN_HOME}" ]; then
-        echo -e "${ERROR}KlipperScreen is not installed! Install it first then rerun this script"
-        return
-    fi
-    echo -e "${INFO}Adding KlipperScreen support for ERCF (${num_gates} gates)"
-    do_install=0
-    ks_config="$KLIPPER_CONFIG_HOME/KlipperScreen.conf"
-    if [ -f "${KLIPPER_CONFIG_HOME}/KlipperScreen.conf" ]; then
-        update_section=$(grep -c '# ERCF Happy Hare' \
-        ${KLIPPER_CONFIG_HOME}/KlipperScreen.conf || true)
-        if [ "${update_section}" -eq 0 ]; then
-            next_ks_config="$(nextsuffix "$ks_config")"
-            echo -e "${INFO}Pre upgrade config file ${ks_config} moved to ${next_ks_config} for reference"
-            cp ${ks_config} ${next_ks_config}
-            do_install=1
-        else
-            echo -e "${INFO}KlipperScreen ERCF menus may already exist - skipping install"
-        fi
-    else
-        echo -e "${WARNING}KlipperScreen.conf not found, will create new one"
-        touch ${KLIPPER_CONFIG_HOME}/KlipperScreen.conf
-        do_install=1
-    fi
-
-    if [ "${do_install}" -eq 1 ]; then
-        max_gate=$(expr $num_gates - 1)
-        cp ${SRCDIR}/klipper_screen/menus.conf /tmp/KlipperScreen.hh
-        cat ${KLIPPER_CONFIG_HOME}/KlipperScreen.conf >> /tmp/KlipperScreen.hh && mv /tmp/KlipperScreen.hh ${KLIPPER_CONFIG_HOME}/KlipperScreen.conf
-
-        for file in `ls ${SRCDIR}/klipper_screen/iter*.conf`; do
-            token=`basename $file .conf`
-            expanded=$(for i in {0..8..1}; do
-                cat ${SRCDIR}/klipper_screen/${token}.conf | sed -e "s/{i}/${i}/g"
-            done)
-            expanded="# Generated menus for each tool/gate..\n${expanded}"
-            awk -v r="$expanded" "{gsub(/^ERCF_${token}/,r)}1" "${KLIPPER_CONFIG_HOME}/KlipperScreen.conf" > /tmp/KlipperScreen.hh && mv /tmp/KlipperScreen.hh "${KLIPPER_CONFIG_HOME}/KlipperScreen.conf"
-        done
-    fi
-
-    # Always ensure images are linked for every style
-    for style in `ls -d ${KLIPPERSCREEN_HOME}/styles/*/images`; do
-        for img in `ls ${SRCDIR}/klipper_screen/images`; do
-            ln -sf "${SRCDIR}/klipper_screen/images/${img}" "${style}/${img}"
-        done
-    done
-
-    restart_klipperscreen
-}
-
 restart_klipper() {
     echo -e "${INFO}Restarting Klipper..."
     sudo systemctl restart klipper
@@ -384,23 +369,18 @@ restart_moonraker() {
     sudo systemctl restart moonraker
 }
 
-restart_klipperscreen() {
-    echo -e "${INFO}Restarting KlipperScreen..."
-    sudo systemctl restart KlipperScreen
-}
-
 prompt_yn() {
     while true; do
         read -p "$@ (y/n)?" yn
         case "${yn}" in
             Y|y|Yes|yes)
-		echo "y" 
+                echo "y" 
                 break;;
             N|n|No|no)
-		echo "n" 
-    	        break;;
-    	    *)
-		;;
+                echo "n" 
+                break;;
+            *)
+                ;;
         esac
     done
 }
@@ -422,9 +402,9 @@ questionaire() {
                         brd_type="EASY-BRD"
                     else
                         brd_type="ERB"
-    		fi
+                    fi
                     echo -e "${PROMPT}This looks like your ${EMPHASIZE}${brd_type}${PROMPT} controller serial port. Is that correct?${INPUT}"
-    		yn=$(prompt_yn "/dev/serial/by-id/${line}")
+                    yn=$(prompt_yn "/dev/serial/by-id/${line}")
                     case $yn in
                         y)
                             serial="/dev/serial/by-id/${line}"
@@ -436,9 +416,9 @@ questionaire() {
                     esac
                 done
                 if [ "${serial}" == "" ]; then
-    		echo
+                    echo
                     echo -e "${PROMPT}Couldn't find your serial port, but no worries - I'll configure the default and you can manually change later${INPUT}"
-    		yn=$(prompt_yn "Setup for EASY-BRD? (Answer 'N' for Fysetc Burrows ERB)")
+                    yn=$(prompt_yn "Setup for EASY-BRD? (Answer 'N' for Fysetc Burrows ERB)")
                     case $yn in
                         y)
                             brd_type="EASY-BRD"
@@ -448,11 +428,8 @@ questionaire() {
                             ;;
                     esac
                     serial='/dev/ttyACM1 # Config guess. Run ls -l /dev/serial/by-id and set manually'
-    	    fi
-    
-                # PAUL TODO.. number of selectors...
-                num_selectors = 9
-    
+                fi
+
                 echo
                 echo -e "${PROMPT}Sensorless selector operation? This allows for additional selector recovery steps but disables the 'extra' input on the EASY-BRD.${INPUT}"
                 yn=$(prompt_yn "Enable sensorless selector operation")
@@ -460,20 +437,20 @@ questionaire() {
                     y)
                         if [ "${brd_type}" == "EASY-BRD" ]; then
                             echo
-    	                echo -e "${WARNING}    IMPORTANT: Set the J6 jumper pins to 2-3 and 4-5, i.e. .[..][..]  MAKE A NOTE NOW!!"
-    		    fi
-    	            sensorless_selector=1
+                            echo -e "${WARNING}    IMPORTANT: Set the J6 jumper pins to 2-3 and 4-5, i.e. .[..][..]  MAKE A NOTE NOW!!"
+                        fi
+                        sensorless_selector=1
                         ;;
                     n)
                         if [ "${brd_type}" == "EASY-BRD" ]; then
                             echo
-    	                echo -e "${WARNING}    IMPORTANT: Set the J6 jumper pins to 1-2 and 4-5, i.e. [..].[..]  MAKE A NOTE NOW!!"
-    		    fi
-    	            sensorless_selector=0
+                            echo -e "${WARNING}    IMPORTANT: Set the J6 jumper pins to 1-2 and 4-5, i.e. [..].[..]  MAKE A NOTE NOW!!"
+                        fi
+                        sensorless_selector=0
                         ;;
-    	    esac
+                esac
                 ;;
-    
+
             n)
                 easy_brd=0
                 echo -e "${INFO}Ok, I can only partially setup non EASY-BRD/ERB installations, but lets see what I can help with"
@@ -481,7 +458,7 @@ questionaire() {
                 echo
                 for line in `ls /dev/serial/by-id`; do
                     echo -e "${PROMPT}Is this the serial port to your ERCF mcu?${INPUT}"
-    		yn=$(prompt_yn "/dev/serial/by-id/${line}")
+                    yn=$(prompt_yn "/dev/serial/by-id/${line}")
                     case $yn in
                         y)
                             serial="/dev/serial/by-id/${line}"
@@ -494,37 +471,49 @@ questionaire() {
                 if [ "${serial}" = "" ]; then
                     echo -e "${INFO}Couldn't find your serial port, but no worries - I'll configure the default and you can manually change later as per the docs"
                     serial='/dev/ttyACM1 # Config guess. Run ls -l /dev/serial/by-id and set manually'
-    	    fi
-    
+                fi
+
                 echo
                 echo -e "${PROMPT}Sensorless selector operation? This allows for additional selector recovery steps${INPUT}"
                 yn=$(prompt_yn "Enable sensorless selector operation")
                 case $yn in
                     y)
-    	            sensorless_selector=1
+                        sensorless_selector=1
                         ;;
                     n)
-    	            sensorless_selector=0
+                        sensorless_selector=0
                         ;;
-    	    esac
-    	    ;;
+                esac
+                ;;
         esac
-    
+
+        num_gates=9
+        echo
+        echo -e "${PROMPT}How many gates (selectors) do you have (3, 6, 9, 12)?${INPUT}"
+       while true; do
+            read -p "Number of gates? " num_gates
+            if ! [ "${num_gates}" -ge 1 ] 2> /dev/null ;then
+                echo -e "${INFO}Positive integer value only"
+          else
+               break
+           fi
+        done
+
         echo
         echo -e "${PROMPT}Do you have a toolhead sensor you would like to use? If reliable this provides the smoothest and most reliable loading and unloading operation${INPUT}"
         yn=$(prompt_yn "Enable toolhead sensor")
         case $yn in
-    	y)
-    	    toolhead_sensor=1
-    	    echo -e "${PROMPT}    What is the mcu pin name that your toolhead sensor is connected too?"
-    	    echo -e "${PROMPT}    If you don't know just hit return, I can enter a default and you can change later${INPUT}"
+            y)
+                toolhead_sensor=1
+                echo -e "${PROMPT}    What is the mcu pin name that your toolhead sensor is connected too?"
+                echo -e "${PROMPT}    If you don't know just hit return, I can enter a default and you can change later${INPUT}"
                 read -p "    Toolhead sensor pin name? " toolhead_sensor_pin
                 if [ "${toolhead_sensor_pin}" = "" ]; then
                     toolhead_sensor_pin="{dummy_pin_must_set_me}"
                 fi
                 ;;
             n)
-    	    toolhead_sensor=0
+                toolhead_sensor=0
                 toolhead_sensor_pin="{dummy_pin_must_set_me}"
                 ;;
         esac
@@ -534,22 +523,22 @@ questionaire() {
         yn=$(prompt_yn "MG-90S Servo?")
         case $yn in
             y)
-    	    servo_up_angle=30
-    	    servo_down_angle=140
+                servo_up_angle=30
+                servo_down_angle=140
                 ;;
             n)
-    	    servo_up_angle=140
-    	    servo_down_angle=30
+                servo_up_angle=140
+                servo_down_angle=30
                 ;;
         esac
-    
+
         echo
         echo -e "${PROMPT}Clog detection? This uses the ERCF encoder movement to detect clogs and can call your filament runout logic${INPUT}"
         yn=$(prompt_yn "Enable clog detection")
         case $yn in
             y)
                 clog_detection=1
-    	    echo -e "${PROMPT}    Would you like ERCF to automatically adjust clog detection length (recommended)?${INPUT}"
+                echo -e "${PROMPT}    Would you like ERCF to automatically adjust clog detection length (recommended)?${INPUT}"
                 yn=$(prompt_yn "    Automatic")
                 if [ "${yn}" == "y" ]; then
                     clog_detection=2
@@ -559,7 +548,7 @@ questionaire() {
                 clog_detection=0
                 ;;
         esac
-    
+
         echo
         echo -e "${PROMPT}EndlessSpool? This uses filament runout detection to automate switching to new spool without interruption${INPUT}"
         yn=$(prompt_yn "Enable EndlessSpool")
@@ -573,10 +562,10 @@ questionaire() {
                 fi
                 ;;
             n)
-    	    endless_spool=0
+               endless_spool=0
                ;;
         esac
-    
+
         echo
         echo -e "${PROMPT}What is the length of your reverse bowden tube in mm?"
         echo -e "${PROMPT}(This is just to speed up calibration and needs to be approximately right but not longer than the real length)${INPUT}"
@@ -588,7 +577,7 @@ questionaire() {
                break
            fi
         done
-    
+
         echo
         menu_12864=0
         echo -e "${PROMPT}Finally, would you like me to include all the ERCF config files into your printer.cfg file${INPUT}"
@@ -603,15 +592,15 @@ questionaire() {
                         menu_12864=1
                         ;;
                     n)
-            	    menu_12864=0
+                       menu_12864=0
                        ;;
                 esac
                 ;;
             n)
-    	    add_includes=0
+               add_includes=0
                ;;
         esac
-    
+
         echo
         echo -e "${INFO}"
         echo "    vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"
@@ -641,9 +630,9 @@ questionaire() {
 
 usage() {
     echo -e "${EMPHASIZE}"
-    echo "Usage: $0 [-k <klipper_home_dir>] [-c <klipper_config_dir>] [-i] [-d <num_gates>]"
+    echo "Usage: $0 [-k <klipper_home_dir>] [-c <klipper_config_dir>] [-i]"
     echo
-    echo "-i for interactive; -d to force just KlipperScreen install"
+    echo "-i for interactive"
     echo
     exit 1
 }
@@ -657,31 +646,23 @@ SRCDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/ && pwd )"
 
 INSTALL_TEMPLATES=0
 INSTALL_KLIPPER_SCREEN_ONLY=0
-while getopts "k:c:d:i" arg; do
+while getopts "k:c:i" arg; do
     case $arg in
         k) KLIPPER_HOME=${OPTARG};;
         c) KLIPPER_CONFIG_HOME=${OPTARG};;
         i) INSTALL_TEMPLATES=1;;
-        d) INSTALL_KLIPPER_SCREEN_ONLY=1
-           num_gates=${OPTARG};;
-	*) usage;;
+        *) usage;;
     esac
 done
 
 verify_not_root
 verify_home_dirs
 check_klipper
-
-if [ ! "$INSTALL_KLIPPER_SCREEN_ONLY" -eq 0 ]; then
-    install_klipper_screen
-else
-    questionaire
-    link_ercf_plugin
-    copy_template_files
-    install_klipper_screen
-    install_update_manager
-    restart_klipper
-fi
+questionaire
+link_ercf_plugin
+copy_template_files
+install_update_manager
+restart_klipper
 
 echo -e "${EMPHASIZE}"
 echo "Done.  Enjoy ERCF (and thank you Ette for a wonderful design)..."
