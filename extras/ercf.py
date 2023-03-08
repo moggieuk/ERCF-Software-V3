@@ -176,8 +176,8 @@ class Ercf:
         self.sync_unload_speed = config.getfloat('sync_unload_speed', 10., minval=1., maxval=100.)
         self.delay_servo_release =config.getfloat('delay_servo_release', 2., minval=0., maxval=5.)
         self.home_position_to_nozzle = config.getfloat('home_position_to_nozzle', minval=5.) # Legacy, separate measures below are preferred
-        self.extruder_to_nozzle = config.getfloat('extruder_to_nozzle', self.home_position_to_nozzle, minval=5.) # For sensorless
-        self.sensor_to_nozzle = config.getfloat('sensor_to_nozzle', self.home_position_to_nozzle, minval=5.) # For toolhead sensor
+        self.extruder_to_nozzle = config.getfloat('extruder_to_nozzle', 0., minval=5.) # For sensorless
+        self.sensor_to_nozzle = config.getfloat('sensor_to_nozzle', 0., minval=5.) # For toolhead sensor
         self.nozzle_load_speed = config.getfloat('nozzle_load_speed', 15, minval=1., maxval=100.)
         self.nozzle_unload_speed = config.getfloat('nozzle_unload_speed', 20, minval=1., maxval=100.)
 
