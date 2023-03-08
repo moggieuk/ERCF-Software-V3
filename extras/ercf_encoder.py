@@ -1,7 +1,7 @@
 # Happy Hare ERCF Software
 # Driver for encoder that supports movement measurement and runout/clog detection
 #
-# Copyright (C) 2022  moggieuk#6538 (discord)
+# Copyright (C) 2022  moggieuk#6538 (discord) moggieuk@hotmail.com
 #
 # Based on:
 # Original Enraged Rabbit Carrot Feeder Project  Copyright (C) 2021  Ette
@@ -51,7 +51,7 @@ class ErcfEncoder:
         # The extrusion interval where new detection_length is calculated (also done on toolchange)
         self.next_calibration_point = self.calibration_length = config.getfloat('calibration_length', 10000., minval=50.) # 10m
         # Detection length will be set by ERCF calibration
-        self.detection_length = config.getfloat('detection_length', 10., above=2.)
+        self.detection_length = self.min_headroom = config.getfloat('detection_length', 10., above=2.)
         self.event_delay = config.getfloat('event_delay', 3., above=0.)
         gcode_macro = self.printer.load_object(config, 'gcode_macro')
         self.runout_gcode = gcode_macro.load_template(config, 'runout_gcode', '_ERCF_ENCODER_RUNOUT')
@@ -61,7 +61,7 @@ class ErcfEncoder:
         self.extruder = self.estimated_print_time = None
         self.filament_detected = False
         self.detection_mode = self.RUNOUT_STATIC
-        self.last_extruder_pos = 0.
+        self.last_extruder_pos = self.filament_runout_pos = 0.
         self._logger = None
 
         # Register event handlers
@@ -246,10 +246,14 @@ class ErcfEncoder:
 
     def get_status(self, eventtime):
         return {
-                'detetion_length': round(self.detection_length, 1),
+                'encoder_pos': round(self.get_distance(), 1),
+                'detection_length': round(self.detection_length, 1),
                 'min_headroom': round(self.min_headroom, 1),
-                'headroom': round(self.filament_runout_pos - self.last_extruder_pos, 1)
-                }
+                'headroom': round(self.filament_runout_pos - self.last_extruder_pos, 1),
+                'desired_headroom': round(self.desired_headroom, 1),
+                'detection_mode': self.detection_mode,
+                'enabled': self._enabled
+        }
 
 def load_config_prefix(config):
     return ErcfEncoder(config)
