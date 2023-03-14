@@ -92,6 +92,7 @@ Note: Upgrade from versions prior to v1.2.0 requires the re-running of ./install
   | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime |
   | ERCF_DISPLAY_TTG_MAP | Displays the current Tool - to - Gate mapping (can be used all the time but generally designed for EndlessSpool  |
   | ERCF_REMAP_TTG | Reconfiguration of the Tool - to - Gate (TTG) map.  Can also set gates as empty! |
+  | ERCF_SET_GATE_MAP | Configure the filament type, color and availability |
   | ERCF_ENDLESS_SPOOL | Modify the defined EndlessSpool groups at runtime |
   | ERCF_SELECT_BYPASS | Unload and select the bypass selector position if configured |
   | ERCF_LOAD | Loads current tool or just extruder |
@@ -354,6 +355,7 @@ Generally there is no downside of setting the level to 2 and so that is the sugg
   <li>`ERCF_RESET_STATS` - Reset print stats and per-gate health stats back to 0
   <li>`ERCF_REMAP_TTG RESET=1` - Reset just the tool-to-gate mapping
   <li>`ERCF_ENDLESS_SPOOL_GROUPS RESET=1` - Reset just the endless spool groups back to default
+  <li>`ERCF_SET_GATE_MAP RESET=1` - Reset information about the filament type, color and availability
   <li>`ERCF_RECOVER` - Automatically discover or manually reset filament position, selected gate, selected tool, filament availability (lots of options)
   <li>Needless to say, other operations can also be used to update state
 </ul>
@@ -369,21 +371,24 @@ Couple of miscellaneous notes:
 ### ERCF variables accessable in your own macros:
 Happy Hare exposes the following 'printer' variables:
 
-    printer.ercf.encoder_pos : {float}
-    printer.ercf.tool : {int} 0..n | -1 for unknown | -2 for bypass
-    printer.ercf.next_tool : {int} 0..n | -1 for unknown | -2 for bypass
-    printer.ercf.gate : {int} 0..n | -1 for unknown
-    printer.ercf.filament : {string} Loaded | Unloaded | Unknown
+    printer.ercf.enabled : {bool}
     printer.ercf.is_locked : {bool}
     printer.ercf.is_homed : {bool}
-    printer.ercf.enabled : {bool}
+    printer.ercf.tool : {int} 0..n | -1 for unknown | -2 for bypass
+    printer.ercf.next_tool : {int} 0..n | -1 for unknown | -2 for bypass
+    printer.ercf.last_toolchange : {string} description of last change similar to M117 display
+    printer.ercf.gate : {int} 0..n | -1 for unknown
     printer.ercf.clog_detection : {int} 0 (off) | 1 (manual) | 2 (auto)
     printer.ercf.endless_spool : {int} 0 (disabled) | 1 (enabled)
+    printer.ercf.filament : {string} Loaded | Unloaded | Unknown
+    printer.ercf.loaded_status : {int} state machine - exact location of filament
+    printer.ercf.filament_direction : {int} 1 (load) | -1 (unload)
     printer.ercf.servo : {string} Up | Down | Unknown
-    printer.ercf.gate_status : {list} 0 empty | 1 available | -1 unknown
     printer.ercf.ttg_map : {list} defined gate for each tool
+    printer.ercf.gate_status : {list} per gate: 0 empty | 1 available | -1 unknown
+    printer.ercf.gate_material : {list} of material names, one per gate
+    printer.ercf.gate_color : {list} of color names, one per gate
     printer.ercf.endless_spool_groups : {list} group membership for each tool
-    printer.ercf.filament_visual : {string} representation of filament location
     printer.ercf.action : {string} Idle | Busy | Loading | Unloading | Forming Tip | Unknown
 
 
@@ -468,7 +473,8 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_ENCODER_RUNOUT | Filament runout handler that will also implement EndlessSpool if enabled | FORCE_RUNOUT=1 is useful for testing to validate your _ERCF_ENDLESS_SPOOL\*\* macros |
   | ERCF_DISPLAY_TTG_MAP | Displays the current Tool -> Gate mapping (can be used all the time but generally designed for EndlessSpool  | SUMMARY=\[0\|1\] Whether to show complete or summary view |
   | ERCF_REMAP_TTG | Reconfiguration of the Tool - to - Gate (TTG) map.  Can also set gates as empty! | RESET=\[0\|1\] If specified the Tool -> Gate mapping will be reset to that defined in `ercf_parameters.cfg` <br>TOOL=\[0..n\] <br>GATE=\[0..n\] Maps specified tool to this gate (multiple tools can point to same gate) <br>AVAILABLE=\[0\|1\]  Marks gate as available or empty |
-  | ERCF_ENDLESS_SPOOL | Modify the defined EndlessSpool groups at runtime | RESET=\[0\|1\] If specified the EndlessSpool groups will be reset to that defined in `ercf_parameters.cfg` <br>GROUPS={comma separated list of groups} The same format as the default groups defined in ercf_parameters.cfg. Must be the same length as the number of ERCF gates ||
+  | ERCF_SET_GATE_MAP | Optionally configure the filament type, color and availabilty. Used in colored UI's and available via printer variables in your print_start macro | RESET=\[0\|1\] If specified the 'gate_materials, 'gate_colors' and 'gate_status' will be reset to that defined in `ercf_parameters.cfg` | DISPLAY=\[0\|1\] To simply display the current gate map<br>The following must be specified together to create a complete entry in the gate map:<br>GATE=\[0..n\] Gate numer<br>MATERIAL=.. The material type. Short, no spaces. e.g. "PLA+"<br>COLOR=.. The color of the filament. Can be a string representing one of the w3c color names found [here[(https://www.w3.org/TR/css-color-4/#named-colors) e.g. "violet" or a color string in the hexadeciaml format RRGGBB e.g. "ff0000" for red. NO space or # symbols. Empty string for no color<br>AVAILABLE=\[0\|1\] Marks gate as empty or available |
+  | ERCF_ENDLESS_SPOOL | Modify the defined EndlessSpool groups at runtime | RESET=\[0\|1\] If specified the EndlessSpool groups will be reset to that defined in `ercf_parameters.cfg` <br>GROUPS={comma separated list of groups} The same format as the default groups defined in ercf_parameters.cfg. Must be the same length as the number of ERCF gates ||k
   | ERCF_CHECK_GATES | Inspect the gate(s) and mark availability | GATE=\[0..n\] The specific gate to check <br>TOOL=\[0..n\] The specific too to check (same as gate if no TTG mapping in place) <br>TOOLS="comma separated list of tools" The list of tools to check. Typically used in print start macro to validate all necessary tools <br>If all parameters are omitted all gates will be checked (the default) |
   <br>
 

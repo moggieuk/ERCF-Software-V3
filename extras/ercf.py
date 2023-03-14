@@ -1,7 +1,8 @@
 # Happy Hare ERCF Software
 # Main module
 #
-# Copyright (C) 2022  moggieuk#6538 (discord) moggieuk@hotmail.com
+# Copyright (C) 2022  moggieuk#6538 (discord)
+#                     moggieuk@hotmail.com
 #
 # Inspired by original ERCF software
 # Enraged Rabbit Carrot Feeder Project           Copyright (C) 2021  Ette
@@ -18,7 +19,7 @@
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
 import logging, logging.handlers, threading, queue, time
-import textwrap, math, os.path
+import textwrap, math, os.path, re, json
 from random import randint
 
 # Forward all messages through a queue (polled by background thread)
@@ -110,21 +111,39 @@ class Ercf:
     EXTRUDER_STALLGUARD = 1
 
     # ercf_vars.cfg variables
-    VARS_ERCF_CALIB_CLOG_LENGTH = "ercf_calib_clog_length"
-    VARS_ERCF_ENDLESS_SPOOL_GROUPS = "ercf_state_endless_spool_groups"
-    VARS_ERCF_TOOL_TO_GATE_MAP = "ercf_state_tool_to_gate_map"
-    VARS_ERCF_GATE_STATUS = "ercf_state_gate_status"
-    VARS_ERCF_GATE_SELECTED = "ercf_state_gate_selected"
-    VARS_ERCF_TOOL_SELECTED = "ercf_state_tool_selected"
-    VARS_ERCF_LOADED_STATUS = "ercf_state_loaded_status"
-    VARS_ERCF_CALIB_REF = "ercf_calib_ref"
-    VARS_ERCF_CALIB_PREFIX = "ercf_calib_"
-    VARS_ERCF_CALIB_VERSION = "ercf_calib_version"
+    VARS_ERCF_CALIB_CLOG_LENGTH      = "ercf_calib_clog_length"
+    VARS_ERCF_ENDLESS_SPOOL_GROUPS   = "ercf_state_endless_spool_groups"
+    VARS_ERCF_TOOL_TO_GATE_MAP       = "ercf_state_tool_to_gate_map"
+    VARS_ERCF_GATE_STATUS            = "ercf_state_gate_status"
+    VARS_ERCF_GATE_MATERIAL          = "ercf_state_gate_material"
+    VARS_ERCF_GATE_COLOR             = "ercf_state_gate_color"
+    VARS_ERCF_GATE_SELECTED          = "ercf_state_gate_selected"
+    VARS_ERCF_TOOL_SELECTED          = "ercf_state_tool_selected"
+    VARS_ERCF_LOADED_STATUS          = "ercf_state_loaded_status"
+    VARS_ERCF_CALIB_REF              = "ercf_calib_ref"
+    VARS_ERCF_CALIB_PREFIX           = "ercf_calib_"
+    VARS_ERCF_CALIB_VERSION          = "ercf_calib_version"
     VARS_ERCF_GATE_STATISTICS_PREFIX = "ercf_statistics_gate_"
-    VARS_ERCF_SWAP_STATISTICS = "ercf_statistics_swaps"
+    VARS_ERCF_SWAP_STATISTICS        = "ercf_statistics_swaps"
 
     DEFAULT_ENCODER_RESOLUTION = 0.67 # 0.67 is about the resolution of one pulse
-    EMPTY_GATE_STATS = {'pauses': 0, 'loads': 0, 'load_distance': 0.0, 'load_delta': 0.0, 'unloads': 0, 'unload_distance': 0.0, 'unload_delta': 0.0, 'servo_retries': 0, 'load_failures': 0, 'unload_failures': 0}
+    EMPTY_GATE_STATS_ENTRY = {'pauses': 0, 'loads': 0, 'load_distance': 0.0, 'load_delta': 0.0, 'unloads': 0, 'unload_distance': 0.0, 'unload_delta': 0.0, 'servo_retries': 0, 'load_failures': 0, 'unload_failures': 0}
+
+    W3C_COLORS = ['aliceblue', 'antiquewhite', 'aqua', 'aquamarine', 'azure', 'beige', 'bisque', 'black', 'blanchedalmond', 'blue', 'blueviolet',
+                  'brown', 'burlywood', 'cadetblue', 'chartreuse', 'chocolate', 'coral', 'cornflowerblue', 'cornsilk', 'crimson', 'cyan', 'darkblue',
+                  'darkcyan', 'darkgoldenrod', 'darkgray', 'darkgreen', 'darkgrey', 'darkkhaki', 'darkmagenta', 'darkolivegreen', 'darkorange',
+                  'darkorchid', 'darkred', 'darksalmon', 'darkseagreen', 'darkslateblue', 'darkslategray', 'darkslategrey', 'darkturquoise', 'darkviolet',
+                  'deeppink', 'deepskyblue', 'dimgray', 'dimgrey', 'dodgerblue', 'firebrick', 'floralwhite', 'forestgreen', 'fuchsia', 'gainsboro',
+                  'ghostwhite', 'gold', 'goldenrod', 'gray', 'green', 'greenyellow', 'grey', 'honeydew', 'hotpink', 'indianred', 'indigo', 'ivory',
+                  'khaki', 'lavender', 'lavenderblush', 'lawngreen', 'lemonchiffon', 'lightblue', 'lightcoral', 'lightcyan', 'lightgoldenrodyellow',
+                  'lightgray', 'lightgreen', 'lightgrey', 'lightpink', 'lightsalmon', 'lightseagreen', 'lightskyblue', 'lightslategray', 'lightslategrey',
+                  'lightsteelblue', 'lightyellow', 'lime', 'limegreen', 'linen', 'magenta', 'maroon', 'mediumaquamarine', 'mediumblue', 'mediumorchid',
+                  'mediumpurple', 'mediumseagreen', 'mediumslateblue', 'mediumspringgreen', 'mediumturquoise', 'mediumvioletred', 'midnightblue',
+                  'mintcream', 'mistyrose', 'moccasin', 'navajowhite', 'navy', 'oldlace', 'olive', 'olivedrab', 'orange', 'orangered', 'orchid',
+                  'palegoldenrod', 'palegreen', 'paleturquoise', 'palevioletred', 'papayawhip', 'peachpuff', 'peru', 'pink', 'plum', 'powderblue',
+                  'purple', 'rebeccapurple', 'red', 'rosybrown', 'royalblue', 'saddlebrown', 'salmon', 'sandybrown', 'seagreen', 'seashell', 'sienna',
+                  'silver', 'skyblue', 'slateblue', 'slategray', 'slategrey', 'snow', 'springgreen', 'steelblue', 'tan', 'teal', 'thistle', 'tomato',
+                  'turquoise', 'violet', 'wheat', 'white', 'whitesmoke', 'yellow', 'yellowgreen']
 
     def __init__(self, config):
         self.config = config
@@ -189,6 +208,9 @@ class Ercf:
         self.default_endless_spool_groups = list(config.getintlist('endless_spool_groups', []))
         self.default_tool_to_gate_map = list(config.getintlist('tool_to_gate_map', []))
         self.default_gate_status = list(config.getintlist('gate_status', []))
+        self.default_gate_material = list(config.getlist('gate_material', []))
+        self.default_gate_color = list(config.getlist('gate_color', []))
+#        self.default_gate_map = json.loads(config.get('gate_map', "{}"))
         self.persistence_level = config.getint('persistence_level', 0, minval=0, maxval=4)
 
         # Logging
@@ -198,7 +220,9 @@ class Ercf:
         self.log_visual = config.getint('log_visual', 1, minval=0, maxval=2)
         self.startup_status = config.getint('startup_status', 0, minval=0, maxval=2)
 
-        # The following lists are the defaults and may be overriden by values in ercf_vars.cfg
+        # The following lists are the defaults (when reset) and will be overriden by values in ercf_vars.cfg
+
+        # Endless spool groups
         if len(self.default_endless_spool_groups) > 0:
             if self.enable_endless_spool == 1 and len(self.default_endless_spool_groups) != len(self.selector_offsets):
                 raise self.config.error("endless_spool_groups has a different number of values than the number of gates")
@@ -207,6 +231,7 @@ class Ercf:
                 self.default_endless_spool_groups.append(i)
         self.endless_spool_groups = list(self.default_endless_spool_groups)
 
+        # Status (availability of filament) at each gate
         if len(self.default_gate_status) > 0:
             if not len(self.default_gate_status) == len(self.selector_offsets):
                 raise self.config.error("gate_status has different number of values than the number of gates")
@@ -215,6 +240,25 @@ class Ercf:
                 self.default_gate_status.append(self.GATE_UNKNOWN)
         self.gate_status = list(self.default_gate_status)
 
+        # Filmament material at each gate
+        if len(self.default_gate_material) > 0:
+            if not len(self.default_gate_material) == len(self.selector_offsets):
+                raise self.config.error("gate_material has different number of entries than the number of gates")
+        else:
+            for i in range(len(self.selector_offsets)):
+                self.default_gate_material.append("")
+        self.gate_material = list(self.default_gate_material)
+
+        # Filmament color at each gate
+        if len(self.default_gate_color) > 0:
+            if not len(self.default_gate_color) == len(self.selector_offsets):
+                raise self.config.error("gate_color has different number of entries than the number of gates")
+        else:
+            for i in range(len(self.selector_offsets)):
+                self.default_gate_color.append("")
+        self.gate_color = list(self.default_gate_color)
+
+        # Tool to gate mapping
         if len(self.default_tool_to_gate_map) > 0:
             if not len(self.default_tool_to_gate_map) == len(self.selector_offsets):
                 raise self.config.error("tool_to_gate_map has different number of values than the number of gates")
@@ -373,6 +417,9 @@ class Ercf:
         self.gcode.register_command('ERCF_REMAP_TTG',
                     self.cmd_ERCF_REMAP_TTG,
                     desc = self.cmd_ERCF_REMAP_TTG_help)
+        self.gcode.register_command('ERCF_SET_GATE_MAP',
+                    self.cmd_ERCF_SET_GATE_MAP,
+                    desc = self.cmd_ERCF_SET_GATE_MAP_help)
         self.gcode.register_command('ERCF_ENDLESS_SPOOL',
                     self.cmd_ERCF_ENDLESS_SPOOL,
                     desc = self.cmd_ERCF_ENDLESS_SPOOL_help)
@@ -479,12 +526,12 @@ class Ercf:
         self.is_homed = False
         self.paused_extruder_temp = 0.
         self.tool_selected = self._next_tool = self.TOOL_UNKNOWN
+        self._last_toolchange = ""
         self.gate_selected = self.GATE_UNKNOWN  # We keep record of gate selected in case user messes with mapping in print
         self.servo_state = self.SERVO_UNKNOWN_STATE
         self.loaded_status = self.LOADED_STATUS_UNKNOWN
         self.filament_direction = self.DIRECTION_LOAD
         self.action = self.ACTION_IDLE
-        self.filament_visual = ""
         self.calibrating = False
         self.saved_toolhead_position = False
         self._reset_statistics()
@@ -493,6 +540,7 @@ class Ercf:
         self._log_debug("Loaded persisted ERCF state, level: %d" % self.persistence_level)
         ignored_state = False
         num_gates = len(self.selector_offsets)
+
         if self.persistence_level >= 4:
             tool_selected = self.variables.get(self.VARS_ERCF_TOOL_SELECTED, self.tool_selected)
             gate_selected = self.variables.get(self.VARS_ERCF_GATE_SELECTED, self.gate_selected)
@@ -514,18 +562,33 @@ class Ercf:
                 ignored_state = True
             if gate_selected != self.GATE_UNKNOWN and tool_selected != self.TOOL_UNKNOWN:
                 self.loaded_status = self.variables.get(self.VARS_ERCF_LOADED_STATUS, self.loaded_status)
+
         if self.persistence_level >= 3:
             gate_status = self.variables.get(self.VARS_ERCF_GATE_STATUS, self.gate_status)
             if len(gate_status) == num_gates:
                 self.gate_status = gate_status
             else:
                 ignored_state = True
+
+            gate_material = self.variables.get(self.VARS_ERCF_GATE_MATERIAL, self.gate_material)
+            if len(gate_status) == num_gates:
+                self.gate_material = gate_material
+            else:
+                ignored_state = True
+
+            gate_color = self.variables.get(self.VARS_ERCF_GATE_COLOR, self.gate_color)
+            if len(gate_status) == num_gates:
+                self.gate_color = gate_color
+            else:
+                ignored_state = True
+
         if self.persistence_level >= 2:
             tool_to_gate_map = self.variables.get(self.VARS_ERCF_TOOL_TO_GATE_MAP, self.tool_to_gate_map)
             if len(tool_to_gate_map) == num_gates:
                 self.tool_to_gate_map = tool_to_gate_map
             else:
                 ignored_state = True
+
         if self.persistence_level >= 1:
             endless_spool_groups = self.variables.get(self.VARS_ERCF_ENDLESS_SPOOL_GROUPS, self.endless_spool_groups)
             if len(endless_spool_groups) == num_gates:
@@ -543,7 +606,7 @@ class Ercf:
             self.total_pauses = swap_stats['total_pauses']
             self.time_spent_paused = swap_stats['time_spent_paused']
         for gate in range(len(self.selector_offsets)):
-            self.gate_statistics[gate] = self.variables.get("%s%d" % (self.VARS_ERCF_GATE_STATISTICS_PREFIX, gate), self.EMPTY_GATE_STATS.copy())
+            self.gate_statistics[gate] = self.variables.get("%s%d" % (self.VARS_ERCF_GATE_STATISTICS_PREFIX, gate), self.EMPTY_GATE_STATS_ENTRY.copy())
 
     def handle_disconnect(self):
         self._log_debug('ERCF Shutdown')
@@ -602,19 +665,23 @@ class Ercf:
                 'is_homed': self.is_homed,
                 'tool': self.tool_selected,
                 'next_tool': self._next_tool,
+                'last_toolchange': self._last_toolchange,
                 'gate': self.gate_selected,
                 'clog_detection': self.enable_clog_detection,
                 'endless_spool': self.enable_endless_spool,
                 'filament': "Loaded" if self.loaded_status == self.LOADED_STATUS_FULL else
                             "Unloaded" if self.loaded_status == self.LOADED_STATUS_UNLOADED else
                             "Unknown",
+                'loaded_status': self.loaded_status,
+                'filament_direction': self.filament_direction,
                 'servo': "Up" if self.servo_state == self.SERVO_UP_STATE else
                          "Down" if self.servo_state == self.SERVO_DOWN_STATE else
                          "Unknown",
-                'gate_status': list(self.gate_status),
-                'endless_spool_groups': list(self.endless_spool_groups),
                 'ttg_map': list(self.tool_to_gate_map),
-                'filament_visual': self.filament_visual,
+                'gate_status': list(self.gate_status),
+                'gate_material': list(self.gate_material),
+                'gate_color': list(self.gate_color),
+                'endless_spool_groups': list(self.endless_spool_groups),
                 'action': "Idle" if self.action == self.ACTION_IDLE else
                           "Busy" if self.action == self.ACTION_BUSY else
                           "Loading" if self.action == self.ACTION_LOADING else
@@ -634,7 +701,7 @@ class Ercf:
 
         self.gate_statistics = []
         for gate in range(len(self.selector_offsets)):
-            self.gate_statistics.append(self.EMPTY_GATE_STATS.copy())
+            self.gate_statistics.append(self.EMPTY_GATE_STATS_ENTRY.copy())
 
     def _track_swap_completed(self):
         self.total_swaps += 1
@@ -746,6 +813,11 @@ class Ercf:
             }
         self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=\"%s\"" % (self.VARS_ERCF_SWAP_STATISTICS, swap_stats))
 
+    def _persist_gap_map(self):
+        self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE='%s'" % (self.VARS_ERCF_GATE_STATUS, self.gate_status))
+        self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE='%s'" % (self.VARS_ERCF_GATE_MATERIAL, map(lambda x: ("\'%s\'" %x), self.gate_material)))
+        self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE='%s'" % (self.VARS_ERCF_GATE_COLOR, map(lambda x: ("\'%s\'" %x), self.gate_color)))
+
     def _log_always(self, message):
         if self.ercf_logger:
             self.ercf_logger.info(message)
@@ -782,8 +854,8 @@ class Ercf:
     def _display_visual_state(self, direction=None, silent=False):
         if not direction == None:
             self.filament_direction = direction
-        visual_str = self._state_to_human_string() # Always call to set printer variable
         if not silent and self.log_visual > 0 and not self.calibrating:
+            visual_str = self._state_to_human_string()
             self._log_always(visual_str)
 
     def _state_to_human_string(self, direction=None):
@@ -831,7 +903,6 @@ class Ercf:
         if self.filament_direction == self.DIRECTION_UNLOAD:
             visual = visual.replace(">", "<")
             visual2 = visual2.replace(">", "<")
-        self.filament_visual = visual2.split("(")[0]
         return visual2 if self.log_visual == 2 else visual
 
     def _log_level_to_human_string(self, level):
@@ -1562,7 +1633,9 @@ class Ercf:
         self.tool_to_gate_map = list(self.default_tool_to_gate_map)
         self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE='%s'" % (self.VARS_ERCF_TOOL_TO_GATE_MAP, self.tool_to_gate_map))
         self.gate_status = list(self.default_gate_status)
-        self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE='%s'" % (self.VARS_ERCF_GATE_STATUS, self.gate_status))
+        self.gate_material = list(self.default_gate_material)
+        self.gate_color = list(self.default_gate_color)
+        self._persist_gap_map()
         self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%d" % (self.VARS_ERCF_GATE_SELECTED, self.gate_selected))
         self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%d" % (self.VARS_ERCF_TOOL_SELECTED, self.tool_selected))
         self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%d" % (self.VARS_ERCF_LOADED_STATUS, self.loaded_status))
@@ -1736,7 +1809,6 @@ class Ercf:
     
             self.toolhead.wait_moves()
             self._log_info("Loaded %.1fmm of filament" % self.encoder_sensor.get_distance())
-#            self.encoder_sensor.reset_counts()    # Encoder 0000
         except ErcfError as ee:
             self._track_gate_statistics('load_failures', self.gate_selected)
             raise ErcfError(ee)
@@ -2323,7 +2395,7 @@ class Ercf:
     def _change_tool(self, tool, skip_tip=True):
         self._log_debug("Tool change initiated %s" % ("with slicer forming tip" if skip_tip else "with standalone ERCF tip formation"))
         skip_unload = False
-        initial_tool_string = "unknown" if self.tool_selected < 0 else ("T%d" % self.tool_selected)
+        initial_tool_string = "Unknown" if self.tool_selected < 0 else ("T%d" % self.tool_selected)
         if tool == self.tool_selected and self.loaded_status == self.LOADED_STATUS_FULL:
                 self._log_always("Tool T%d is already ready" % tool)
                 return
@@ -2331,11 +2403,13 @@ class Ercf:
         if self.loaded_status == self.LOADED_STATUS_UNLOADED:
             skip_unload = True
             msg = "Tool change requested, to T%d" % tool
-            self.gcode.run_script_from_command("M117 -> T%d" % tool)
+            m117_msg = ("> T%d" % tool)
         else:
             msg = "Tool change requested, from %s to T%d" % (initial_tool_string, tool)
-            self.gcode.run_script_from_command("M117 %s -> T%d" % (initial_tool_string, tool))
+            m117_msg = ("%s > T%d" % (initial_tool_string, tool))
         # Important to always inform user in case there is an error and manual recovery is necessary
+        self._last_toolchange = m117_msg
+        self.gcode.run_script_from_command("M117 %s" % m117_msg)
         self._log_always(msg)
 
         # Identify the start up use case and make it easy for user
@@ -2998,6 +3072,16 @@ class Ercf:
             msg += " Bypass" if self.gate_selected == self.TOOL_BYPASS else (" T%d" % self.tool_selected) if self.tool_selected >= 0 else ""
         return msg
 
+    def _gate_map_to_human_string(self):
+        msg = ""
+        num_gates = len(self.selector_offsets)
+        for g in range(num_gates):
+            material = self.gate_material[g] if self.gate_material[g] != "" else "n/a"
+            color = self.gate_color[g] if self.gate_color[g] != "" else "n/a"
+            available = "Available" if self.gate_status[g] == self.GATE_AVAILABLE else "Empty" if self.gate_status[g] == self.GATE_EMPTY else "Unknown"
+            msg += ("Gate #%d: Material: %s, Color: %s, Status: %s\n" % (g, material, color, available))
+        return msg
+
     def _remap_tool(self, tool, gate, available):
         self._set_tool_to_gate(tool, gate)
         self._set_gate_status(gate, available)
@@ -3008,7 +3092,33 @@ class Ercf:
         self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE='%s'" % (self.VARS_ERCF_TOOL_TO_GATE_MAP, self.tool_to_gate_map))
         self._unselect_tool()
 
-### GCODE COMMANDS FOR RUNOUT and GATE LOGIC ##################################
+    def _reset_gate_map(self):
+        self._log_debug("Resetting Gate/Filament map")
+        self.gate_status = self.default_gate_status
+        self.gate_material = self.default_gate_material
+        self.gate_color = self.default_gate_color
+        self._persist_gap_map()
+
+    def _validate_color(self, color):
+        color = color.lower()
+        if color == "":
+            return True
+
+        # Try w3c named color
+        for i in range(len(self.W3C_COLORS)):
+            if color == self.W3C_COLORS[i]:
+                return True
+
+        # Try RGB color
+        color = "#" + color
+        x = re.search("^#?([a-f\d]{6})$", color)
+        if x != None and x.group() == color:
+            return True
+
+        return False
+
+
+### GCODE COMMANDS FOR RUNOUT, TTG MAP, GATE MAP and GATE LOGIC ##################################
 
     cmd_ERCF_ENCODER_RUNOUT_help = "Internal encoder filament runout handler"
     def cmd_ERCF_ENCODER_RUNOUT(self, gcmd):
@@ -3052,6 +3162,30 @@ class Ercf:
             else:
                 self._remap_tool(tool, gate, available)
         self._log_info(self._tool_to_gate_map_to_human_string())
+
+    cmd_ERCF_SET_GATE_MAP_help = "Define the type and color of filaments on each gate"
+    def cmd_ERCF_SET_GATE_MAP(self, gcmd):
+        reset = gcmd.get_int('RESET', 0, minval=0, maxval=1)
+        dump = gcmd.get_int('DISPLAY', 0, minval=0, maxval=1)
+        if reset == 1:
+            self._reset_gate_map()
+        elif dump == 1:
+            self._log_info(self._gate_map_to_human_string())
+            return
+        else:
+            # Specifying one gate (filament)
+            gate = gcmd.get_int('GATE', minval=0, maxval=len(self.selector_offsets)-1)
+            material = "".join(gcmd.get('MATERIAL').split()).replace('#', '').upper()[:10]
+            color = "".join(gcmd.get('COLOR').split()).replace('#', '').lower()
+            available = gcmd.get_int('AVAILABLE', 1, minval=0, maxval=1)
+            if not self._validate_color(color):
+                raise gcmd.error("Color specification must be in form 'rrggbb' hexadecimal value (no '#') or valid color name or empty string")
+            self.gate_material[gate] = material
+            self.gate_color[gate] = color
+            self.gate_status[gate] = available
+            self._persist_gap_map()
+
+        self._log_info(self._gate_map_to_human_string())
 
     cmd_ERCF_ENDLESS_SPOOL_help = "Redefine the EndlessSpool groups"
     def cmd_ERCF_ENDLESS_SPOOL(self, gcmd):

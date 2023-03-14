@@ -113,20 +113,29 @@ copy_template_files() {
     # Generate sample colorselector, gate_status, endless_spool_groups based on number of gates
     colorselector="colorselector: "
     gate_status="gate_status: "
+    gate_material="gate_material: "
+    gate_color="gate_color: "
     tool_to_gate_map="tool_to_gate_map: "
     endless_spool_groups="endless_spool_groups: "
     offset_x10=23
     available=1
+    materials=(PLA PETG ABS PLA+ ABS ABS PLA ABS ASA)
+    colors=(red orange yellow green blue indigo violet ffffff black)
     for (( i=0; i<=$(expr $num_gates - 1); i++ ))
     do
+       mod=$(echo `expr $i % 9`)
        if [ "${i}" -ne 0 ]; then
            colorselector="${colorselector}, "
            gate_status="${gate_status}, "
+           gate_material="${gate_material}, "
+           gate_color="${gate_color}, "
            tool_to_gate_map="${tool_to_gate_map}, "
            endless_spool_groups="${endless_spool_groups}, "
        fi
        colorselector="${colorselector}$(echo $offset_x10 | sed -e 's/.$/.&/;t' -e 's/.$/.0&/')"
        gate_status="${gate_status}${available}"
+       gate_material="${gate_material}${materials[$mod]}"
+       gate_color="${gate_color}${colors[$mod]}"
        tool_to_gate_map="${tool_to_gate_map}${i}"
        endless_spool_groups="${endless_spool_groups}$(expr $i % 3 + 1)"
        offset_x10=$(expr $offset_x10 + 210)
@@ -224,6 +233,8 @@ copy_template_files() {
                 s/{calibration_bowden_length}/${calibration_bowden_length}/g; \
 		s/colorselector:.*/${colorselector}/; \
 		s/gate_status:.*/${gate_status}/; \
+		s/gate_material:.*/${gate_material}/; \
+		s/gate_color:.*/${gate_color}/; \
 		s/tool_to_gate_map:.*/${tool_to_gate_map}/; \
 		s/endless_spool_groups:.*/${endless_spool_groups}/; \
 		s/#bypass_selector:/${bypass_comment}bypass_selector:/; \

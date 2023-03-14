@@ -1,7 +1,8 @@
 # Happy Hare ERCF Software
 # Driver for encoder that supports movement measurement and runout/clog detection
 #
-# Copyright (C) 2022  moggieuk#6538 (discord) moggieuk@hotmail.com
+# Copyright (C) 2022  moggieuk#6538 (discord)
+#                     moggieuk@hotmail.com
 #
 # Based on:
 # Original Enraged Rabbit Carrot Feeder Project  Copyright (C) 2021  Ette

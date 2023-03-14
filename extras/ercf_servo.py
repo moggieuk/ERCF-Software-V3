@@ -3,7 +3,8 @@
 # All existing servo funcationality is avialable with the addition of a `duration`
 # parameter for setting PWM pulse train with auto off
 #
-# Copyright (C) 2022  moggieuk#6538 (discord) moggieuk@hotmail.com
+# Copyright (C) 2022  moggieuk#6538 (discord)
+#                     moggieuk@hotmail.com
 #
 # Enraged Rabbit Carrot Feeder Project  Copyright (C) 2021  Ette
 # Based on original servo.py            Copyright (C) 2017-2020  Kevin O'Connor <kevin@koconnor.net>
