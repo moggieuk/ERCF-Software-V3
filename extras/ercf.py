@@ -210,7 +210,6 @@ class Ercf:
         self.default_gate_status = list(config.getintlist('gate_status', []))
         self.default_gate_material = list(config.getlist('gate_material', []))
         self.default_gate_color = list(config.getlist('gate_color', []))
-#        self.default_gate_map = json.loads(config.get('gate_map', "{}"))
         self.persistence_level = config.getint('persistence_level', 0, minval=0, maxval=4)
 
         # Logging
