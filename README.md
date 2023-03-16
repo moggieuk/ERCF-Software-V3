@@ -375,7 +375,8 @@ Happy Hare exposes the following 'printer' variables:
     printer.ercf.is_locked : {bool}
     printer.ercf.is_homed : {bool}
     printer.ercf.tool : {int} 0..n | -1 for unknown | -2 for bypass
-    printer.ercf.next_tool : {int} 0..n | -1 for unknown | -2 for bypass
+    printer.ercf.next_tool : {int} 0..n | -1 for unknown | -2 for bypass (during a tool change)
+    printer.ercf.last_tool : {int} 0..n | -1 for unknown | -2 for bypass (during a tool change after unload)
     printer.ercf.last_toolchange : {string} description of last change similar to M117 display
     printer.ercf.gate : {int} 0..n | -1 for unknown
     printer.ercf.clog_detection : {int} 0 (off) | 1 (manual) | 2 (auto)

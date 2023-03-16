@@ -520,13 +520,16 @@ class Ercf:
         self.encoder_sensor.set_logger(self._log_debug)
         self.encoder_sensor.set_mode(self.enable_clog_detection)
 
+        # Restore state
+        self._load_persisted_state()
+
     def _initialize_state(self):
         self.is_enabled = True
         self.is_paused_locked = False
         self.is_homed = False
         self.paused_extruder_temp = 0.
-        self.tool_selected = self._next_tool = self.TOOL_UNKNOWN
-        self._last_toolchange = ""
+        self.tool_selected = self._next_tool = self._last_tool = self.TOOL_UNKNOWN
+        self._last_toolchange = "Unknown"
         self.gate_selected = self.GATE_UNKNOWN  # We keep record of gate selected in case user messes with mapping in print
         self.servo_state = self.SERVO_UNKNOWN_STATE
         self.loaded_status = self.LOADED_STATUS_UNKNOWN
@@ -638,7 +641,6 @@ class Ercf:
         except Exception as e:
             self._log_always('Warning: Error trying to wrap RESUME macro: %s' % str(e))
 
-        self._load_persisted_state()
         waketime = self.reactor.monotonic() + self.BOOT_DELAY
         self.reactor.register_callback(self._bootup_tasks, waketime)
 
@@ -665,6 +667,7 @@ class Ercf:
                 'is_homed': self.is_homed,
                 'tool': self.tool_selected,
                 'next_tool': self._next_tool,
+                'last_tool': self._last_tool,
                 'last_toolchange': self._last_toolchange,
                 'gate': self.gate_selected,
                 'clog_detection': self.enable_clog_detection,
@@ -1183,10 +1186,10 @@ class Ercf:
             ratio = (test_length * 2) / (measurement - encoder_moved)
             self._log_always("Calibration move of %.1fmm, average encoder measurement %.1fmm - Ratio is %.6f" % (test_length * 2, measurement - encoder_moved, ratio))
             if not tool == 0:
-                if ratio > 0.9 and ratio < 1.1:
+                if ratio > 0.8 and ratio < 1.2:
                     self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s%d VALUE=%.6f" % (self.VARS_ERCF_CALIB_PREFIX, tool, ratio))
                 else:
-                    self._log_always("Calibration ratio not saved because it is not considered valid (0.9 < ratio < 1.0)")
+                    self._log_always("Calibration ratio not saved because it is not considered valid (0.8 < ratio < 1.2)")
             self._unload_encoder(self.unload_buffer)
             self._servo_up()
             self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
@@ -2547,11 +2550,12 @@ class Ercf:
             self._recover_loaded_state()
         try:
             restore_encoder = self._disable_encoder_sensor(update_clog_detection_length=True) # Don't want runout accidently triggering during tool change
+            self._last_tool = self.tool_selected
             self._next_tool = tool
             self._change_tool(tool, skip_tip)
             self._enable_encoder_sensor(restore_encoder)
         except ErcfError as ee:
-            self._pause(str(ee))
+            self._pause("%s.\nOccured when changing tool: %s" % (str(ee), self._last_toolchange))
         finally:
             self._next_tool = self.TOOL_UNKNOWN
 
