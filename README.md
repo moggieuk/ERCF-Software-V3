@@ -394,9 +394,9 @@ Happy Hare exposes the following 'printer' variables:
     printer.ercf.action : {string} Idle | Busy | Loading | Unloading | Forming Tip | Unknown
 
 ## KlipperScreen Happy Hare Edition
-<img src="doc/ercf_main_printing.png" width="400" alt="KlipperScreen">
+<img src="doc/ercf_main_printing.png" width="500" alt="KlipperScreen">
 
-Even if not a KlipperScreen user you might be interested in my brand new [KlipperScreen version](https://github.com/moggieuk/KlipperScreen-Happy-Hare-Edition). Be sure to follow the install directions carefully and read the [panel-by-panel](https://github.com/moggieuk/KlipperScreen-Happy-Hare-Edition/blob/master/docs/ERCF.md) documentation.
+Even if not a KlipperScreen user you might be interested in my brand new [KlipperScreen version](https://github.com/moggieuk/KlipperScreen-Happy-Hare-Edition). Be sure to follow the install directions carefully and read the [panel-by-panel](https://github.com/moggieuk/KlipperScreen-Happy-Hare-Edition/blob/master/docs/ERCF.md) documentation.  It will make you even happier!!
 
 
 ## My Testing:
