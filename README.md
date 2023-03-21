@@ -1,6 +1,10 @@
 # ERCF-Software-V3 "Happy Hare"
 I love my ERCF and building it was the most fun I've had in many years of the 3D-printing hobby. Whilst the design is brilliant I found a few problems with the software and wanted to add some features and improve user friendliness.  This became especially true after the separation of functionality with the introduction of the "sensorless filament homing" branch. I liked the new python implementation as a Klipper plug-in but wanted to leverage my (very reliable) toolhead sensor.  So I rewrote the software behind ERCF - it still has the structure and much of the code of the original but, more significantly, it has many new features, integrates the toolhead sensor and sensorless options.  I'm calling it the **"Happy Hare"** release or v3.
 
+Also, some folks have asked about making a donation to cover the cost of the all the coffee I'm drinking.  I'm not doing this for any financial reward but it you feel inclined a donation to PayPal https://www.paypal.me/moggieuk will certainly be spent making your life with ERCF more enjoyable.
+
+Thank you!
+
 ## Major new features:
 <ul>
 <li>Support all options for both toolhead sensor based loading/unloading and the newer sensorless filament homing (no toolhead sensor)
@@ -16,8 +20,11 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 <li>Moonraker update-manager support
 <li>Complete persitance of state and statistics across restarts!
 <li>Reliable servo operation - no more "kickback" problems
-<li>Integrated encoder driver that implements filament measurement and automatic clog detection
+<li>Integrated encoder driver that implements filament measurement and automatic clog detection!
+<li>Supports my sister project...
 </ul>
+
+Customized [KlipperScreen for ERCF](#klipperscreen-happy-hare-edition)
 
 ## Other features:
 <ul>
