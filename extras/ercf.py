@@ -2535,7 +2535,20 @@ class Ercf:
                 self._select_tool(tool)
             else:
                 self._select_gate(gate)
-                self.tool_selected = self.TOOL_UNKNOWN
+                # Find the first tool that maps to this gate or current tool if it maps
+                # (Remember multiple tools can map to the same gate)
+                if self.tool_selected >= 0 and self.tool_to_gate_map[self.tool_selected] == gate:
+                    pass
+                else:
+                    tool_found = False
+                    for tool in range(len(self.tool_to_gate_map)):
+                        if self.tool_to_gate_map[tool] == gate:
+                            self._set_tool_selected(tool, silent=True)
+                            self._log_info("Tool T%d enabled%s" % (tool, (" on gate #%d" % gate) if tool != gate else ""))
+                            tool_found = True
+                            break
+                    if not tool_found:
+                        self._set_tool_selected(self.TOOL_UNKNOWN, silent=True)
         except ErcfError as ee:
             self._pause(str(ee))
 
