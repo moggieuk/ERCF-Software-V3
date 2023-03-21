@@ -1,6 +1,10 @@
 # ERCF-Software-V3 "Happy Hare"
 I love my ERCF and building it was the most fun I've had in many years of the 3D-printing hobby. Whilst the design is brilliant I found a few problems with the software and wanted to add some features and improve user friendliness.  This became especially true after the separation of functionality with the introduction of the "sensorless filament homing" branch. I liked the new python implementation as a Klipper plug-in but wanted to leverage my (very reliable) toolhead sensor.  So I rewrote the software behind ERCF - it still has the structure and much of the code of the original but, more significantly, it has many new features, integrates the toolhead sensor and sensorless options.  I'm calling it the **"Happy Hare"** release or v3.
 
+Also, some folks have asked about making a donation to cover the cost of the all the coffee I'm drinking.  I'm not doing this for any financial reward but it you feel inclined a donation to PayPal https://www.paypal.me/moggieuk will certainly be spent making your life with ERCF more enjoyable.
+
+Thank you!
+
 ## Major new features:
 <ul>
 <li>Support all options for both toolhead sensor based loading/unloading and the newer sensorless filament homing (no toolhead sensor)
@@ -16,8 +20,11 @@ I love my ERCF and building it was the most fun I've had in many years of the 3D
 <li>Moonraker update-manager support
 <li>Complete persitance of state and statistics across restarts!
 <li>Reliable servo operation - no more "kickback" problems
-<li>Integrated encoder driver that implements filament measurement and automatic clog detection
+<li>Integrated encoder driver that implements filament measurement and automatic clog detection!
+<li>Supports my sister project...
 </ul>
+
+Customized [KlipperScreen for ERCF](#klipperscreen-happy-hare-edition)
 
 ## Other features:
 <ul>
@@ -47,7 +54,7 @@ The module can be installed into an existing Klipper installation with the insta
 
     ./install.sh -i
 
-The `-i` option will bring up some interactive prompts to aid setting some confusing parameters (like sensorless selector homing setup). For EASY-BRD installations it will also configure all the pins for you. If not run with the `-i` flag the new template `ercf*.cfg` files will not be installed.  Note that if existing `ercf*.cfg` files are found the old versions will be moved to `<file>.00` extension instead so as not to overwrite an existing configuration (don't run twice in a row!).  If you still choose not to install the new `ercf*.cfg` files automatically be sure to examine them closely and compare to the supplied templates - some options have changed!
+The `-i` option will bring up some interactive prompts to aid setting some confusing parameters (like sensorless selector homing setup). For EASY-BRD and Fysetc ERB installations it will also configure all the pins for you. If not run with the `-i` flag the new template `ercf*.cfg` files will not be installed.  Note that if existing `ercf*.cfg` files are found the old versions will be moved to numbered backups like `<file>.00` extension instead so as not to overwrite an existing configuration.  If you still choose not to install the new `ercf*.cfg` files automatically be sure to examine them closely and compare to the supplied templates (this is completely different software from the original)
 <br>
 
 Note that the installer will look for Klipper install and config in standard locations.  If you have customized locations or the installer fails to find Klipper you can use the `-k` and `-c` flags to override the klipper home directory and klipper config directory respectively. Also, the install assumes a single instance of Klipper running per device.  If you have many you may need to install and configure the `ercf*.cfg` files by hand.
