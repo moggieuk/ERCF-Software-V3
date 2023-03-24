@@ -13,21 +13,21 @@ declare -A PIN 2>/dev/null || {
     exit 1
 }
 
-# Pins for Fysetc Burrows ERB board and ERCF EASY-BRD
-PIN[ERB,gear_uart_pin]="ercf:gpio20";         PIN[EASY-BRD,gear_uart_pin]="ercf:PA8"
-PIN[ERB,gear_step_pin]="ercf:gpio10";         PIN[EASY-BRD,gear_step_pin]="ercf:PA4"
-PIN[ERB,gear_dir_pin]="!ercf:gpio9";          PIN[EASY-BRD,gear_dir_pin]="!ercf:PA10"
-PIN[ERB,gear_enable_pin]="!ercf:gpio8";       PIN[EASY-BRD,gear_enable_pin]="!ercf:PA2"
-PIN[ERB,gear_diag_pin]="ercf:gpio13";         PIN[EASY-BRD,gear_diag_pin]=""
-PIN[ERB,gear_endstop_pin]="ercf:gpio24";      PIN[EASY-BRD,gear_endstop_pin]="ercf:PB9"
-PIN[ERB,selector_uart_pin]="ercf:gpio17";     PIN[EASY-BRD,selector_uart_pin]="ercf:PA8"
-PIN[ERB,selector_step_pin]="ercf:gpio16";     PIN[EASY-BRD,selector_step_pin]="ercf:PA9"
-PIN[ERB,selector_dir_pin]="!ercf:gpio15";     PIN[EASY-BRD,selector_dir_pin]="!ercf:PB8"
-PIN[ERB,selector_enable_pin]="!ercf:gpio14";  PIN[EASY-BRD,selector_enable_pin]="!ercf:PA11"
-PIN[ERB,selector_diag_pin]="ercf:gpio19";     PIN[EASY-BRD,selector_diag_pin]="ercf:PA7"
-PIN[ERB,selector_endstop_pin]="ercf:gpio24";  PIN[EASY-BRD,selector_endstop_pin]="ercf:PB9"
-PIN[ERB,servo_pin]="ercf:gpio23";             PIN[EASY-BRD,servo_pin]="ercf:PA5"
-PIN[ERB,encoder_pin]="ercf:gpio22";           PIN[EASY-BRD,encoder_pin]="ercf:PA6"
+# Pins for Fysetc Burrows ERB board, ERCF EASY-BRD and ERCF EASY-BRD with Seed Studio XIAO RP2040
+PIN[ERB,gear_uart_pin]="ercf:gpio20";         PIN[EASY-BRD,gear_uart_pin]="ercf:PA8";          PIN[EASY-BRD-RP2040,gear_uart_pin]="ercf:gpio6"
+PIN[ERB,gear_step_pin]="ercf:gpio10";         PIN[EASY-BRD,gear_step_pin]="ercf:PA4";          PIN[EASY-BRD-RP2040,gear_step_pin]="ercf:gpio27"
+PIN[ERB,gear_dir_pin]="!ercf:gpio9";          PIN[EASY-BRD,gear_dir_pin]="!ercf:PA10";         PIN[EASY-BRD-RP2040,gear_dir_pin]="!ercf:gpio28"
+PIN[ERB,gear_enable_pin]="!ercf:gpio8";       PIN[EASY-BRD,gear_enable_pin]="!ercf:PA2";       PIN[EASY-BRD-RP2040,gear_enable_pin]="!ercf:gpio26"
+PIN[ERB,gear_diag_pin]="ercf:gpio13";         PIN[EASY-BRD,gear_diag_pin]="";                  PIN[EASY-BRD-RP2040,gear_diag_pin]=""
+PIN[ERB,gear_endstop_pin]="ercf:gpio24";      PIN[EASY-BRD,gear_endstop_pin]="ercf:PB9";       PIN[EASY-BRD-RP2040,gear_endstop_pin]="ercf:gpio1"
+PIN[ERB,selector_uart_pin]="ercf:gpio17";     PIN[EASY-BRD,selector_uart_pin]="ercf:PA8";      PIN[EASY-BRD-RP2040,selector_uart_pin]="ercf:gpio6"
+PIN[ERB,selector_step_pin]="ercf:gpio16";     PIN[EASY-BRD,selector_step_pin]="ercf:PA9";      PIN[EASY-BRD-RP2040,selector_step_pin]="ercf:gpio7"
+PIN[ERB,selector_dir_pin]="!ercf:gpio15";     PIN[EASY-BRD,selector_dir_pin]="!ercf:PB8";      PIN[EASY-BRD-RP2040,selector_dir_pin]="!ercf:gpio0"
+PIN[ERB,selector_enable_pin]="!ercf:gpio14";  PIN[EASY-BRD,selector_enable_pin]="!ercf:PA11";  PIN[EASY-BRD-RP2040,selector_enable_pin]="!ercf:gpio29"
+PIN[ERB,selector_diag_pin]="ercf:gpio19";     PIN[EASY-BRD,selector_diag_pin]="ercf:PA7";      PIN[EASY-BRD-RP2040,selector_diag_pin]="ercf:gpio2"
+PIN[ERB,selector_endstop_pin]="ercf:gpio24";  PIN[EASY-BRD,selector_endstop_pin]="ercf:PB9";   PIN[EASY-BRD-RP2040,selector_endstop_pin]="ercf:gpio1"
+PIN[ERB,servo_pin]="ercf:gpio23";             PIN[EASY-BRD,servo_pin]="ercf:PA5";              PIN[EASY-BRD-RP2040,servo_pin]="ercf:gpio4"
+PIN[ERB,encoder_pin]="ercf:gpio22";           PIN[EASY-BRD,encoder_pin]="ercf:PA6";            PIN[EASY-BRD-RP2040,encoder_pin]="ercf:gpio3"
 
 # Screen Colors
 OFF='\033[0m'             # Text Reset
@@ -167,7 +167,7 @@ copy_template_files() {
                 magic_str1="NO TOOLHEAD"
             fi
             uart_comment=""
-            if [ "${brd_type}" == "ERB" ]; then
+            if [ "${brd_type}" == "ERB" -o "${brd_type}" == "EASY-BRD-RP2040" ]; then
                 uart_comment="#"
             fi
 
@@ -184,6 +184,7 @@ copy_template_files() {
             else
                 # This is the default template config without sensorless selector homing enabled
                 cat ${SRCDIR}/${file} | sed -e "\
+                    s/{brd_type}/${brd_type}/; \
                     s/^uart_address:/${uart_comment}uart_address:/; \
                         " > ${dest}.tmp
             fi
@@ -418,7 +419,16 @@ questionaire() {
                     if echo ${line} | grep --quiet "Klipper_samd21"; then
                         brd_type="EASY-BRD"
                     else
-                        brd_type="ERB"
+                        echo -e "${PROMPT}You seem to have a ${EMPHASIZE}RP2040-based${PROMPT} controller serial port.${INPUT}"
+                        yn=$(prompt_yn "Are you using the Fysetc Burrows ERB controller?")
+                        case $yn in
+                        y)
+                            brd_type="ERB"
+                            ;;
+                        n)
+                            brd_type="EASY-BRD-RP2040"
+                            ;;
+                        esac
                     fi
                     echo -e "${PROMPT}This looks like your ${EMPHASIZE}${brd_type}${PROMPT} controller serial port. Is that correct?${INPUT}"
                     yn=$(prompt_yn "/dev/serial/by-id/${line}")
@@ -438,7 +448,15 @@ questionaire() {
                     yn=$(prompt_yn "Setup for EASY-BRD? (Answer 'N' for Fysetc Burrows ERB)")
                     case $yn in
                         y)
-                            brd_type="EASY-BRD"
+                            yn1=$(prompt_yn "EASY-BRD with SAMD21 (default)? (Answer 'N' for EASY-BRD with RP2040)")
+                            case $yn1 in
+                                y)
+                                    brd_type="EASY-BRD"
+                                    ;;
+                                n)
+                                    brd_type="EASY-BRD-RP2040"
+                                    ;;
+                            esac
                             ;;
                         n)
                             brd_type="ERB"
@@ -446,6 +464,9 @@ questionaire() {
                     esac
                     serial='/dev/ttyACM1 # Config guess. Run ls -l /dev/serial/by-id and set manually'
                 fi
+
+		echo
+		echo -e "${WARNING}Board Type: ${brd_type}"
 
                 echo
                 echo -e "${PROMPT}Sensorless selector operation? This allows for additional selector recovery steps but disables the 'extra' input on the EASY-BRD.${INPUT}"
