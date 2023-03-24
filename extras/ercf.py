@@ -1559,14 +1559,17 @@ class Ercf:
 
     def _set_above_min_temp(self, temp=-1):
         if temp == -1:
-            if not self.printer.lookup_object("extruder").heater.can_extrude:
-                temp = self.min_temp_extruder
-                self._log_info("Heating extruder to minimum temp (%.1f)" % temp)
-                self.gcode.run_script_from_command("M109 S%.1f" % temp)
+            if self.printer.lookup_object("extruder").heater.can_extrude:
+                return
+            temp = self.min_temp_extruder
+            self._log_info("Heating extruder to minimum temp (%.1f)" % temp)
         else:
-            if self.printer.lookup_object("extruder").heater.target_temp < temp:
+            if self.printer.lookup_object("extruder").heater.target_temp < temp and temp > 40:
                 self._log_info("Heating extruder to desired temp (%.1f)" % temp)
-                self.gcode.run_script_from_command("M109 S%.1f" % temp)
+	    else:
+                return
+        self.gcode.run_script_from_command("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=%.1f" % temp)
+        self.gcode.run_script_from_command("TEMPERATURE_WAIT SENSOR=extruder MINIMUM=%.1f MAXIMUM=%.1f" % (temp-1, temp+1))
 
     def _set_loaded_status(self, state, silent=False):
         self.loaded_status = state
