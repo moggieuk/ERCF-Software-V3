@@ -2182,7 +2182,7 @@ class Ercf:
                 self._log_debug("Moving the gear motor for %.1fmm" % -initial_move) 
                 delta = self._trace_filament_move("Unload", -initial_move, speed=self.sync_unload_speed, motor="gear", track=True)
 
-            if delta > max(initial_move * 0.2, 1): # 20% slippage
+            if delta > max(initial_move * 0.5, 1): # 50% slippage
                 self._log_always("Error unloading filament - not enough detected at encoder. Suspect servo not properly down. Retrying...")
                 self._track_gate_statistics('servo_retries', self.gate_selected)
                 self._servo_up()
@@ -2191,7 +2191,7 @@ class Ercf:
                     delta = self._trace_filament_move("Retrying sync unload move after servo reset", -delta, speed=self.sync_unload_speed, motor="both")
                 else:
                     delta = self._trace_filament_move("Retrying unload move after servo reset", -delta, speed=self.sync_unload_speed, motor="gear", track=True)
-                if delta > max(initial_move * 0.2, 1): # 20% slippage
+                if delta > max(initial_move * 0.5, 1): # 50% slippage
                     # Actually we are likely still stuck in extruder
                     self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
                     raise ErcfError("Too much slippage (%.1fmm) detected during the sync unload from extruder. Maybe still stuck in extruder" % delta)
@@ -3174,8 +3174,20 @@ class Ercf:
         if self._check_is_disabled(): return
         quiet = gcmd.get_int('QUIET', 0, minval=0, maxval=1)
         reset = gcmd.get_int('RESET', 0, minval=0, maxval=1)
+        ttg_map = gcmd.get('MAP', "")
         if reset == 1:
             self._reset_ttg_mapping()
+        elif ttg_map != "":
+            ttg_map = gcmd.get('MAP').split(",")
+            if len(ttg_map) != len(self.selector_offsets):
+                self._log_always("The number of map values (%d) is not the same as number of gates (%d)" % (len(ttg_map), len(self.selector_offsets)))
+                return
+            self.tool_to_gate_map = []
+            for gate in ttg_map:
+                if gate.isdigit():
+                    self.tool_to_gate_map.append(int(gate))
+                else:
+                    self.tool_to_gate_map.append(0)
         else:
             tool = gcmd.get_int('TOOL', -1, minval=0, maxval=len(self.selector_offsets)-1)
             gate = gcmd.get_int('GATE', minval=0, maxval=len(self.selector_offsets)-1)
@@ -3224,9 +3236,13 @@ class Ercf:
             return
         quiet = gcmd.get_int('QUIET', 0, minval=0, maxval=1)
         reset = gcmd.get_int('RESET', 0, minval=0, maxval=1)
+        dump = gcmd.get_int('DISPLAY', 0, minval=0, maxval=1)
         if reset == 1:
             self._log_debug("Resetting EndlessSpool groups")
             self.endless_spool_groups = self.default_endless_spool_groups
+        elif dump == 1:
+            self._log_info(self._tool_to_gate_map_to_human_string())
+            return
         else:
             groups = gcmd.get('GROUPS').split(",")
             if len(groups) != len(self.selector_offsets):
