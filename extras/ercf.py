@@ -112,6 +112,7 @@ class Ercf:
 
     # ercf_vars.cfg variables
     VARS_ERCF_CALIB_CLOG_LENGTH      = "ercf_calib_clog_length"
+    VARS_ERCF_ENABLE_ENDLESS_SPOOL   = "ercf_state_enable_endless_spool"
     VARS_ERCF_ENDLESS_SPOOL_GROUPS   = "ercf_state_endless_spool_groups"
     VARS_ERCF_TOOL_TO_GATE_MAP       = "ercf_state_tool_to_gate_map"
     VARS_ERCF_GATE_STATUS            = "ercf_state_gate_status"
@@ -177,6 +178,7 @@ class Ercf:
         self.selector_offsets = config.getfloatlist('colorselector')
         self.bypass_offset = config.getfloat('bypass_selector', 0)
         self.timeout_pause = config.getint('timeout_pause', 72000)
+        self.timeout_unlock = config.getint('timeout_unlock', -1)
         self.disable_heater = config.getint('disable_heater', 600)
         self.min_temp_extruder = config.getfloat('min_temp_extruder', 180.)
         self.calibration_bowden_length = config.getfloat('calibration_bowden_length')
@@ -204,7 +206,7 @@ class Ercf:
         self.homing_method = config.getint('homing_method', 0, minval=0, maxval=1)
         self.sensorless_selector = config.getint('sensorless_selector', 0, minval=0, maxval=1)
         self.enable_clog_detection = config.getint('enable_clog_detection', 2, minval=0, maxval=2)
-        self.enable_endless_spool = config.getint('enable_endless_spool', 0, minval=0, maxval=1)
+        self.default_enable_endless_spool = config.getint('enable_endless_spool', 0, minval=0, maxval=1)
         self.default_endless_spool_groups = list(config.getintlist('endless_spool_groups', []))
         self.default_tool_to_gate_map = list(config.getintlist('tool_to_gate_map', []))
         self.default_gate_status = list(config.getintlist('gate_status', []))
@@ -222,6 +224,7 @@ class Ercf:
         # The following lists are the defaults (when reset) and will be overriden by values in ercf_vars.cfg
 
         # Endless spool groups
+        self.enable_endless_spool = self.default_enable_endless_spool
         if len(self.default_endless_spool_groups) > 0:
             if self.enable_endless_spool == 1 and len(self.default_endless_spool_groups) != len(self.selector_offsets):
                 raise self.config.error("endless_spool_groups has a different number of values than the number of gates")
@@ -514,6 +517,9 @@ class Ercf:
         # Sanity check to see that ercf_vars.cfg is included
         if self.variables == {}:
             raise self.config.error("Calibration settings in ercf_vars.cfg not found.  Did you include it in your klipper config directory?")
+        # Remember user setting of idle_timeout so it can be restored (if not overridden)
+        if self.timeout_unlock < 0:
+            self.timeout_unlock = self.printer.lookup_object("idle_timeout").idle_timeout
 
         # Configure encoder
         self.encoder_sensor.set_logger(self._log_debug)
@@ -592,6 +598,7 @@ class Ercf:
                 ignored_state = True
 
         if self.persistence_level >= 1:
+            self.enable_endless_spool = self.variables.get(self.VARS_ERCF_ENABLE_ENDLESS_SPOOL, self.enable_endless_spool)
             endless_spool_groups = self.variables.get(self.VARS_ERCF_ENDLESS_SPOOL_GROUPS, self.endless_spool_groups)
             if len(endless_spool_groups) == num_gates:
                 self.endless_spool_groups = endless_spool_groups
@@ -1441,6 +1448,7 @@ class Ercf:
             self._log_info("Enabling extruder heater (%.1f)" % self.paused_extruder_temp)
         self.gcode.run_script_from_command("M104 S%.1f" % self.paused_extruder_temp)
         self.encoder_sensor.reset_counts()    # Encoder 0000
+        self.gcode.run_script_from_command("SET_IDLE_TIMEOUT TIMEOUT=%d" % self.timeout_unlock)
         self._track_pause_end()
         self.is_paused_locked = False
         self._disable_encoder_sensor() # Precautionary, should already be disabled
@@ -1637,6 +1645,8 @@ class Ercf:
     cmd_ERCF_RESET_help = "Forget persisted state and re-initialize defaults"
     def cmd_ERCF_RESET(self, gcmd):
         self._initialize_state()
+        self.enable_endless_spool = self.default_enable_endless_spool
+        self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%d" % (self.VARS_ERCF_ENABLE_ENDLESS_SPOOL, self.enable_endless_spool))
         self.endless_spool_groups = list(self.default_endless_spool_groups)
         self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE='%s'" % (self.VARS_ERCF_ENDLESS_SPOOL_GROUPS, self.endless_spool_groups))
         self.tool_to_gate_map = list(self.default_tool_to_gate_map)
@@ -1777,6 +1787,7 @@ class Ercf:
 ###########################
 
     # Primary method to selects and loads tool. Assumes we are unloaded.
+    # TODO think about retry option here...
     def _select_and_load_tool(self, tool):
         self._log_debug('Loading tool T%d...' % tool)
         self._select_tool(tool)
@@ -2431,6 +2442,7 @@ class Ercf:
             self._unload_tool(skip_tip=skip_tip)
         self._select_and_load_tool(tool)
         self._track_swap_completed()
+        self.gcode.run_script_from_command("M117 %s" % tool)
 
     def _unselect_tool(self):
         self._servo_up()
@@ -3231,20 +3243,24 @@ class Ercf:
     cmd_ERCF_ENDLESS_SPOOL_help = "Redefine the EndlessSpool groups"
     def cmd_ERCF_ENDLESS_SPOOL(self, gcmd):
         if self._check_is_disabled(): return
-        if not self.enable_endless_spool:
-            self._log_always("EndlessSpool is disabled")
-            return
         quiet = gcmd.get_int('QUIET', 0, minval=0, maxval=1)
+        enabled = gcmd.get_int('ENABLE', -1, minval=0, maxval=1)
         reset = gcmd.get_int('RESET', 0, minval=0, maxval=1)
         dump = gcmd.get_int('DISPLAY', 0, minval=0, maxval=1)
+        if enabled >= 0:
+            self.enable_endless_spool = enabled
+            self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%d" % (self.VARS_ERCF_ENABLE_ENDLESS_SPOOL, self.enable_endless_spool))
+        if not self.enable_endless_spool:
+            self._log_always("EndlessSpool is disabled")
         if reset == 1:
             self._log_debug("Resetting EndlessSpool groups")
+            self.enable_endless_spool = self.default_enable_endless_spool
             self.endless_spool_groups = self.default_endless_spool_groups
         elif dump == 1:
             self._log_info(self._tool_to_gate_map_to_human_string())
             return
         else:
-            groups = gcmd.get('GROUPS').split(",")
+            groups = gcmd.get('GROUPS', ",".join(map(str, self.endless_spool_groups))).split(",")
             if len(groups) != len(self.selector_offsets):
                 self._log_always("The number of group values (%d) is not the same as number of gates (%d)" % (len(groups), len(self.selector_offsets)))
                 return

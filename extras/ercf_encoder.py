@@ -46,7 +46,7 @@ class ErcfEncoder:
         # For clog/runout functionality
         self.extruder_name = config.get('extruder', None)
         # The runout headroom that ERCF will attempt to maintain (closest ERCF comes to triggering runout)
-        self.desired_headroom = config.getfloat('desired_headroom', 5., above=0.)
+        self.desired_headroom = config.getfloat('desired_headroom', 6., above=0.)
         # The "damping" effect of last measurement. Higher value means clog_length will be reduced more slowly
         self.average_samples = config.getint('average_samples', 4, minval=1)
         # The extrusion interval where new detection_length is calculated (also done on toolchange)
@@ -104,7 +104,8 @@ class ErcfEncoder:
             # First lets see if we got encoder movement since last invocation
             if self._movement:
                 self._movement = False
-                self.filament_runout_pos = extruder_pos + self.detection_length
+                if extruder_pos > self.last_extruder_pos:
+                    self.filament_runout_pos = extruder_pos + self.detection_length
 
             if extruder_pos >= self.next_calibration_point:
                 if self.next_calibration_point > 0:
