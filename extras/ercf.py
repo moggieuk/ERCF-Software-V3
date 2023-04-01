@@ -2130,8 +2130,8 @@ class Ercf:
 
         # Goal is to exit extruder. Two strategies depending on availability of toolhead sensor
         out_of_extruder = False
-        safety_margin = 5.
         if self._has_toolhead_sensor():
+            safety_margin = 5.
             #step = self.toolhead_homing_step # Too slow
             step = 3.
             max_length = self._get_home_position_to_nozzle() + safety_margin
@@ -2155,7 +2155,7 @@ class Ercf:
             # Back up around 15mm at a time until either the encoder doesn't see any movement
             # Do this until we have traveled more than the length of the extruder 
             step = self.encoder_move_step_size
-            max_length = self._get_home_position_to_nozzle() + safety_margin
+            max_length = self._get_home_position_to_nozzle() + step # PAUL test me. was + saftey
             speed = self.nozzle_unload_speed * 0.5 # First pull slower just in case we don't have tip
             self._log_debug("Trying to exit the extruder, up to %.1fmm in %.1fmm steps" % (max_length, step))
             for i in range(int(math.ceil(max_length / step))):
@@ -2442,7 +2442,7 @@ class Ercf:
             self._unload_tool(skip_tip=skip_tip)
         self._select_and_load_tool(tool)
         self._track_swap_completed()
-        self.gcode.run_script_from_command("M117 %s" % tool)
+        self.gcode.run_script_from_command("M117 T%s" % tool)
 
     def _unselect_tool(self):
         self._servo_up()
