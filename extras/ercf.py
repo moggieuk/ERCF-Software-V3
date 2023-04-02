@@ -788,7 +788,9 @@ class Ercf:
             unload_slip_percent = (rounded['unload_delta'] / rounded['unload_distance']) * 100 if rounded['unload_distance'] != 0. else 0.
             # Give the gate a reliability grading based on slippage
             grade = load_slip_percent + unload_slip_percent
-            if grade < 2.:
+            if rounded['load_distance'] + rounded['unload_distance'] == 0.:
+                status = "n/a"
+            elif grade < 2.:
                 status = "Good"
             elif grade < 4.:
                 status = "Marginal"
@@ -1787,7 +1789,6 @@ class Ercf:
 ###########################
 
     # Primary method to selects and loads tool. Assumes we are unloaded.
-    # TODO think about retry option here...
     def _select_and_load_tool(self, tool):
         self._log_debug('Loading tool T%d...' % tool)
         self._select_tool(tool)
@@ -2155,7 +2156,7 @@ class Ercf:
             # Back up around 15mm at a time until either the encoder doesn't see any movement
             # Do this until we have traveled more than the length of the extruder 
             step = self.encoder_move_step_size
-            max_length = self._get_home_position_to_nozzle() + step # PAUL test me. was + saftey
+            max_length = self._get_home_position_to_nozzle() + step
             speed = self.nozzle_unload_speed * 0.5 # First pull slower just in case we don't have tip
             self._log_debug("Trying to exit the extruder, up to %.1fmm in %.1fmm steps" % (max_length, step))
             for i in range(int(math.ceil(max_length / step))):
@@ -2431,6 +2432,12 @@ class Ercf:
         self._last_toolchange = m117_msg
         self.gcode.run_script_from_command("M117 %s" % m117_msg)
         self._log_always(msg)
+
+        # Check TTG map. We might be mapped to same gate
+        if self.tool_to_gate_map[tool] == self.gate_selected and self.loaded_status == self.LOADED_STATUS_FULL:
+            self._select_tool(tool)
+            self.gcode.run_script_from_command("M117 T%s" % tool)
+            return
 
         # Identify the start up use case and make it easy for user
         if not self.is_homed and self.tool_selected == self.TOOL_UNKNOWN:
