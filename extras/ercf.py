@@ -105,6 +105,7 @@ class Ercf:
     ACTION_LOADING = 2
     ACTION_UNLOADING = 3
     ACTION_FORMING_TIP = 4
+    ACTION_HEATING = 5
 
     # Extruder homing sensing strategies
     EXTRUDER_COLLISION = 0
@@ -429,7 +430,6 @@ class Ercf:
                     self.cmd_ERCF_CHECK_GATES,
                     desc = self.cmd_ERCF_CHECK_GATES_help)
 
-
     def handle_connect(self):
         # Setup background file based logging before logging any messages
         if self.logfile_level >= 0:
@@ -697,6 +697,7 @@ class Ercf:
                           "Loading" if self.action == self.ACTION_LOADING else
                           "Unloading" if self.action == self.ACTION_UNLOADING else
                           "Forming Tip" if self.action == self.ACTION_FORMING_TIP else
+                          "Heating" if self.action == self.ACTION_HEATING else
                           "Unknown"
         }
 
@@ -1060,11 +1061,13 @@ class Ercf:
             self.encoder_sensor.set_distance(initial_encoder_position)
         return delta
 
-    def _motors_off(self):
-        self.gear_stepper.do_enable(False)
-        self.selector_stepper.do_enable(False)
-        self.is_homed = False
-        self._set_tool_selected(self.TOOL_UNKNOWN, True)
+    def _motors_off(self, motor="all"):
+        if motor == "all" or motor == "gear":
+            self.gear_stepper.do_enable(False)
+        if motor == "all" or motor == "selector":
+            self.selector_stepper.do_enable(False)
+            self.is_homed = False
+            self._set_tool_selected(self.TOOL_UNKNOWN, True)
 
 ### SERVO AND MOTOR GCODE FUNCTIONS
 
@@ -1559,10 +1562,7 @@ class Ercf:
                 print_status = "paused"
             else:
                 idle_timeout = self.printer.lookup_object("idle_timeout").get_status(self.printer.get_reactor().monotonic())
-                if idle_timeout["printing_time"] < 1.0:
-                    print_status = "standby"
-                else:
-                    print_status = idle_timeout['state'].lower()
+                print_status = idle_timeout['state'].lower()
         finally:
             self._log_trace("Determined print status as: %s from %s" % (print_status, source))
             return print_status
@@ -1578,8 +1578,10 @@ class Ercf:
                 self._log_info("Heating extruder to desired temp (%.1f)" % temp)
             else:
                 return
+        current_action = self._set_action(self.ACTION_HEATING)
         self.gcode.run_script_from_command("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=%.1f" % temp)
         self.gcode.run_script_from_command("TEMPERATURE_WAIT SENSOR=extruder MINIMUM=%.1f MAXIMUM=%.1f" % (temp-1, temp+1))
+        self._set_action(current_action)
 
     def _set_loaded_status(self, state, silent=False):
         self.loaded_status = state
@@ -1806,8 +1808,8 @@ class Ercf:
             # If full length load requested then assume homing is required (if configured)
             if (length >= self._get_calibration_ref()):
                 if (length > self._get_calibration_ref()):
-                    self._log_info("Restricting load length to extruder calibration reference of %.1fmm")
                     length = self._get_calibration_ref()
+                    self._log_info("Restricting load length to extruder calibration reference of %.1fmm" % length)
                 home = True
             else:
                 home = False
@@ -2070,18 +2072,26 @@ class Ercf:
                     # No movement means we can safely assume we are somewhere in the bowden
                     self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
      
-            if self.loaded_status > self.LOADED_STATUS_PARTIAL_HOMED_EXTRUDER:
-                # Unload extruder, then fast unload of bowden
+            if self.loaded_status == self.LOADED_STATUS_PARTIAL_END_OF_BOWDEN and self._has_toolhead_sensor():
+                # This error case can occur when home to sensor failed and we may be stuck in extruder
+                self._unload_extruder()
+                self._unload_encoder(length) # Full slow unload
+
+            elif self.loaded_status >= self.LOADED_STATUS_PARTIAL_HOMED_SENSOR:
+                # Exit extruder, fast unload of bowden, then slow unload encoder
                 self._unload_extruder()
                 self._unload_bowden(length - self.unload_buffer, skip_sync_move=skip_sync_move)
                 self._unload_encoder(self.unload_buffer)
-            elif self.loaded_status == self.LOADED_STATUS_PARTIAL_END_OF_BOWDEN or self.loaded_status == self.LOADED_STATUS_PARTIAL_HOMED_EXTRUDER:
-                # Fast unload of bowden
+
+            elif self.loaded_status >= self.LOADED_STATUS_PARTIAL_HOMED_EXTRUDER:
+                # fast unload of bowden, then slow unload encoder
                 self._unload_bowden(length - self.unload_buffer, skip_sync_move=skip_sync_move)
                 self._unload_encoder(self.unload_buffer)
-            elif self.loaded_status >= self.LOADED_STATUS_PARTIAL_BEFORE_ENCODER and self.loaded_status <= self.LOADED_STATUS_PARTIAL_IN_BOWDEN:
+
+            elif self.loaded_status >= self.LOADED_STATUS_PARTIAL_BEFORE_ENCODER:
                 # Have to do slow unload because we don't know exactly where we are
-                self._unload_encoder(length)
+                self._unload_encoder(length) # Full slow unload
+
             else:
                 self._log_debug("Assertion failure - unexpected state %d in _unload_sequence()" % self.loaded_status)
                 raise ErcfError("Unexpected state during unload sequence")
@@ -2252,7 +2262,7 @@ class Ercf:
             self.toolhead.wait_moves()
             park_pos = 35.  # TODO cosmetic: bring in from tip forming (represents parking position in extruder)
             self._log_info("Forming tip...")
-            self._set_above_min_temp(self.min_temp_extruder)
+            self._set_above_min_temp()
             self._servo_up()
     
             if self.extruder_tmc and self.extruder_form_tip_current > 100:
@@ -2639,8 +2649,11 @@ class Ercf:
             elif self.loaded_status != self.LOADED_STATUS_UNLOADED or extruder_only:
                 if self._form_tip_standalone():
                     self._unload_extruder()
-                self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
-                self._log_always("Please pull the filament out clear of the ERCF selector")
+                if self.tool_selected == self.TOOL_BYPASS:
+                    self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
+                    self._log_always("Please pull the filament out clear of the ERCF selector")
+                else:
+                    self._set_loaded_status(self.LOADED_STATUS_PARTIAL_HOMED_EXTRUDER)
             else:
                 self._log_always("Filament not loaded")
         except ErcfError as ee:
@@ -2773,7 +2786,7 @@ class Ercf:
         if self._check_is_paused(): return
         if self._check_in_bypass(): return
         self._servo_down()
-        self._motors_off()
+        self._motors_off(motor="gear")
 
     cmd_ERCF_TEST_SERVO_help = "Test the servo angle"
     def cmd_ERCF_TEST_SERVO(self, gcmd):

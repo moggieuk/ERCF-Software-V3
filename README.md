@@ -399,7 +399,7 @@ Happy Hare exposes the following 'printer' variables:
     printer.ercf.gate_material : {list} of material names, one per gate
     printer.ercf.gate_color : {list} of color names, one per gate
     printer.ercf.endless_spool_groups : {list} group membership for each tool
-    printer.ercf.action : {string} Idle | Busy | Loading | Unloading | Forming Tip | Unknown
+    printer.ercf.action : {string} Idle | Busy | Loading | Unloading | Forming Tip | Heating | Unknown
 
 ## KlipperScreen Happy Hare Edition
 <img src="doc/ercf_main_printing.png" width="500" alt="KlipperScreen">
@@ -461,10 +461,10 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_PRELOAD | Helper for filament loading. Feed filament into gate, ERCF will catch it and correctly position at the specified gate | GATE=\[0..n\] The specific gate to preload. If omitted the currently selected gate can be loaded |
   | ERCF_UNLOCK | Unlock ERCF operations after a pause caused by error condition | None |
   | ERCF_HOME | Home the ERCF selector and optionally selects gate associated with the specified tool | TOOL=\[0..n\] After homing, select this gate as if ERCF_SELECT TOOL=xx was called <br>FORCE_UNLOAD=\[0\|1\] Optional. If specified will override default intelligent filament unload behavior prior to homing |
-  | ERCF_SELECT_TOOL | Deprecated but included as alias to 'ERCF_SELECT TOOL=' to be compatible with current documentation |
+  | ERCF_SELECT_TOOL | DEPRECATED but included as alias to 'ERCF_SELECT TOOL=' to be compatible with current documentation | DEPRECATED |
   | ERCF_SELECT | Selects the gate associated with the specified tool (TTG map) or the specific gate regardless of TTG map | TOOL=\[0..n\] The tool to be selected <br>GATE=\[0..n\] The gate to be selected (ignores TTG map) |
   | ERCF_SELECT_BYPASS | Unload and select the bypass selector position if configured | None |
-  | ERCF_LOAD | Loads filament in currently selected tool/gate to extruder. Optionally performs just the extruder load part of the sequence - designed for bypass unloading | EXTRUDER_ONLY=\[0\|1\] To force just the extruder loading (automatic if in bypass) <br>NOTE: Owing to current documented use for test loading (correctly ERCF_TEST_LOAD) it is necessary to pass `TEST=0` to force the loading of current tool/gate. This will be updated in the future |
+  | ERCF_LOAD | Loads filament in currently selected tool/gate to extruder. Optionally performs just the extruder load part of the sequence - designed for bypass unloading | EXTRUDER_ONLY=\[0\|1\] To force just the extruder loading (automatic if in bypass) <br>NOTE: Owing to current documented use for test loading (correctly use ERCF_TEST_LOAD instead) it is necessary to pass `TEST=0` to force the loading of current tool/gate. This will be updated in the future |
   | ERCF_CHANGE_TOOL | Perform a tool swap (generally called from 'Tx' macros) | TOOL=\[0..n\] <br>STANDALONE=\[0\|1\] Optional to force standalone logic (tip forming)<br> QUIET=\[0\|1\] Optional to always suppress swap statistics |
   | ERCF_EJECT | Eject filament and park it in the ERCF gate or does the extruder unloading part of the unload sequence if in bypass | EXTRUDER_ONLY=\[0\|1\] To force just the extruder unloading (automatic if in bypass) |
   | ERCF_PAUSE | Pause the current print and lock the ERCF operations | FORCE_IN_PRINT=\[0\|1\] This option forces the handling of pause as if it occurred in print and is useful for testing |
@@ -499,7 +499,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_CALIBRATE | Complete calibration of all ERCF tools | None |
   | ERCF_CALIBRATE_SINGLE | Calibration of a single ERCF tool | TOOL=\[0..n\] <br>REPEATS=\[1..10\] How many times to repeat the calibration for reference tool T0 (ercf_calib_ref) <br>VALIDATE=\[0\|1\] If True then calibration of tool 0 will simply verify the ratio i.e. another check of encoder accuracy (should result in a ratio of 1.0) |
   | ERCF_CALIBRATE_SELECTOR | Calibration of the selector for the defined tool | GATE=\[0..n\] or TOOL=\[0..n\] |
-  | ERCF_CALIB_SELECTOR | Deprecated, but included as alias to 'ERCF_CALIBRATE_SELECTOR' because in current documentation | TOOL=\[0..n\] |
+  | ERCF_CALIB_SELECTOR | DEPRECATED, but included as alias to 'ERCF_CALIBRATE_SELECTOR' because of use in current documentation | DEPRECATED |
   | ERCF_CALIBRATE_ENCODER | Calibration routine for ERCF encoder | DIST=.. Distance (mm) to measure over. Longer is better, defaults to 500mm <br>REPEATS=.. Number of times to average over <br>SPEED=.. Speed of gear motor move. Defaults to long move speed <br>ACCEL=.. Accel of gear motor move. Defaults to motor setting in ercf_hardware.cfg <br>MINSPEED=.. & MAXSPEED=.. If specified the speed is increased over each iteration between these speeds (only for experimentation) |
   <br>
   
