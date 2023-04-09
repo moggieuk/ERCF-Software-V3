@@ -399,7 +399,7 @@ Happy Hare exposes the following 'printer' variables:
     printer.ercf.gate_material : {list} of material names, one per gate
     printer.ercf.gate_color : {list} of color names, one per gate
     printer.ercf.endless_spool_groups : {list} group membership for each tool
-    printer.ercf.action : {string} Idle | Busy | Loading | Unloading | Forming Tip | Heating | Unknown
+    printer.ercf.action : {string} Idle | Loading | Unloading | Forming Tip | Heating | Loading Ext | Exiting Ext | Checking | Homing | Selecting
 
 ## KlipperScreen Happy Hare Edition
 <img src="doc/ercf_main_printing.png" width="500" alt="KlipperScreen">
