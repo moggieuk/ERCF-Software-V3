@@ -24,7 +24,9 @@ Thank you!
 <li>Supports my sister project...
 </ul>
 
-Customized [KlipperScreen for ERCF](#klipperscreen-happy-hare-edition)
+Now with customized [KlipperScreen for ERCF](#klipperscreen-happy-hare-edition) touchscreen control
+
+<img src="doc/my_klipperscreen.png" width="400" alt="KlipperScreen-Happy Hare edition">
 
 ## Other features:
 <ul>
