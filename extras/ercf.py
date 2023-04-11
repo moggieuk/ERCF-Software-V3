@@ -3248,6 +3248,7 @@ class Ercf:
                     self.tool_to_gate_map.append(int(gate))
                 else:
                     self.tool_to_gate_map.append(0)
+            self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE='%s'" % (self.VARS_ERCF_TOOL_TO_GATE_MAP, self.tool_to_gate_map))
         else:
             tool = gcmd.get_int('TOOL', -1, minval=0, maxval=len(self.selector_offsets)-1)
             gate = gcmd.get_int('GATE', minval=0, maxval=len(self.selector_offsets)-1)
