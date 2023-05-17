@@ -131,6 +131,7 @@ class Ercf:
     VARS_ERCF_CALIB_VERSION          = "ercf_calib_version"
     VARS_ERCF_GATE_STATISTICS_PREFIX = "ercf_statistics_gate_"
     VARS_ERCF_SWAP_STATISTICS        = "ercf_statistics_swaps"
+    VARS_ERCF_GATE_POS               = "ercf_gate_pos"
 
     DEFAULT_ENCODER_RESOLUTION = 0.67 # 0.67 is about the resolution of one pulse
     EMPTY_GATE_STATS_ENTRY = {'pauses': 0, 'loads': 0, 'load_distance': 0.0, 'load_delta': 0.0, 'unloads': 0, 'unload_distance': 0.0, 'unload_delta': 0.0, 'servo_retries': 0, 'load_failures': 0, 'unload_failures': 0}
@@ -620,7 +621,13 @@ class Ercf:
             self.time_spent_paused = swap_stats['time_spent_paused']
         for gate in range(len(self.selector_offsets)):
             self.gate_statistics[gate] = self.variables.get("%s%d" % (self.VARS_ERCF_GATE_STATISTICS_PREFIX, gate), self.EMPTY_GATE_STATS_ENTRY.copy())
-
+        #Overwrite the selector offset in parameters
+        gate_pos = self.variables.get(self.VARS_ERCF_GATE_POS, [])
+        if len(gate_pos)==num_gates :
+            self.selector_offsets= gate_pos
+            self._log_debug("Load selector_offsets:%s" % [self.selector_offsets])
+        else:
+            raise self.config.error("The config ercf_gate_pos is error!Please check it")
     def handle_disconnect(self):
         self._log_debug('ERCF Shutdown')
         if self.queue_listener != None:
@@ -1389,6 +1396,12 @@ class Ercf:
             else:
                 self._log_always("Selector position = %.1fmm" % traveled)
                 # TODO this could be persisted automatically in ercf_vars.cfg (and override defaults in params)
+                ercf_gate_pos= self.selector_offsets
+                ercf_gate_pos[gate]=traveled
+                self.gcode.run_script_from_command(
+                    "SAVE_VARIABLE VARIABLE=%s VALUE=\"%s\"" % (self.VARS_ERCF_GATE_POS, ercf_gate_pos))
+                self.selector_offsets=ercf_gate_pos
+                self._log_always('Gate pos now is:%s' % ercf_gate_pos)
         except ErcfError as ee:
             self._pause(str(ee))
         finally:
