@@ -9,7 +9,7 @@ Happy Hare is a rewrite of the controller software for ERCF.  An attempt has bee
  <li>The `[servo]` section in ercf_hardward.cfg is now `[ercf_servo]`
  <li>There is no `[filament_motion_sensor]` or `[duplicate_pin_override]` configuration anymore
  <li>Don't put any `encoder` control logic in your print_start, pause, resume or cancel macros. This is now automatic
- <li>The `ERCF_CHANGE_TOOL_STANDALONE TOOL={initial_tool}` that you may want in your print_start macro should now be called `ERCF_CHANGE_TOOL STNDALONE=1 TOOL={initial_tool}`
+ <li>The `ERCF_CHANGE_TOOL_STANDALONE TOOL={initial_tool}` that you may want in your print_start macro should now be called `ERCF_CHANGE_TOOL STANDALONE=1 TOOL={initial_tool}`
 </ol>
 
 Good luck!
