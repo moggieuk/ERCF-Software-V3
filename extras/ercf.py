@@ -21,6 +21,7 @@
 import logging, logging.handlers, threading, queue, time
 import textwrap, math, os.path, re, json
 from random import randint
+from kinematics import extruder
 
 # Forward all messages through a queue (polled by background thread)
 class QueueHandler(logging.Handler):
@@ -163,6 +164,7 @@ class Ercf:
         self.selector_stepper = self.gear_stepper = self.toolhead_sensor = self.encoder_sensor = self.servo = None
 
         # Specific build parameters / tuning
+        self.sync_to_extruder_name = config.get('sync_to_extruder', None)
         self.long_moves_speed = config.getfloat('long_moves_speed', 100.)
         self.short_moves_speed = config.getfloat('short_moves_speed', 25.)
         self.z_hop_height = config.getfloat('z_hop_height', 5., minval=0.)
@@ -334,6 +336,9 @@ class Ercf:
         self.gcode.register_command('ERCF_BUZZ_GEAR_MOTOR',
                     self.cmd_ERCF_BUZZ_GEAR_MOTOR,
                     desc=self.cmd_ERCF_BUZZ_GEAR_MOTOR_help)
+        self.gcode.register_command('ERCF_SYNC_GEAR_MOTOR', 
+                    self.cmd_ERCF_SYNC_GEAR_MOTOR, 
+                    desc=self.cmd_ERCF_SYNC_GEAR_MOTOR_help)
 
 	# Core ERCF functionality
         self.gcode.register_command('ERCF_ENABLE',
@@ -456,13 +461,15 @@ class Ercf:
             stepper_name = manual_stepper[1].get_steppers()[0].get_name()
             if stepper_name == 'manual_stepper selector_stepper':
                 self.selector_stepper = manual_stepper[1]
-            if stepper_name == 'manual_stepper gear_stepper':
+        for manual_stepper in self.printer.lookup_objects('manual_extruder_stepper'):
+            stepper_name = manual_stepper[1].get_steppers()[0].get_name()
+            if stepper_name == 'manual_extruder_stepper gear_stepper':
                 self.gear_stepper = manual_stepper[1]
         if self.selector_stepper is None:
-            raise self.config.error("Manual_stepper selector_stepper must be specified")
+            raise self.config.error("[manual_stepper selector_stepper] must be specified")
         if self.gear_stepper is None:
-            raise self.config.error("Manual_stepper gear_stepper must be specified")
-
+            raise self.config.error("[manual_extruder_stepper gear_stepper] must be specified")
+ 
         try:
             self.pause_resume = self.printer.lookup_object('pause_resume')
         except:
@@ -1071,6 +1078,7 @@ class Ercf:
 
     def _motors_off(self, motor="all"):
         if motor == "all" or motor == "gear":
+            self._sync_gear_to_extruder(False)
             self.gear_stepper.do_enable(False)
         if motor == "all" or motor == "selector":
             self.selector_stepper.do_enable(False)
@@ -1105,6 +1113,12 @@ class Ercf:
         found = self._buzz_gear_motor()
         self._log_info("Filament %s by gear motor buzz" % ("detected" if found else "not detected"))
 
+    cmd_ERCF_SYNC_GEAR_MOTOR_help = "Sync the ERCF gear motor to the extruder motor"
+    def cmd_ERCF_SYNC_GEAR_MOTOR(self, gcmd):
+        if self._check_is_disabled(): return
+        if self._check_in_bypass(): return
+        sync = gcmd.get_int('SYNC', 1, minval=0, maxval=1)
+        self._sync_gear_to_extruder(sync)
 
 #########################
 # CALIBRATION FUNCTIONS #
@@ -1678,6 +1692,7 @@ class Ercf:
 ####################################################################################
 
     def _gear_stepper_move_wait(self, dist, wait=True, speed=None, accel=None, sync=True):
+        self._sync_gear_to_extruder(False)
         self.gear_stepper.do_set_position(0.)   # All gear moves are relative
         is_long_move = abs(dist) > self.LONG_MOVE_THRESHOLD
         if speed is None:
@@ -1699,6 +1714,7 @@ class Ercf:
         trace_str += ". Stepper: '%s' moved %%.1fmm, encoder measured %%.1fmm (delta %%.1fmm)" % motor
         if motor == "both":
             self._log_stepper("BOTH: dist=%.1f, speed=%d, accel=%d" % (distance, speed, self.gear_sync_accel))
+            self._sync_gear_to_extruder(False)
             self.gear_stepper.do_set_position(0.)                   # Make incremental move
             pos = self.toolhead.get_position()
             pos[3] += distance
@@ -1793,6 +1809,9 @@ class Ercf:
         delta = self._trace_filament_move("Checking extruder", -self.toolhead_homing_max, speed=25, motor="extruder")
         return (self.toolhead_homing_max - delta) > 1.
 
+    def _sync_gear_to_extruder(self, sync=True):
+        self._log_debug("Syncing gear stepper to extruder")
+        self.gear_stepper.sync_to_extruder(self.sync_to_extruder_name if sync else None)
 
 ###########################
 # FILAMENT LOAD FUNCTIONS #
@@ -2037,6 +2056,9 @@ class Ercf:
                     self._log_always("Ignoring: %s" % msg)
             self._set_loaded_status(self.LOADED_STATUS_FULL)
             self._log_info('ERCF load successful')
+            if self.sync_to_extruder_name:
+                self._servo_down()
+                self._sync_gear_to_extruder(True)
         finally:
             self._set_action(current_action)
 
@@ -2281,6 +2303,7 @@ class Ercf:
             self._log_info("Forming tip...")
             self._set_above_min_temp()
             self._servo_up()
+            self._sync_gear_to_extruder(False)
 
             if self.extruder_tmc and self.extruder_form_tip_current > 100:
                 extruder_run_current = self.extruder_tmc.get_status(0)['run_current']
