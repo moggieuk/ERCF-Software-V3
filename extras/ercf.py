@@ -21,7 +21,6 @@
 import logging, logging.handlers, threading, queue, time
 import textwrap, math, os.path, re, json
 from random import randint
-from kinematics import extruder
 
 # Forward all messages through a queue (polled by background thread)
 class QueueHandler(logging.Handler):
@@ -1127,7 +1126,10 @@ class Ercf:
     def cmd_ERCF_SYNC_GEAR_MOTOR(self, gcmd):
         if self._check_is_disabled(): return
         if self._check_in_bypass(): return
+        servo = gcmd.get_int('SERVO', 1, minval=0, maxval=1)
         sync = gcmd.get_int('SYNC', 1, minval=0, maxval=1)
+        if servo and sync:
+            self._servo_down()
         self._sync_gear_to_extruder(sync)
 
 #########################
