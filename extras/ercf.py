@@ -461,14 +461,24 @@ class Ercf:
             stepper_name = manual_stepper[1].get_steppers()[0].get_name()
             if stepper_name == 'manual_stepper selector_stepper':
                 self.selector_stepper = manual_stepper[1]
-        for manual_stepper in self.printer.lookup_objects('manual_extruder_stepper'):
-            stepper_name = manual_stepper[1].get_steppers()[0].get_name()
-            if stepper_name == 'manual_extruder_stepper gear_stepper':
-                self.gear_stepper = manual_stepper[1]
         if self.selector_stepper is None:
             raise self.config.error("[manual_stepper selector_stepper] must be specified")
+
+        for manual_extruder_stepper in self.printer.lookup_objects('manual_extruder_stepper'):
+            stepper_name = manual_extruder_stepper[1].get_steppers()[0].get_name()
+            if stepper_name == 'manual_extruder_stepper gear_stepper':
+                self.gear_stepper = manual_extruder_stepper[1]
+        if not self.gear_stepper and not self.sync_to_extruder_name:
+            # search again under old config name for backward compatibility
+            for manual_stepper in self.printer.lookup_objects('manual_stepper'):
+                stepper_name = manual_stepper[1].get_steppers()[0].get_name()
+                if stepper_name == 'manual_stepper gear_stepper':
+                    self.gear_stepper = manual_stepper[1]
         if self.gear_stepper is None:
-            raise self.config.error("[manual_extruder_stepper gear_stepper] must be specified")
+            if self.sync_to_extruder_name:
+                raise self.config.error("[manual_extruder_stepper selector_stepper] must be specified")
+            else:
+                raise self.config.error("[manual_stepper gear_stepper] or [manual_extruder_stepper selector_stepper] must be specified")
  
         try:
             self.pause_resume = self.printer.lookup_object('pause_resume')
@@ -1810,6 +1820,8 @@ class Ercf:
         return (self.toolhead_homing_max - delta) > 1.
 
     def _sync_gear_to_extruder(self, sync=True):
+        if sync and self.sync_to_extruder_name is None:
+            self._log_error("sync_gear_to_extruder is not enabled. Please set 'sync_to_extruder' in ercf_parameters.cfg")
         self._log_debug("Syncing gear stepper to extruder")
         self.gear_stepper.sync_to_extruder(self.sync_to_extruder_name if sync else None)
 

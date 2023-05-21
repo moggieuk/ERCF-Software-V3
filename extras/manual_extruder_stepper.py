@@ -1,6 +1,6 @@
 # Support for an extruder stepper that can be manually controlled when it is not synced to its motion queue
 #
-# Copyright (C) 2023 Cambridge Yang <camyang@mit.csail.edu>
+# Copyright (C) 2023 Cambridge Yang <camyang@csail.mit.edu>
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 
@@ -46,7 +46,7 @@ class ManualExtruderStepper(kinematics_extruder.ExtruderStepper, manual_stepper.
         # setup extruder kinematics
         self.sk_extruder = ffi_main.gc(ffi_lib.extruder_stepper_alloc(),
                                        ffi_lib.free)
-        self.alt_stepper_sks = [s.set_stepper_kinematics(self.sk_extruder) 
+        self.alt_stepper_sks = [s.set_stepper_kinematics(self.sk_extruder)
                                 for s in self.steppers]
         self.motion_queue = None
 
