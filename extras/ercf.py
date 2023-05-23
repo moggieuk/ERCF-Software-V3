@@ -2225,7 +2225,7 @@ class Ercf:
                 # Do this until we have traveled more than the length of the extruder 
                 if self.sync_to_extruder_name:
                     # We can't sync here and must rely on the toolhead to be able to push back the filament...
-                    self._servo_down()
+                    self._servo_up()
                     self._sync_gear_to_extruder(False)
                 step = self.encoder_move_step_size
                 max_length = self._get_home_position_to_nozzle() + step
