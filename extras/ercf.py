@@ -2258,6 +2258,8 @@ class Ercf:
                 else:
                     # back up just a bit with only the extruder, if we don't see any movement.
                     # then the filament is out of the extruder
+                    self._servo_up()
+                    self._sync_gear_to_extruder(False)
                     test_backup_distance = 30
                     delta = self._trace_filament_move("Moving extruder after exit", -test_backup_distance, speed=self.nozzle_load_speed * 0.5, motor="extruder")
                     if (test_backup_distance - delta) < 1.0:
