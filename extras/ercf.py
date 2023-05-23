@@ -2040,21 +2040,24 @@ class Ercf:
             self._log_debug("Loading last %.1fmm to the nozzle..." % length)
             initial_encoder_position = self.encoder_sensor.get_distance()
 
-            if not self._has_toolhead_sensor() and not skip_entry_moves:
-                # This is the extruder entry logic similar to that in home_to_toolhead_sensor()
-                if self.delay_servo_release > 0:
-                    # Delay servo release by a few mm to keep filament tension for reliable transition
-                    delta = self._trace_filament_move("Small extruder move under filament tension before servo release", self.delay_servo_release, speed=self.sync_load_speed, motor="extruder")
-                    length -= self.delay_servo_release
-                if self.sync_load_length > 0:
-                    self._servo_down()
-                    self._log_debug("Moving the gear and extruder motors in sync for %.1fmm" % self.sync_load_length)
-                    delta = self._trace_filament_move("Sync load move", self.sync_load_length, speed=self.sync_load_speed, motor="both")
-                    length -= self.sync_load_length
+            if self.sync_to_extruder_name:
+                delta = self._trace_filament_move("Synchronously loading filament to nozzle", length, speed=self.sync_load_speed, motor="both")
+            else:
+                if not self._has_toolhead_sensor() and not skip_entry_moves:
+                    # This is the extruder entry logic similar to that in home_to_toolhead_sensor()
+                    if self.delay_servo_release > 0:
+                        # Delay servo release by a few mm to keep filament tension for reliable transition
+                        delta = self._trace_filament_move("Small extruder move under filament tension before servo release", self.delay_servo_release, speed=self.sync_load_speed, motor="extruder")
+                        length -= self.delay_servo_release
+                    if self.sync_load_length > 0:
+                        self._servo_down()
+                        self._log_debug("Moving the gear and extruder motors in sync for %.1fmm" % self.sync_load_length)
+                        delta = self._trace_filament_move("Sync load move", self.sync_load_length, speed=self.sync_load_speed, motor="both")
+                        length -= self.sync_load_length
 
-            # Move the remaining distance to the nozzle meltzone under exclusive extruder stepper control
-            self._servo_up()
-            delta = self._trace_filament_move("Remainder of final move to meltzone", length, speed=self.sync_load_speed, motor="extruder")
+                # Move the remaining distance to the nozzle meltzone under exclusive extruder stepper control
+                self._servo_up()
+                delta = self._trace_filament_move("Remainder of final move to meltzone", length, speed=self.sync_load_speed, motor="extruder")
 
             # Final sanity check
             measured_movement = self.encoder_sensor.get_distance() - initial_encoder_position
