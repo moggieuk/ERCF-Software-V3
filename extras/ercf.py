@@ -1087,7 +1087,8 @@ class Ercf:
 
     def _motors_off(self, motor="all"):
         if motor == "all" or motor == "gear":
-            self._sync_gear_to_extruder(False)
+            if self.sync_to_extruder_name:
+                self._sync_gear_to_extruder(False)
             self.gear_stepper.do_enable(False)
         if motor == "all" or motor == "selector":
             self.selector_stepper.do_enable(False)
@@ -1704,7 +1705,8 @@ class Ercf:
 ####################################################################################
 
     def _gear_stepper_move_wait(self, dist, wait=True, speed=None, accel=None, sync=True):
-        self._sync_gear_to_extruder(False)
+        if self.sync_to_extruder_name:
+            self._sync_gear_to_extruder(False)
         self.gear_stepper.do_set_position(0.)   # All gear moves are relative
         is_long_move = abs(dist) > self.LONG_MOVE_THRESHOLD
         if speed is None:
@@ -1726,7 +1728,8 @@ class Ercf:
         trace_str += ". Stepper: '%s' moved %%.1fmm, encoder measured %%.1fmm (delta %%.1fmm)" % motor
         if motor == "both":
             self._log_stepper("BOTH: dist=%.1f, speed=%d, accel=%d" % (distance, speed, self.gear_sync_accel))
-            self._sync_gear_to_extruder(False)
+            if self.sync_to_extruder_name:
+                self._sync_gear_to_extruder(False)
             self.gear_stepper.do_set_position(0.)                   # Make incremental move
             pos = self.toolhead.get_position()
             pos[3] += distance
@@ -2190,15 +2193,13 @@ class Ercf:
             self._log_debug("Extracting filament from extruder")
             self.filament_direction = self.DIRECTION_UNLOAD
             self._set_above_min_temp()
-            if self.sync_to_extruder_name:
-                self._servo_down()
-                self._sync_gear_to_extruder(True)
-            else:
-                self._servo_up()
 
             # Goal is to exit extruder. Two strategies depending on availability of toolhead sensor
             out_of_extruder = False
             if self._has_toolhead_sensor():
+                if self.sync_to_extruder_name:
+                    self._servo_down()
+                    self._sync_gear_to_extruder(True)
                 safety_margin = 5.
                 #step = self.toolhead_homing_step # Too slow
                 step = 3.
@@ -2222,6 +2223,10 @@ class Ercf:
                 # No toolhead sensor:
                 # Back up around 15mm at a time until either the encoder doesn't see any movement
                 # Do this until we have traveled more than the length of the extruder 
+                if self.sync_to_extruder_name:
+                    # We can't sync here and must rely on the toolhead to be able to push back the filament...
+                    self._servo_down()
+                    self._sync_gear_to_extruder(False)
                 step = self.encoder_move_step_size
                 max_length = self._get_home_position_to_nozzle() + step
                 speed = self.nozzle_unload_speed * 0.5 # First pull slower just in case we don't have tip
