@@ -2120,7 +2120,6 @@ class Ercf:
             # Check for cases where we must form tip
             if not skip_tip and self.loaded_status >= self.LOADED_STATUS_PARTIAL_IN_EXTRUDER:
                 if self._form_tip_standalone():
-                    # Definitely now just in extruder
                     self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
                 else:
                     # No movement means we can safely assume we are somewhere in the bowden
@@ -2193,13 +2192,13 @@ class Ercf:
             self._log_debug("Extracting filament from extruder")
             self.filament_direction = self.DIRECTION_UNLOAD
             self._set_above_min_temp()
+            if self.sync_to_extruder_name:
+                self._servo_down()
+                self._sync_gear_to_extruder(True)
 
-            # Goal is to exit extruder. Two strategies depending on availability of toolhead sensor
+            # Goal is to exit extruder. Different strategies depending on availability of toolhead sensor and synced steppers
             out_of_extruder = False
             if self._has_toolhead_sensor():
-                if self.sync_to_extruder_name:
-                    self._servo_down()
-                    self._sync_gear_to_extruder(True)
                 safety_margin = 5.
                 #step = self.toolhead_homing_step # Too slow
                 step = 3.
@@ -2219,14 +2218,10 @@ class Ercf:
                         delta = self._trace_filament_move("Move from toolhead sensor to exit", -final_move, speed=speed, motor="extruder")
                         out_of_extruder = True
                         break
-            else:
-                # No toolhead sensor:
+            elif not self.sync_to_extruder_name:
+                # No toolhead sensor and not synced steppers:
                 # Back up around 15mm at a time until either the encoder doesn't see any movement
                 # Do this until we have traveled more than the length of the extruder 
-                if self.sync_to_extruder_name:
-                    # We can't sync here and must rely on the toolhead to be able to push back the filament...
-                    self._servo_up()
-                    self._sync_gear_to_extruder(False)
                 step = self.encoder_move_step_size
                 max_length = self._get_home_position_to_nozzle() + step
                 speed = self.nozzle_unload_speed * 0.5 # First pull slower just in case we don't have tip
@@ -2240,6 +2235,34 @@ class Ercf:
                         self._log_debug("Extruder entrance reached after %d moves" % (i+1))
                         out_of_extruder = True
                         break
+            else:
+                # No toolhead sensor with synced steppers:
+                # Back up in sync around 15mm at a time for more than length of the extruder
+                # Then back up the extruder a bit to make sure that the encoder doesn't see any movement
+                step = self.encoder_move_step_size
+                max_length = self._get_home_position_to_nozzle() + step
+                speed = self.nozzle_unload_speed * 0.5 # First pull slower just in case we don't have tip
+                self._log_debug("Trying to exit the extruder, up to %.1fmm in %.1fmm steps" % (max_length, step))
+                stuck_in_extruder = False
+                for i in range(int(math.ceil(max_length / step))):
+                    msg = "Step #%d:" % (i+1)
+                    delta = self._trace_filament_move(msg, -step, speed=speed, motor="extruder")
+                    speed = self.nozzle_unload_speed  # Can pull at full speed on subsequent steps
+
+                    if (step - delta) <= 1.0:
+                        self._log_debug("No encoder movement despite both steppers are pull after %d moves" % (i+1))
+                        stuck_in_extruder = True
+                        break
+                if stuck_in_extruder:
+                    out_of_extruder = False
+                else:
+                    # back up just a bit with only the extruder, if we don't see any movement.
+                    # then the filament is out of the extruder
+                    test_backup_distance = 30
+                    delta = self._trace_filament_move("Moving extruder after exit", -test_backup_distance, speed=self.nozzle_load_speed * 0.5, motor="extruder")
+                    if (test_backup_distance - delta) < 1.0:
+                        self._log_debug("Extruder entrance reached after %d moves" % (i+1))
+                        out_of_extruder = True
 
             if not out_of_extruder:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
@@ -2330,6 +2353,9 @@ class Ercf:
             self._set_above_min_temp()
             self._servo_up()
             if self.sync_to_extruder_name:
+                # Can't form tip with synced steppers for now
+                # since we rely on encoder movement to detect if the filament
+                # is in the extruder or not
                 self._sync_gear_to_extruder(False)
 
             if self.extruder_tmc and self.extruder_form_tip_current > 100:
