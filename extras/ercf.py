@@ -2190,7 +2190,11 @@ class Ercf:
             self._log_debug("Extracting filament from extruder")
             self.filament_direction = self.DIRECTION_UNLOAD
             self._set_above_min_temp()
-            self._servo_up()
+            if self.sync_to_extruder_name:
+                self._servo_down()
+                self._sync_gear_to_extruder(True)
+            else:
+                self._servo_up()
 
             # Goal is to exit extruder. Two strategies depending on availability of toolhead sensor
             out_of_extruder = False
@@ -2319,8 +2323,11 @@ class Ercf:
             park_pos = 35.  # TODO cosmetic: bring in from tip forming (represents parking position in extruder)
             self._log_info("Forming tip...")
             self._set_above_min_temp()
-            self._servo_up()
-            self._sync_gear_to_extruder(False)
+            if self.sync_to_extruder_name:
+                self._servo_down()
+                self._sync_gear_to_extruder(True)
+            else:
+                self._servo_up()
 
             if self.extruder_tmc and self.extruder_form_tip_current > 100:
                 extruder_run_current = self.extruder_tmc.get_status(0)['run_current']
