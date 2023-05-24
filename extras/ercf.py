@@ -1630,7 +1630,7 @@ class Ercf:
 
     def _set_above_min_temp(self, temp=-1):
         if temp == -1:
-            if self.printer.lookup_object("extruder").heater.can_extrude:
+            if self.printer.lookup_object("extruder").heater.target_temp >= self.min_temp_extruder:
                 return
             temp = self.min_temp_extruder
             self._log_error("Heating extruder to minimum temp (%.1f)" % temp)
