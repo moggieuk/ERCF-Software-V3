@@ -501,7 +501,7 @@ class Ercf:
         except:
             raise self.config.error("Missing [ercf_encoder] definition in ercf_hardware.cfg\nDid you upgrade? Run Happy Hare './install.sh' again to fix configuration files and/or read https://github.com/moggieuk/ERCF-Software-V3")
 
-        # See if we have a TMC controller capable of current control for filament collision method on gear_stepper 
+        # See if we have a TMC controller capable of current control for filament collision method on gear_stepper
         # and tip forming on extruder (just 2209 for now)
         self.gear_tmc = self.extruder_tmc = None
         try:
@@ -986,7 +986,7 @@ class Ercf:
         msg += " on gate %s" % self._selected_gate_string()
         msg += ". Toolhead position saved pending resume" if self.saved_toolhead_position else ""
         msg += "\nFilament position: %s" % self._state_to_human_string()
-        
+
         if config:
             msg += "\n\nConfiguration:\nFilament homes"
             if self._must_home_to_extruder():
@@ -1035,7 +1035,7 @@ class Ercf:
 
     def _servo_set_angle(self, angle):
         self.servo.set_value(angle=angle, duration=self.servo_duration)
-        self.servo_state = self.SERVO_UNKNOWN_STATE 
+        self.servo_state = self.SERVO_UNKNOWN_STATE
 
     def _servo_down(self):
         if self.servo_state == self.SERVO_DOWN_STATE: return
@@ -1137,7 +1137,7 @@ class Ercf:
                 self._servo_down()
                 self.encoder_sensor.reset_counts()    # Encoder 0000
                 encoder_moved = self._load_encoder(retry=False)
-                self._load_bowden(self.calibration_bowden_length - encoder_moved)     
+                self._load_bowden(self.calibration_bowden_length - encoder_moved)
                 self._log_info("Finding extruder gear position (try #%d of %d)..." % (i+1, repeats))
                 self._home_to_extruder(extruder_homing_length)
                 measured_movement = self.encoder_sensor.get_distance()
@@ -1154,12 +1154,12 @@ class Ercf:
                         if self._has_toolhead_sensor():
                             # We have a toolhead sensor so the extruder entrance isn't the reference
                             # homing point and therefore not critical to press against it. Relax tension
-                            reference = measured_movement - (spring * 1.1) 
+                            reference = measured_movement - (spring * 1.1)
                         else:
                             # We need a little bit of tension because sync load is more reliable in
                             # picking up filament but we still rely on the extruder as home point
                             reference = measured_movement - (spring * 0.5)
-        
+
                     msg = "Pass #%d: Filament homed to extruder, encoder measured %.1fmm, " % (i+1, measured_movement)
                     msg += "filament sprung back %.1fmm" % spring
                     msg += "\n- Calibration reference based on this pass is %.1f" % reference
@@ -1755,7 +1755,7 @@ class Ercf:
     def _buzz_gear_motor(self):
         initial_encoder_position = self.encoder_sensor.get_distance()
         self._gear_stepper_move_wait(2.0, wait=False)
-        self._gear_stepper_move_wait(-2.0)        
+        self._gear_stepper_move_wait(-2.0)
         delta = self.encoder_sensor.get_distance() - initial_encoder_position
         self._log_trace("After buzzing gear motor, encoder moved %.2f" % delta)
         self.encoder_sensor.set_distance(initial_encoder_position)
@@ -1921,11 +1921,11 @@ class Ercf:
         if measured_movement > (max_length * 0.8):
             self._log_info("Warning: 80% of 'extruder_homing_max' was used homing. You may want to increase your initial load distance ('ercf_calib_ref') or increase 'extruder_homing_max'")
         self._set_loaded_status(self.LOADED_STATUS_PARTIAL_HOMED_EXTRUDER)
-  
+
     def _home_to_extruder_collision_detection(self, max_length):
         step = self.extruder_homing_step
         self._log_debug("Homing to extruder gear, up to %.1fmm in %.1fmm steps" % (max_length, step))
- 
+
         if self.gear_tmc and self.extruder_homing_current < 100:
             gear_stepper_run_current = self.gear_tmc.get_status(0)['run_current']
             self._log_debug("Temporarily reducing gear_stepper run current to %d%% for collision detection"
@@ -2021,7 +2021,7 @@ class Ercf:
 
             # Move the remaining distance to the nozzle meltzone under exclusive extruder stepper control
             self._servo_up()
-            delta = self._trace_filament_move("Remainder of final move to meltzone", length, speed=self.sync_load_speed, motor="extruder")
+            delta = self._trace_filament_move("Remainder of final move to meltzone", length, speed=self.nozzle_load_speed, motor="extruder")
 
             # Final sanity check
             measured_movement = self.encoder_sensor.get_distance() - initial_encoder_position
@@ -2083,7 +2083,7 @@ class Ercf:
                 else:
                     # No movement means we can safely assume we are somewhere in the bowden
                     self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
-     
+
             if self.loaded_status == self.LOADED_STATUS_PARTIAL_END_OF_BOWDEN and self._has_toolhead_sensor():
                 # This error case can occur when home to sensor failed and we may be stuck in extruder
                 self._unload_extruder()
@@ -2178,7 +2178,7 @@ class Ercf:
             else:
                 # No toolhead sensor:
                 # Back up around 15mm at a time until either the encoder doesn't see any movement
-                # Do this until we have traveled more than the length of the extruder 
+                # Do this until we have traveled more than the length of the extruder
                 step = self.encoder_move_step_size
                 max_length = self._get_home_position_to_nozzle() + step
                 speed = self.nozzle_unload_speed * 0.5 # First pull slower just in case we don't have tip
@@ -2215,10 +2215,10 @@ class Ercf:
             sync = not skip_sync_move and self.sync_unload_length > 0
             initial_move = 10. if not sync else self.sync_unload_length
             if sync:
-                self._log_debug("Moving the gear and extruder motors in sync for %.1fmm" % -initial_move) 
+                self._log_debug("Moving the gear and extruder motors in sync for %.1fmm" % -initial_move)
                 delta = self._trace_filament_move("Sync unload", -initial_move, speed=self.sync_unload_speed, motor="both")
             else:
-                self._log_debug("Moving the gear motor for %.1fmm" % -initial_move) 
+                self._log_debug("Moving the gear motor for %.1fmm" % -initial_move)
                 delta = self._trace_filament_move("Unload", -initial_move, speed=self.sync_unload_speed, motor="gear", track=True)
 
             if delta > max(initial_move * 0.5, 1): # 50% slippage
@@ -2235,7 +2235,7 @@ class Ercf:
                     self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
                     raise ErcfError("Too much slippage (%.1fmm) detected during the sync unload from extruder. Maybe still stuck in extruder" % delta)
             length -= (initial_move - delta)
-        
+
         # Continue fast unload
         moves = 1 if length < (self._get_calibration_ref() / self.num_moves) else self.num_moves
         delta = 0
@@ -2392,7 +2392,7 @@ class Ercf:
                 self.selector_stepper.do_set_position(0.)
                 self._log_trace("Resetting selector by a distance of: %.1fmm" % -travel)
                 self._selector_stepper_move_wait(-travel)
-                
+
                 # See if we can detect filament in the encoder
                 self._servo_down()
                 found = self._buzz_gear_motor()
@@ -2409,7 +2409,7 @@ class Ercf:
                 except ErcfError as ee:
                     # Add some more context to the error and re-raise
                     raise ErcfError("Selector recovery failed because: %s" % (str(ee)))
-                
+
                 # Ok, now check if selector can now reach proper target
                 self._home_selector()
                 successful, travel = self._attempt_selector_move(target)
@@ -2561,7 +2561,7 @@ class Ercf:
 ### CORE GCODE COMMANDS ##########################################################
 
     cmd_ERCF_UNLOCK_help = "Unlock ERCF operations"
-    def cmd_ERCF_UNLOCK(self, gcmd):        
+    def cmd_ERCF_UNLOCK(self, gcmd):
         if self._check_is_disabled(): return
         if not self.is_paused_locked:
             self._log_info("ERCF is not locked")
@@ -2930,7 +2930,7 @@ class Ercf:
         if self._check_in_bypass(): return
         restore = params.get_int('RETURN', 0, minval=0, maxval=1)
         try:
-            self.toolhead.wait_moves() 
+            self.toolhead.wait_moves()
             initial_encoder_position = self.encoder_sensor.get_distance()
             self._home_to_extruder(self.extruder_homing_max)
             measured_movement = self.encoder_sensor.get_distance() - initial_encoder_position
@@ -3397,7 +3397,7 @@ class Ercf:
                 except ErcfError as ee:
                     self._set_gate_status(gate, self.GATE_EMPTY)
                     self._set_loaded_status(self.LOADED_STATUS_UNLOADED, silent=True)
-                    if tool >= 0: 
+                    if tool >= 0:
                         msg = "Tool T%d - filament not detected. Gate #%d marked empty" % (tool, gate)
                     else:
                         msg = "Gate #%d - filament not detected. Marked empty" % gate
