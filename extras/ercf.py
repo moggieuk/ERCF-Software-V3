@@ -500,7 +500,7 @@ class Ercf:
         for endstop, name in self.query_endstops.endstops:
             if name == 'manual_stepper selector_stepper':
                 self.selector_endstop = endstop
-            if name == 'manual_stepper gear_stepper':
+            if name == 'manual_stepper gear_stepper' or name == 'manual_extruder_stepper gear_stepper':
                 self.gear_endstop = endstop
         if self.selector_endstop == None:
             raise self.config.error("Selector endstop must be specified")
@@ -521,7 +521,10 @@ class Ercf:
         # and tip forming on extruder (just 2209 for now)
         self.gear_tmc = self.extruder_tmc = None
         try:
-            self.gear_tmc = self.printer.lookup_object('tmc2209 manual_stepper gear_stepper')
+            if self.sync_to_extruder_name:
+                self.gear_tmc = self.printer.lookup_object('tmc2209 manual_extruder_stepper gear_stepper')
+            else:
+                self.gear_tmc = self.printer.lookup_object('tmc2209 manual_stepper gear_stepper')
         except:
             self._log_debug("TMC2209 driver not found for gear_stepper, cannot use current reduction for collision detection")
         try:
