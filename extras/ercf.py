@@ -1634,6 +1634,11 @@ class Ercf:
     def _set_action(self, action):
         old_action = self.action
         self.action = action
+
+        # Call the callback macro
+        self._log_info("Calling teh action callback.")
+        self.gcode.run_script_from_command("_ERCF_ACTION_CHANGED ACTION=%d"% (self.action))
+        
         return old_action
 
 
