@@ -75,6 +75,7 @@ class Ercf:
 
     LONG_MOVE_THRESHOLD = 70.   # This is also the initial move to load past encoder
     ENCODER_MIN = 0.7           # The threshold (mm) that determines real encoder movement (ignore erroneous pulse)
+    SERVO_RELEASE_STATE = 2  # PAUL NEW V2
     SERVO_DOWN_STATE = 1
     SERVO_UP_STATE = 0
     SERVO_UNKNOWN_STATE = -1
@@ -155,6 +156,8 @@ class Ercf:
         self.config = config
         self.printer = config.get_printer()
         self.reactor = self.printer.get_reactor()
+        self.estimated_print_time = None # PAUL new
+        self.last_sensorless_move = 0 # PAUL new
         self.printer.register_event_handler('klippy:connect', self.handle_connect)
         self.printer.register_event_handler("klippy:disconnect", self.handle_disconnect)
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
@@ -163,6 +166,7 @@ class Ercf:
         self.selector_stepper = self.gear_stepper = self.toolhead_sensor = self.encoder_sensor = self.servo = None
 
         # Specific build parameters / tuning
+        self.ercf_version = config.getfloat('version', 1.1) # TEMP V2 development
         self.long_moves_speed = config.getfloat('long_moves_speed', 100.)
         self.short_moves_speed = config.getfloat('short_moves_speed', 25.)
         self.z_hop_height = config.getfloat('z_hop_height', 5., minval=0.)
@@ -172,11 +176,12 @@ class Ercf:
         self.gear_buzz_accel = config.getfloat('gear_buzz_accel', 2000)
         self.servo_down_angle = config.getfloat('servo_down_angle')
         self.servo_up_angle = config.getfloat('servo_up_angle')
+        self.servo_release_angle = config.getfloat('servo_release_angle', self.servo_up_angle) # PAUL NEW V2
         self.servo_duration = config.getfloat('servo_duration', 0.2, minval=0.1)
         self.num_moves = config.getint('num_moves', 2, minval=1)
         self.apply_bowden_correction = config.getint('apply_bowden_correction', 0, minval=0, maxval=1)
-        self.load_bowden_tolerance = config.getfloat('load_bowden_tolerance', 8., minval=1., maxval=50.)
-        self.unload_bowden_tolerance = config.getfloat('unload_bowden_tolerance', self.load_bowden_tolerance, minval=1., maxval=50.)
+        self.load_bowden_tolerance = config.getfloat('load_bowden_tolerance', 10., minval=1.)
+        self.unload_bowden_tolerance = config.getfloat('unload_bowden_tolerance', self.load_bowden_tolerance * 1.5, minval=1.)
         self.parking_distance = config.getfloat('parking_distance', 23., minval=12., maxval=30.)
         self.encoder_move_step_size = config.getfloat('encoder_move_step_size', 15., minval=5., maxval=25.)
         self.load_encoder_retries = config.getint('load_encoder_retries', 2, minval=1, maxval=5)
@@ -342,6 +347,9 @@ class Ercf:
         self.gcode.register_command('ERCF_DISABLE',
                     self.cmd_ERCF_DISABLE,
                     desc = self.cmd_ERCF_DISABLE_help)
+        self.gcode.register_command('ERCF_ENCODER',
+                    self.cmd_ERCF_ENCODER,
+                    desc = self.cmd_ERCF_ENCODER_help) # PAUL new command
         self.gcode.register_command('ERCF_HOME',
                     self.cmd_ERCF_HOME,
                     desc = self.cmd_ERCF_HOME_help)
@@ -383,6 +391,8 @@ class Ercf:
                     desc = self.cmd_ERCF_RECOVER_help)
 
 	# User Testing
+        self.gcode.register_command('_ERCF_SOAKTEST_SELECTOR',
+                    self.cmd_ERCF_SOAKTEST_SELECTOR) # PAUL new command
         self.gcode.register_command('ERCF_TEST_GRIP',
                     self.cmd_ERCF_TEST_GRIP,
                     desc = self.cmd_ERCF_TEST_GRIP_help)
@@ -651,6 +661,8 @@ class Ercf:
         except Exception as e:
             self._log_always('Warning: Error trying to wrap RESUME macro: %s' % str(e))
 
+        self.estimated_print_time = self.printer.lookup_object('mcu').estimated_print_time # PAUL new
+        self.last_sensorless_move = self.estimated_print_time(self.reactor.monotonic()) # PAUL new
         waketime = self.reactor.monotonic() + self.BOOT_DELAY
         self.reactor.register_callback(self._bootup_tasks, waketime)
 
@@ -1068,6 +1080,15 @@ class Ercf:
             self._log_debug("Spring in filament measured  %.1fmm - adjusting encoder" % delta)
             self.encoder_sensor.set_distance(initial_encoder_position)
         return delta
+
+# PAUL vvv NEW V2
+    def _servo_release(self):
+        if self.servo_state == self.SERVO_RELEASE_STATE: return 0.
+        self._log_debug("Setting servo to release angle: %d" % (self.servo_release_angle))
+        self.toolhead.wait_moves()
+        self.servo.set_value(angle=self.servo_release_angle, duration=self.servo_duration)
+        self.servo_state = self.SERVO_RELEASE_STATE
+# PAUL ^^^ NEW V2
 
     def _motors_off(self, motor="all"):
         if motor == "all" or motor == "gear":
@@ -1580,7 +1601,7 @@ class Ercf:
             if self.printer.lookup_object("extruder").heater.can_extrude:
                 return
             temp = self.min_temp_extruder
-            self._log_info("Heating extruder to minimum temp (%.1f)" % temp)
+            self._log_error("Heating extruder to minimum temp (%.1f)" % temp)
         else:
             if self.printer.lookup_object("extruder").heater.target_temp < temp and temp > 40:
                 self._log_info("Heating extruder to desired temp (%.1f)" % temp)
@@ -1653,6 +1674,15 @@ class Ercf:
         if self.is_enabled:
             self._log_always("ERCF disabled")
             self.is_enabled = False
+
+    cmd_ERCF_ENCODER_help = "Manual enable/disable control of ERCF encoder"
+    def cmd_ERCF_ENCODER(self, gcmd):
+        if self._check_is_disabled(): return
+        enable = gcmd.get_int('ENABLE', minval=0, maxval=1)
+        if enable:
+            self._enable_encoder_sensor(True)
+        else:
+            self._disable_encoder_sensor(True)
 
     cmd_ERCF_RESET_help = "Forget persisted state and re-initialize defaults"
     def cmd_ERCF_RESET(self, gcmd):
@@ -1743,7 +1773,18 @@ class Ercf:
             accel = self.selector_stepper.accel
         if homing_move != 0:
             self._log_stepper("SELECTOR: dist=%.1f, speed=%d, accel=%d homing=%d" % (dist, speed, accel, homing_move))
-            if abs(dist - self.selector_stepper.get_position()[0]) < 12: # Workaround for Timer Too Close error with short homing moves
+# PAUL vvv all new
+            # Don't allow sensorless home moves in rapid succession (TMC limitation)
+            if self.sensorless_selector == 1:
+                current_time = self.estimated_print_time(self.reactor.monotonic())
+                self._log_trace("**** PAUL: last_sensorless_move=%.1f, estimated_print_time=%.1f" % (self.last_sensorless_move, current_time))
+                time_since_last = self.last_sensorless_move + 2.0 - current_time
+                if (time_since_last) > 0:
+                    self._log_trace("+++++++ PAUL:Wating %.2f seconds before next sensorless homing move" % time_since_last) # PAUL
+                    self.toolhead.dwell(time_since_last)
+                self.last_sensorless_move = self.estimated_print_time(self.reactor.monotonic())
+# PAUL ^^^ all new
+            elif abs(dist - self.selector_stepper.get_position()[0]) < 12: # Workaround for Timer Too Close error with short homing moves
                 self.toolhead.dwell(1)
             self.selector_stepper.do_homing_move(dist, speed, accel, homing_move > 0, abs(homing_move) == 1)
         else:
@@ -1899,12 +1940,12 @@ class Ercf:
                         break
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
                 if delta >= tolerance:
-                    self._log_info("Warning: Excess slippage was detected in bowden tube load afer correction moves. Moved %.1fmm, Encoder delta %.1fmm. See ercf.log for more details"% (length, delta))
+                    self._log_info("Warning: Excess slippage was detected in bowden tube load afer correction moves. Gear moved %.1fmm, Encoder delta %.1fmm. See ercf.log for more details"% (length, delta))
             else:
-                self._log_info("Warning: Excess slippage was detected in bowden tube load but 'apply_bowden_correction' is disabled. Moved %.1fmm, Encoder delta %.1fmm. See ercf.log for more details" % (length, delta))
+                self._log_info("Warning: Excess slippage was detected in bowden tube load but 'apply_bowden_correction' is disabled. Gear moved %.1fmm, Encoder delta %.1fmm. See ercf.log for more details" % (length, delta))
 
             if delta >= tolerance:
-                self._log_debug("Possible causes of slippage:\nCalibration ref length too long (hitting extruder gear before homing)\nCalibration ratio for gate is not accurate\nERCF gears are not properly gripping filament\nEncoder reading is inaccurate\nFaulty servo")
+                self._log_debug("Possible causes of slippage:\nCalibration ref length too long (hitting extruder gear before homing)\nCalibration ratio for gate is not accurate\nERCF gears are not properly gripping filament\nEncoder reading is inaccurate\nFaulty servo\nLoad speed too fast for encoder to track (>200mm/s)")
 
     # This optional step snugs the filament up to the extruder gears.
     def _home_to_extruder(self, max_length):
@@ -2109,6 +2150,12 @@ class Ercf:
                 raise ErcfError("Unexpected state during unload sequence")
 
             self._servo_up()
+            movement = self._servo_up()
+            # PAUL NEW vvvv test me
+            if movement > self.ENCODER_MIN:
+                raise ErcfError("It may be time to get the pliers out! Filament appears to stuck somewhere")
+            # PAUL NEW ^^^ test me
+
             self.toolhead.wait_moves()
             self._log_info("Unloaded %.1fmm of filament" % self.encoder_sensor.get_distance())
             self.encoder_sensor.reset_counts()    # Encoder 0000
@@ -2245,10 +2292,10 @@ class Ercf:
             if i < moves:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
         if delta >= length * 0.8 and not self.calibrating: # 80% slippage detects filament still stuck in extruder
-            raise ErcfError("Failure to unload bowden. Perhaps filament is stuck in extruder. Moved %.1fmm, Encoder delta %.1fmm" % (length, delta))
+            raise ErcfError("Failure to unload bowden. Perhaps filament is stuck in extruder. Gear moved %.1fmm, Encoder delta %.1fmm" % (length, delta))
         elif delta >= tolerance and not self.calibrating:
             # Only a warning because _unload_encoder() will deal with it
-            self._log_info("Warning: Excess slippage was detected in bowden tube unload. Moved %.1fmm, Encoder delta %.1fmm" % (length, delta))
+            self._log_info("Warning: Excess slippage was detected in bowden tube unload. Gear moved %.1fmm, Encoder delta %.1fmm" % (length, delta))
         self._set_loaded_status(self.LOADED_STATUS_PARTIAL_PAST_ENCODER)
 
     # Step extract of filament from encoder to ERCF park position
@@ -2386,7 +2433,7 @@ class Ercf:
     def _move_selector_sensorless(self, target):
         successful, travel = self._attempt_selector_move(target)
         if not successful:
-            if abs(travel) < 3.0 :         # Filament stuck in the current selector
+            if abs(travel) < 3.0:       # Filament stuck in the current selector
                 self._log_info("Selector is blocked by inside filament, trying to recover...")
                 # Realign selector
                 self.selector_stepper.do_set_position(0.)
@@ -2454,7 +2501,7 @@ class Ercf:
 
         if self.loaded_status == self.LOADED_STATUS_UNLOADED:
             skip_unload = True
-            msg = "Tool change requested, to T%d" % tool
+            msg = "Tool change requested: T%d" % tool
             m117_msg = ("> T%d" % tool)
         else:
             msg = "Tool change requested, from %s to T%d" % (initial_tool_string, tool)
@@ -2499,6 +2546,7 @@ class Ercf:
         self._select_gate(gate)
         self._set_tool_selected(tool, silent=True)
         self._log_info("Tool T%d enabled%s" % (tool, (" on gate #%d" % gate) if tool != gate else ""))
+        self._log_always("***** PAUL: Servo to coast postion") # PAUL NEW V2 ... set servo unlock pos here
 
     def _select_gate(self, gate):
         if gate == self.gate_selected: return
@@ -2808,6 +2856,30 @@ class Ercf:
 
 ### GCODE COMMANDS INTENDED FOR TESTING #####################################
 
+    def cmd_ERCF_SOAKTEST_SELECTOR(self, gcmd):
+        if self._check_is_disabled(): return
+        if self._check_is_paused(): return
+        if self._check_is_loaded(): return
+        loops = gcmd.get_int('LOOP', 100)
+        servo = gcmd.get_int('SERVO', 0)
+        try:
+            self._home()
+            for l in range(loops):
+                self._log_always("Testing loop %d / %d" % (l, loops))
+                tool = randint(0, len(self.selector_offsets))
+                if tool == len(self.selector_offsets):
+                    self._select_bypass()
+                else:
+                    if randint(0, 10) == 0:
+                        self._home(tool)
+                    else:
+                        self._select_tool(tool)
+                if servo:
+                    self._servo_down()
+        except ErcfError as ee:
+            self._log_error("Soaktest abandoned because of error")
+            self._log_always(str(ee))
+
     cmd_ERCF_TEST_GRIP_help = "Test the ERCF grip for a Tool"
     def cmd_ERCF_TEST_GRIP(self, gcmd):
         if self._check_is_disabled(): return
@@ -3068,7 +3140,7 @@ class Ercf:
 
             self.gcode.run_script_from_command("_ERCF_ENDLESS_SPOOL_PRE_UNLOAD")
             if not self._form_tip_standalone():
-                self._log_info("Didn't detect filament during tip forming move!")
+                self._log_info("Filament hasn't yet reached encoder after tip forming move")
             self._unload_tool(skip_tip=True)
             self._remap_tool(self.tool_selected, next_gate, 1)
             self._select_and_load_tool(self.tool_selected)
