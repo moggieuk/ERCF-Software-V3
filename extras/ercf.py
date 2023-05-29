@@ -164,6 +164,7 @@ class Ercf:
 
         # Specific build parameters / tuning
         self.sync_to_extruder_name = config.get('sync_to_extruder', None)
+        self.form_tip_with_synced_gear = config.getint('form_tip_with_synced_gear', 0, minval=0, maxval=1)
         self.long_moves_speed = config.getfloat('long_moves_speed', 100.)
         self.short_moves_speed = config.getfloat('short_moves_speed', 25.)
         self.z_hop_height = config.getfloat('z_hop_height', 5., minval=0.)
@@ -2122,11 +2123,22 @@ class Ercf:
 
             # Check for cases where we must form tip
             if not skip_tip and self.loaded_status >= self.LOADED_STATUS_PARTIAL_IN_EXTRUDER:
-                if self._form_tip_standalone():
-                    self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
+                form_tip_encoder_moved = self._form_tip_standalone()
+                if self.sync_to_extruder_name and self.form_tip_with_synced_gear:
+                    if not form_tip_encoder_moved:
+                        raise ErcfError("Filament appears to be in extruder, "
+                        "but encoder did not detect any movement for tip forming despite the synced extruders steppers."
+                        "Possible causes: the filament is stuck, encoder is not working or filament moved out of ERCF somehow?")
+                    if self._test_filament_in_extruder_by_retracting():
+                        self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
+                    else:
+                        self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
                 else:
-                    # No movement means we can safely assume we are somewhere in the bowden
-                    self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
+                    if form_tip_encoder_moved:
+                        self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
+                    else:
+                        # No movement means we can safely assume we are somewhere in the bowden
+                        self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_BOWDEN)
 
             if self.loaded_status == self.LOADED_STATUS_PARTIAL_END_OF_BOWDEN and self._has_toolhead_sensor():
                 # This error case can occur when home to sensor failed and we may be stuck in extruder
@@ -2253,7 +2265,7 @@ class Ercf:
                     speed = self.nozzle_unload_speed  # Can pull at full speed on subsequent steps
 
                     if (step - delta) <= 1.0:
-                        self._log_debug("No encoder movement despite both steppers are pull after %d moves" % (i+1))
+                        self._log_debug("No encoder movement despite both steppers are pulling after %d moves" % (i+1))
                         stuck_in_extruder = True
                         break
                 if stuck_in_extruder:
@@ -2261,13 +2273,8 @@ class Ercf:
                 else:
                     # back up just a bit with only the extruder, if we don't see any movement.
                     # then the filament is out of the extruder
-                    self._servo_up()
-                    self._sync_gear_to_extruder(False)
-                    test_backup_distance = 10
-                    delta = self._trace_filament_move("Moving extruder after exit", -test_backup_distance, speed=self.nozzle_load_speed * 0.5, motor="extruder")
-                    if (test_backup_distance - delta) < 1.0:
-                        self._log_debug("Extruder entrance reached after %d moves" % (i+1))
-                        out_of_extruder = True
+                    self._log_debug("Extruder entrance reached after %d moves" % (i+1))
+                    out_of_extruder = self._test_filament_in_extruder_by_retracting()
 
             if not out_of_extruder:
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_IN_EXTRUDER)
@@ -2278,6 +2285,15 @@ class Ercf:
 
         finally:
             self._set_action(current_action)
+
+    def _test_filament_in_extruder_by_retracting(self, length = 10):
+        """Retract the filament by the extruder stepper and see if we do not have any encoder movement.
+        
+        This assumes that we already tip formed, and the filament is parked somewhere in the encoder."""
+        self._servo_up()
+        self._sync_gear_to_extruder(False)
+        delta = self._trace_filament_move("Moving extruder to test for exit", -length, speed=self.nozzle_load_speed * 0.5, motor="extruder")
+        return (length - delta) < 1.0
 
     # Fast unload of filament from exit of extruder gear (end of bowden) to close to ERCF (but still in encoder)
     def _unload_bowden(self, length, skip_sync_move=False):
@@ -2356,11 +2372,11 @@ class Ercf:
             park_pos = 35.  # TODO cosmetic: bring in from tip forming (represents parking position in extruder)
             self._log_info("Forming tip...")
             self._set_above_min_temp()
-            self._servo_up()
-            if self.sync_to_extruder_name:
-                # Can't form tip with synced steppers for now
-                # since we rely on encoder movement to detect if the filament
-                # is in the extruder or not
+            if self.sync_to_extruder_name and self.form_tip_with_synced_gear:
+                self._servo_down()
+                self._sync_gear_to_extruder(True)
+            else:
+                self._servo_up()
                 self._sync_gear_to_extruder(False)
 
             if self.extruder_tmc and self.extruder_form_tip_current > 100:
