@@ -31,10 +31,11 @@ class ErcfEncoder:
         self.reactor = self.printer.get_reactor()
         self.gcode = self.printer.lookup_object('gcode')
         encoder_pin = config.get('encoder_pin')
+        self._logger = None
 
         # For counter functionality
         self.sample_time = config.getfloat('sample_time', 0.1, above=0.)
-        self.poll_time = config.getfloat('poll_time', 0.0001, above=0.)
+        self.poll_time = config.getfloat('poll_time', 0.001, above=0.)
         self.resolution = config.getfloat('encoder_resolution', above=0.) # Must be calibrated by user
         self._last_time = None
         self._counts = self._last_count = 0
@@ -63,7 +64,12 @@ class ErcfEncoder:
         self.filament_detected = False
         self.detection_mode = self.RUNOUT_STATIC
         self.last_extruder_pos = self.filament_runout_pos = 0.
-        self._logger = None
+
+        # For flowrate functionality
+        self.flowrate_last_encoder_pos = 0.
+        self.extrusion_flowrate = 1.
+        self.samples = []
+        self.flowrate_samples = config.getint('flowrate_samples', 20, minval=5)
 
         # Register event handlers
         self.printer.register_event_handler('klippy:ready', self._handle_ready)
@@ -118,6 +124,14 @@ class ErcfEncoder:
                     elif self.detection_mode == self.RUNOUT_STATIC:
                         self._logger("Warning: Only %.1fmm of headroom to clog/runout" % self.min_headroom)
             self._handle_filament_event(extruder_pos < self.filament_runout_pos)
+
+            # Flowrate calc. Depends of calibration accuracy of encoder
+            encoder_pos = self.get_distance()
+            # If encoder has moved, record the extruder and encoder movement for flow rate calcs
+            if encoder_pos > self.flowrate_last_encoder_pos:
+                self._record(encoder_pos, extruder_pos)
+                self.flowrate_last_encoder_pos = encoder_pos
+
             self.last_extruder_pos = extruder_pos
         return eventtime + self.CHECK_MOVEMENT_TIMEOUT
 
@@ -125,6 +139,9 @@ class ErcfEncoder:
         if eventtime is None:
             eventtime = self.reactor.monotonic()
         self.last_extruder_pos = self._get_extruder_pos(eventtime)
+        self.flowrate_last_encoder_pos = self.get_distance()
+        self.extrusion_flowrate = 1.
+        self.samples = []
         self.filament_runout_pos = self.last_extruder_pos + self.detection_length + self.desired_headroom # Add headroom to decrease sensitivity on startup
         self.next_calibration_point = self.last_extruder_pos + self.calibration_length
         self.min_headroom = self.detection_length
@@ -220,6 +237,15 @@ class ErcfEncoder:
     def is_enabled(self):
         return self._enabled
 
+    def _record(self, encoder_pos, extruder_pos):
+        self.samples.append((encoder_pos, extruder_pos))
+        if len(self.samples) > self.flowrate_samples:
+            self.samples = self.samples[-self.flowrate_samples:]
+        encoder_movement = encoder_pos - self.samples[0][0]
+        extruder_movement = extruder_pos - self.samples[0][1]
+        new_extrusion_flowrate = (encoder_movement / extruder_movement) if extruder_movement > 0. else 1.
+        self.extrusion_flowrate = (self.extrusion_flowrate + new_extrusion_flowrate) / 2.
+
     # Callback for MCU_counter
     def _counter_callback(self, time, count, count_time):
         if self._last_time is None:  # First sample
@@ -253,7 +279,8 @@ class ErcfEncoder:
                 'headroom': round(self.filament_runout_pos - self.last_extruder_pos, 1),
                 'desired_headroom': round(self.desired_headroom, 1),
                 'detection_mode': self.detection_mode,
-                'enabled': self._enabled
+                'enabled': self._enabled,
+                'flow_rate': int(round(min(self.extrusion_flowrate, 1.) * 100))
         }
 
 def load_config_prefix(config):

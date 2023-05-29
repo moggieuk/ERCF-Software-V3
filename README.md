@@ -473,6 +473,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_RECOVER | Recover filament position and optionally reset ERCF state. Useful to call prior to RESUME if you intervene/manipulate filament by hand | TOOL=\[0..n\] \| -2 Optionally force set the currently selected tool (-2 = bypass). Use caution! <br>GATE=\[0..n\] Optionally force set the currently selected gate if TTG mapping is being leveraged otherwise it will get the gate associated with current tool. Use caution! <br>LOADED=\[0\|1\] Optionally specify if the filamanet is fully loaded or fully unloaded. Use caution! If not specified, ERCF will try to discover filament position |
   | ERCF_ENABLE | Enable ERCF and reset state after disable | None |
   | ERCF_DISABLE | Disable all ERCF functionality | None |
+  | ERCF_ENCODER | Explicitly enable or disable the encoder. Note that the encoder state is set automatically so this will only be sticky until next tool change | ENABLE=\[0\|1\] |
   <br>
   
   ## Servo and motor control
@@ -511,13 +512,15 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_TEST_GRIP | Test the ERCF grip of the currently selected tool | None |
   | ERCF_TEST_SERVO | Test the servo angle | VALUE=.. Angle value sent to servo |
   | ERCF_TEST_MOVE_GEAR | Move the ERCF gear | LENGTH=..\[200\] Length of gear move in mm <br>SPEED=..\[50\] Stepper move speed <br>ACCEL=..\[200\] Gear stepper accel |
-  | ERCF_TEST_LOAD_SEQUENCE | Soak testing of load sequence. Great for testing reliability and repeatability| LOOP=..\[10\] Number of times to loop while testing <br>RANDOM=\[0\|1\] Whether to randomize tool selection <br>FULL=\[0 \|1 \] Whether to perform full load to nozzle or short load just past encoder |
   | ERCF_TEST_LOAD | Test loading filament | LENGTH=..[100] Test load the specified length of filament into selected tool |
   | (ERCF_LOAD) | Identical to ERCF_TEST_LOAD | |
   | ERCF_TEST_UNLOAD | Move the ERCF gear | LENGTH=..[100] Length of filament to be unloaded <br>UNKNOWN=\[0\|1\] Whether the state of the extruder is known. Generally 0 for standalone use, 1 simulates call as if it was from slicer when tip has already been formed |
   | ERCF_TEST_HOME_TO_EXTRUDER | For calibrating extruder homing - TMC current setting, etc. | RETURN=\[0\|1\] Whether to return the filament to the approximate starting position after homing - good for repeated testing |
   | ERCF_TEST_TRACKING | Simple visual test to see how encoder tracks with gear motor | DIRECTION=\[-1\|1\] Direction to perform the test <br>STEP=\[0.5..20\] Size of individual steps <br>Defaults to load direction and 1mm step size |
   | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime | Many. Best to run ERCF_TEST_CONFIG without options to report all parameters than can be specified |
+
+  | ERCF_SOAKTEST_SELECTOR | QA reliability testing to put the selector movement under stress to test for failures | LOOP=..\[100\] Number of times to repeat the test <br>SERVO=\[0\|1\] Whether to include the servo down movement in the test |
+  | ERCF_TEST_LOAD_SEQUENCE | Soak testing of load sequence. Great for testing reliability and repeatability| LOOP=..\[10\] Number of times to loop while testing <br>RANDOM=\[0\|1\] Whether to randomize tool selection <br>FULL=\[0 \|1 \] Whether to perform full load to nozzle or short load just past encoder |
   <br>
 
   ## User defined/configurable macros (in ercf_software.cfg)
