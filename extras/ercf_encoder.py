@@ -69,7 +69,7 @@ class ErcfEncoder:
         self.flowrate_last_encoder_pos = 0.
         self.extrusion_flowrate = 1.
         self.samples = []
-        self.flowrate_samples = config.getint('flowrate_samples', 10, minval=3)
+        self.flowrate_samples = config.getint('flowrate_samples', 20, minval=5)
 
         # Register event handlers
         self.printer.register_event_handler('klippy:ready', self._handle_ready)
@@ -241,13 +241,10 @@ class ErcfEncoder:
         self.samples.append((encoder_pos, extruder_pos))
         if len(self.samples) > self.flowrate_samples:
             self.samples = self.samples[-self.flowrate_samples:]
-#        self._logger("PAUL: self.samples=%s" % self.samples)
-#        self._logger("PAUL: encoder_pos=%.1f, extruder_pos=%.1f [0][0]=%.1f [0][1]=%.1f" % (encoder_pos, extruder_pos, self.samples[0][0], self.samples[0][1]))
         encoder_movement = encoder_pos - self.samples[0][0]
         extruder_movement = extruder_pos - self.samples[0][1]
         new_extrusion_flowrate = (encoder_movement / extruder_movement) if extruder_movement > 0. else 1.
         self.extrusion_flowrate = (self.extrusion_flowrate + new_extrusion_flowrate) / 2.
-#        self._logger("PAUL: Windowed (%d) Encoder movement: %.2f vs Extruder: %.2f (deta=%.2f) FLOW_RATE=%d" % (len(self.samples), encoder_movement, extruder_movement, extruder_movement - encoder_movement, round(min(self.extrusion_flowrate, 1.) * 100, 1)))
 
     # Callback for MCU_counter
     def _counter_callback(self, time, count, count_time):
@@ -283,7 +280,7 @@ class ErcfEncoder:
                 'desired_headroom': round(self.desired_headroom, 1),
                 'detection_mode': self.detection_mode,
                 'enabled': self._enabled,
-                'flow_rate': round(min(self.extrusion_flowrate, 1.) * 100, 1)
+                'flow_rate': int(round(min(self.extrusion_flowrate, 1.) * 100))
         }
 
 def load_config_prefix(config):
