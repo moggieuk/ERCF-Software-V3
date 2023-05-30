@@ -707,6 +707,19 @@ class Ercf:
 # LOGGING AND STATISTICS FUNCTIONS #
 ####################################
 
+    def _get_action_string(self):
+        return ("Idle" if self.action == self.ACTION_IDLE else
+                "Loading" if self.action == self.ACTION_LOADING else
+                "Unloading" if self.action == self.ACTION_UNLOADING else
+                "Loading Ext" if self.action == self.ACTION_LOADING_EXTRUDER else
+                "Exiting Ext" if self.action == self.ACTION_UNLOADING_EXTRUDER else
+                "Forming Tip" if self.action == self.ACTION_FORMING_TIP else
+                "Heating" if self.action == self.ACTION_HEATING else
+                "Checking" if self.action == self.ACTION_CHECKING else
+                "Homing" if self.action == self.ACTION_HOMING else
+                "Selecting" if self.action == self.ACTION_SELECTING else
+                "Unknown") # Error case - should not happen
+
     def get_status(self, eventtime):
         return {
                 'enabled': self.is_enabled,
@@ -734,17 +747,7 @@ class Ercf:
                 'gate_material': list(self.gate_material),
                 'gate_color': list(self.gate_color),
                 'endless_spool_groups': list(self.endless_spool_groups),
-                'action': "Idle" if self.action == self.ACTION_IDLE else
-                          "Loading" if self.action == self.ACTION_LOADING else
-                          "Unloading" if self.action == self.ACTION_UNLOADING else
-                          "Loading Ext" if self.action == self.ACTION_LOADING_EXTRUDER else
-                          "Exiting Ext" if self.action == self.ACTION_UNLOADING_EXTRUDER else
-                          "Forming Tip" if self.action == self.ACTION_FORMING_TIP else
-                          "Heating" if self.action == self.ACTION_HEATING else
-                          "Checking" if self.action == self.ACTION_CHECKING else
-                          "Homing" if self.action == self.ACTION_HOMING else
-                          "Selecting" if self.action == self.ACTION_SELECTING else
-                          "Unknown" # Error case - should not happen
+                'action': self._get_action_string()
         }
 
     def _reset_statistics(self):
@@ -1699,12 +1702,11 @@ class Ercf:
     def _set_action(self, action):
         old_action = self.action
         self.action = action
-
-        # Call the callback macro
-        self._log_info("Calling the action callback.")
-        self.gcode.run_script_from_command("_ERCF_ACTION_CHANGED ACTION=%d"% (self.action))
-
-        return old_action
+        try:
+            self.printer.lookup_object('gcode_macro _ERCF_ACTION_CHANGED')
+            self.gcode.run_script_from_command("_ERCF_ACTION_CHANGED")
+        finally:
+            return old_action
 
 
 ### STATE GCODE COMMANDS
