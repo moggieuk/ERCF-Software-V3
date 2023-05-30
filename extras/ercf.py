@@ -1636,13 +1636,7 @@ class Ercf:
         extruder_heater = self.printer.lookup_object("extruder").heater
         current_temp = self.printer.lookup_object("extruder").get_status(0)['temperature']
 
-        if temp == -1:
-            temp = max(extruder_heater.target_temp, self.min_temp_extruder)
-        else:
-            # Restoring former temp (e.g. after a pause)
-            if extruder_heater.target_temp >= temp or temp < 40:
-                return
-
+        temp = max(temp, extruder_heater.target_temp, self.min_temp_extruder)
         new_target = False
         if extruder_heater.target_temp < temp:
             if (temp == self.min_temp_extruder):
