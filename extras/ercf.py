@@ -1628,23 +1628,33 @@ class Ercf:
             self._log_trace("Determined print status as: %s from %s" % (print_status, source))
             return print_status
 
+    # Ensure we are above desired or min temperature and that target is set
     def _set_above_min_temp(self, temp=-1):
         extruder_heater = self.printer.lookup_object("extruder").heater
+        current_temp = self.printer.lookup_object("extruder").get_status(0)['temperature']
+
         if temp == -1:
-            if extruder_heater.target_temp >= self.min_temp_extruder:
-                temp = extruder_heater.target_temp
-            else:
-                temp = self.min_temp_extruder
-            self._log_error("Heating extruder to minimum temp (%.1f)" % temp)
+            temp = max(extruder_heater.target_temp, self.min_temp_extruder)
         else:
-            if extruder_heater.target_temp < temp and temp > 40:
-                self._log_info("Heating extruder to desired temp (%.1f)" % temp)
-            else:
+            # Restoring former temp (e.g. after a pause)
+            if extruder_heater.target_temp >= temp or temp < 40:
                 return
-        current_action = self._set_action(self.ACTION_HEATING)
-        self.gcode.run_script_from_command("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=%.1f" % temp)
-        self.gcode.run_script_from_command("TEMPERATURE_WAIT SENSOR=extruder MINIMUM=%.1f MAXIMUM=%.1f" % (temp-1, temp+1))
-        self._set_action(current_action)
+
+        new_target = False
+        if extruder_heater.target_temp < temp:
+            if (temp == self.min_temp_extruder):
+                self._log_error("Heating extruder to minimum temp (%.1f)" % temp)
+            else:
+                self._log_info("Heating extruder to desired temp (%.1f)" % temp)
+            self.gcode.run_script_from_command("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=%.1f" % temp)
+            new_target = True
+
+        if current_temp < temp:
+            current_action = self._set_action(self.ACTION_HEATING)
+            if not new_target:
+                self._log_info("Waiting for extruder to reach temp (%.1f)" % temp)
+            self.gcode.run_script_from_command("TEMPERATURE_WAIT SENSOR=extruder MINIMUM=%.1f MAXIMUM=%.1f" % (temp-1, temp+1))
+            self._set_action(current_action)
 
     def _set_loaded_status(self, state, silent=False):
         self.loaded_status = state
