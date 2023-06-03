@@ -76,7 +76,6 @@ class Ercf:
     LONG_MOVE_THRESHOLD = 70.   # This is also the initial move to load past encoder
     ENCODER_MIN = 0.7           # The threshold (mm) that determines real encoder movement (ignore erroneous pulse)
 
-    SERVO_MOVE_STATE = 2 # NEW V2
     SERVO_DOWN_STATE = 1
     SERVO_UP_STATE = 0
     SERVO_UNKNOWN_STATE = -1
@@ -168,7 +167,6 @@ class Ercf:
         self.selector_stepper = self.gear_stepper = self.toolhead_sensor = self.encoder_sensor = self.servo = None
 
         # Specific build parameters / tuning
-        self.ercf_version = config.getfloat('version', 1.1) # V2 development
         self.long_moves_speed = config.getfloat('long_moves_speed', 100.)
         self.short_moves_speed = config.getfloat('short_moves_speed', 25.)
         self.z_hop_height = config.getfloat('z_hop_height', 5., minval=0.)
@@ -176,9 +174,8 @@ class Ercf:
         self.gear_homing_accel = config.getfloat('gear_homing_accel', 1000)
         self.gear_sync_accel = config.getfloat('gear_sync_accel', 1000)
         self.gear_buzz_accel = config.getfloat('gear_buzz_accel', 2000)
-        self.servo_down_angle = config.getfloat('servo_down_angle')
         self.servo_up_angle = config.getfloat('servo_up_angle')
-        self.servo_move_angle = config.getfloat('servo_move_angle', self.servo_up_angle) # V2 development
+        self.servo_down_angle = config.getfloat('servo_down_angle')
         self.servo_duration = config.getfloat('servo_duration', 0.2, minval=0.1)
         self.num_moves = config.getint('num_moves', 2, minval=1)
         self.apply_bowden_correction = config.getint('apply_bowden_correction', 0, minval=0, maxval=1)
@@ -335,9 +332,6 @@ class Ercf:
         self.gcode.register_command('ERCF_SERVO_UP',
                     self.cmd_ERCF_SERVO_UP,
                     desc = self.cmd_ERCF_SERVO_UP_help)
-        self.gcode.register_command('ERCF_MOVE_SELECT',
-                    self.cmd_ERCF_SERVO_MOVE,
-                    desc = self.cmd_ERCF_SERVO_MOVE_help)
         self.gcode.register_command('ERCF_MOTORS_OFF',
                     self.cmd_ERCF_MOTORS_OFF,
                     desc = self.cmd_ERCF_MOTORS_OFF_help)
@@ -1093,14 +1087,6 @@ class Ercf:
         self.toolhead.dwell(max(0., self.servo_duration - (0.1 * oscillations)))
         self.servo_state = self.SERVO_DOWN_STATE
 
-    def _servo_move(self): # V2 Development
-        if self.servo_state == self.SERVO_MOVE_STATE: return 0.
-        initial_encoder_position = self.encoder_sensor.get_distance()
-        self._log_debug("Setting servo to move angle: %d" % (self.servo_move_angle))
-        self.toolhead.wait_moves()
-        self.servo.set_value(angle=self.servo_move_angle, duration=self.servo_duration)
-        self.servo_state = self.SERVO_MOVE_STATE
-
     def _servo_up(self):
         if self.servo_state == self.SERVO_UP_STATE: return 0.
         initial_encoder_position = self.encoder_sensor.get_distance()
@@ -1127,12 +1113,6 @@ class Ercf:
             self._set_tool_selected(self.TOOL_UNKNOWN, True)
 
 ### SERVO AND MOTOR GCODE FUNCTIONS
-
-    cmd_ERCF_SERVO_MOVE_help = "Disengage the ERCF gear and ready for selector movement"
-    def cmd_ERCF_SERVO_MOVE(self, gcmd):
-        if self._check_is_disabled(): return
-        if self._check_is_paused(): return
-        self._servo_move()
 
     cmd_ERCF_SERVO_UP_help = "Disengage the ERCF gear and position servo to release filament"
     def cmd_ERCF_SERVO_UP(self, gcmd):
@@ -1888,7 +1868,6 @@ class Ercf:
         if self.gate_status[gate] == self.GATE_EMPTY:
             raise ErcfError("Gate %d is empty!" % gate)
         self._load_sequence(self._get_calibration_ref())
-        #self._servo_up() # V2
 
     def _load_sequence(self, length, no_extruder = False):
         current_action = self._set_action(self.ACTION_LOADING)
@@ -2534,9 +2513,9 @@ class Ercf:
         self._log_debug("Tool change initiated %s" % ("with slicer forming tip" if skip_tip else "with standalone ERCF tip formation"))
         skip_unload = False
         initial_tool_string = "Unknown" if self.tool_selected < 0 else ("T%d" % self.tool_selected)
-        if tool == self.tool_selected and self.loaded_status == self.LOADED_STATUS_FULL:
-                self._log_always("Tool T%d is already ready" % tool)
-                return
+        if tool == self.tool_selected and self.tool_to_gate_map[tool] == self.gate_selected and self.loaded_status == self.LOADED_STATUS_FULL:
+            self._log_always("Tool T%d is already ready" % tool)
+            return
 
         if self.loaded_status == self.LOADED_STATUS_UNLOADED:
             skip_unload = True
