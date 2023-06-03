@@ -76,7 +76,6 @@ class Ercf:
     LONG_MOVE_THRESHOLD = 70.   # This is also the initial move to load past encoder
     ENCODER_MIN = 0.7           # The threshold (mm) that determines real encoder movement (ignore erroneous pulse)
 
-    SERVO_SELECT_STATE = 2 # NEW V2
     SERVO_DOWN_STATE = 1
     SERVO_UP_STATE = 0
     SERVO_UNKNOWN_STATE = -1
@@ -170,7 +169,6 @@ class Ercf:
         # Specific build parameters / tuning
         self.sync_to_extruder_name = config.get('sync_to_extruder', None)
         self.form_tip_with_synced_gear = config.getint('form_tip_with_synced_gear', 0, minval=0, maxval=1)
-        self.ercf_version = config.getfloat('version', 1.1) # V2 development
         self.long_moves_speed = config.getfloat('long_moves_speed', 100.)
         self.short_moves_speed = config.getfloat('short_moves_speed', 25.)
         self.z_hop_height = config.getfloat('z_hop_height', 5., minval=0.)
@@ -178,9 +176,8 @@ class Ercf:
         self.gear_homing_accel = config.getfloat('gear_homing_accel', 1000)
         self.gear_sync_accel = config.getfloat('gear_sync_accel', 1000)
         self.gear_buzz_accel = config.getfloat('gear_buzz_accel', 2000)
-        self.servo_down_angle = config.getfloat('servo_down_angle')
         self.servo_up_angle = config.getfloat('servo_up_angle')
-        self.servo_select_angle = config.getfloat('servo_select_angle', self.servo_up_angle) # V2 development
+        self.servo_down_angle = config.getfloat('servo_down_angle')
         self.servo_duration = config.getfloat('servo_duration', 0.2, minval=0.1)
         self.num_moves = config.getint('num_moves', 2, minval=1)
         self.apply_bowden_correction = config.getint('apply_bowden_correction', 0, minval=0, maxval=1)
@@ -337,9 +334,6 @@ class Ercf:
         self.gcode.register_command('ERCF_SERVO_UP',
                     self.cmd_ERCF_SERVO_UP,
                     desc = self.cmd_ERCF_SERVO_UP_help)
-        self.gcode.register_command('ERCF_SERVO_SELECT',
-                    self.cmd_ERCF_SERVO_SELECT,
-                    desc = self.cmd_ERCF_SERVO_SELECT_help)
         self.gcode.register_command('ERCF_MOTORS_OFF',
                     self.cmd_ERCF_MOTORS_OFF,
                     desc = self.cmd_ERCF_MOTORS_OFF_help)
@@ -727,6 +721,19 @@ class Ercf:
 # LOGGING AND STATISTICS FUNCTIONS #
 ####################################
 
+    def _get_action_string(self):
+        return ("Idle" if self.action == self.ACTION_IDLE else
+                "Loading" if self.action == self.ACTION_LOADING else
+                "Unloading" if self.action == self.ACTION_UNLOADING else
+                "Loading Ext" if self.action == self.ACTION_LOADING_EXTRUDER else
+                "Exiting Ext" if self.action == self.ACTION_UNLOADING_EXTRUDER else
+                "Forming Tip" if self.action == self.ACTION_FORMING_TIP else
+                "Heating" if self.action == self.ACTION_HEATING else
+                "Checking" if self.action == self.ACTION_CHECKING else
+                "Homing" if self.action == self.ACTION_HOMING else
+                "Selecting" if self.action == self.ACTION_SELECTING else
+                "Unknown") # Error case - should not happen
+
     def get_status(self, eventtime):
         return {
                 'enabled': self.is_enabled,
@@ -754,17 +761,7 @@ class Ercf:
                 'gate_material': list(self.gate_material),
                 'gate_color': list(self.gate_color),
                 'endless_spool_groups': list(self.endless_spool_groups),
-                'action': "Idle" if self.action == self.ACTION_IDLE else
-                          "Loading" if self.action == self.ACTION_LOADING else
-                          "Unloading" if self.action == self.ACTION_UNLOADING else
-                          "Loading Ext" if self.action == self.ACTION_LOADING_EXTRUDER else
-                          "Exiting Ext" if self.action == self.ACTION_UNLOADING_EXTRUDER else
-                          "Forming Tip" if self.action == self.ACTION_FORMING_TIP else
-                          "Heating" if self.action == self.ACTION_HEATING else
-                          "Checking" if self.action == self.ACTION_CHECKING else
-                          "Homing" if self.action == self.ACTION_HOMING else
-                          "Selecting" if self.action == self.ACTION_SELECTING else
-                          "Unknown" # Error case - should not happen
+                'action': self._get_action_string()
         }
 
     def _reset_statistics(self):
@@ -1095,7 +1092,7 @@ class Ercf:
         self.servo.set_value(angle=angle, duration=self.servo_duration)
         self.servo_state = self.SERVO_UNKNOWN_STATE
 
-    def _servo_down(self): # AKA Drive
+    def _servo_down(self):
         if self.servo_state == self.SERVO_DOWN_STATE: return
         if self.gate_selected == self.TOOL_BYPASS: return
         self._log_debug("Setting servo to down angle: %d" % (self.servo_down_angle))
@@ -1110,21 +1107,13 @@ class Ercf:
         self.toolhead.dwell(max(0., self.servo_duration - (0.1 * oscillations)))
         self.servo_state = self.SERVO_DOWN_STATE
 
-    def _servo_up(self): # AKA Park
+    def _servo_up(self):
         if self.servo_state == self.SERVO_UP_STATE: return 0.
         initial_encoder_position = self.encoder_sensor.get_distance()
         self._log_debug("Setting servo to up angle: %d" % (self.servo_up_angle))
         self.toolhead.wait_moves()
         self.servo.set_value(angle=self.servo_up_angle, duration=self.servo_duration)
         self.servo_state = self.SERVO_UP_STATE
-
-    def _servo_select(self): # AKA Neutral
-        if self.servo_state == self.SERVO_SELECT_STATE: return 0.
-        initial_encoder_position = self.encoder_sensor.get_distance()
-        self._log_debug("Setting servo to select angle: %d" % (self.servo_select_angle))
-        self.toolhead.wait_moves()
-        self.servo.set_value(angle=self.servo_select_angle, duration=self.servo_duration)
-        self.servo_state = self.SERVO_SELECT_STATE
 
         # Report on spring back in filament then reset counter
         self.toolhead.dwell(self.servo_duration)
@@ -1147,13 +1136,7 @@ class Ercf:
 
 ### SERVO AND MOTOR GCODE FUNCTIONS
 
-    cmd_ERCF_SERVO_SELECT_help = "Disengage the ERCF gear and release filament brake"
-    def cmd_ERCF_SERVO_SELECT(self, gcmd):
-        if self._check_is_disabled(): return
-        if self._check_is_paused(): return
-        self._servo_select()
-
-    cmd_ERCF_SERVO_UP_help = "Disengage the ERCF gear and position servo for selector movement"
+    cmd_ERCF_SERVO_UP_help = "Disengage the ERCF gear and position servo to release filament"
     def cmd_ERCF_SERVO_UP(self, gcmd):
         if self._check_is_disabled(): return
         if self._check_is_paused(): return
@@ -1217,14 +1200,13 @@ class Ercf:
             successes = 0
             self._set_above_min_temp() # This will ensure the extruder stepper is powered to resist collision
             for i in range(repeats):
-                self._servo_down()
                 self.encoder_sensor.reset_counts()    # Encoder 0000
                 encoder_moved = self._load_encoder(retry=False)
                 self._load_bowden(self.calibration_bowden_length - encoder_moved)
                 self._log_info("Finding extruder gear position (try #%d of %d)..." % (i+1, repeats))
                 self._home_to_extruder(extruder_homing_length)
                 measured_movement = self.encoder_sensor.get_distance()
-                spring = self._servo_select()
+                spring = self._servo_up()
                 reference = measured_movement - (spring * 0.1)
                 if spring > 0:
                     if self._must_home_to_extruder():
@@ -1659,21 +1641,27 @@ class Ercf:
             self._log_trace("Determined print status as: %s from %s" % (print_status, source))
             return print_status
 
-    def _set_above_min_temp(self, temp=-1):
-        if temp == -1:
-            if self.printer.lookup_object("extruder").heater.can_extrude:
-                return
-            temp = self.min_temp_extruder
-            self._log_error("Heating extruder to minimum temp (%.1f)" % temp)
-        else:
-            if self.printer.lookup_object("extruder").heater.target_temp < temp and temp > 40:
-                self._log_info("Heating extruder to desired temp (%.1f)" % temp)
+    # Ensure we are above desired or min temperature and that target is set
+    def _set_above_min_temp(self, target_temp=-1):
+        extruder_heater = self.printer.lookup_object("extruder").heater
+        current_temp = self.printer.lookup_object("extruder").get_status(0)['temperature']
+
+        target_temp = max(target_temp, extruder_heater.target_temp, self.min_temp_extruder)
+        new_target = False
+        if extruder_heater.target_temp < target_temp:
+            if (target_temp == self.min_temp_extruder):
+                self._log_error("Heating extruder to minimum temp (%.1f)" % target_temp)
             else:
-                return
-        current_action = self._set_action(self.ACTION_HEATING)
-        self.gcode.run_script_from_command("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=%.1f" % temp)
-        self.gcode.run_script_from_command("TEMPERATURE_WAIT SENSOR=extruder MINIMUM=%.1f MAXIMUM=%.1f" % (temp-1, temp+1))
-        self._set_action(current_action)
+                self._log_info("Heating extruder to desired temp (%.1f)" % target_temp)
+            self.gcode.run_script_from_command("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=%.1f" % target_temp)
+            new_target = True
+
+        if current_temp < target_temp - 1:
+            current_action = self._set_action(self.ACTION_HEATING)
+            if not new_target:
+                self._log_info("Waiting for extruder to reach temp (%.1f)" % target_temp)
+            self.gcode.run_script_from_command("TEMPERATURE_WAIT SENSOR=extruder MINIMUM=%.1f MAXIMUM=%.1f" % (target_temp - 1, target_temp + 1))
+            self._set_action(current_action)
 
     def _set_loaded_status(self, state, silent=False):
         self.loaded_status = state
@@ -1718,7 +1706,11 @@ class Ercf:
     def _set_action(self, action):
         old_action = self.action
         self.action = action
-        return old_action
+        try:
+            self.printer.lookup_object('gcode_macro _ERCF_ACTION_CHANGED')
+            self.gcode.run_script_from_command("_ERCF_ACTION_CHANGED")
+        finally:
+            return old_action
 
 
 ### STATE GCODE COMMANDS
@@ -1894,7 +1886,7 @@ class Ercf:
     def _check_filament_stuck_in_extruder(self):
         self._log_debug("Checking for possibility of filament stuck in extruder gears...")
         self._set_above_min_temp()
-        self._servo_select()
+        self._servo_up()
         delta = self._trace_filament_move("Checking extruder", -self.toolhead_homing_max, speed=25, motor="extruder")
         return (self.toolhead_homing_max - delta) > 1.
 
@@ -1916,7 +1908,6 @@ class Ercf:
         if self.gate_status[gate] == self.GATE_EMPTY:
             raise ErcfError("Gate %d is empty!" % gate)
         self._load_sequence(self._get_calibration_ref())
-        self._servo_select()
 
     def _load_sequence(self, length, no_extruder = False):
         current_action = self._set_action(self.ACTION_LOADING)
@@ -2092,7 +2083,7 @@ class Ercf:
         for i in range(int(self.toolhead_homing_max / step)):
             msg = "Homing step #%d" % (i+1)
             if not sync and step*(i+1) > delay:
-                self._servo_select()
+                self._servo_up()
             delta = self._trace_filament_move(msg, step, speed=10, motor="both" if sync and step*(i+1) > delay else "extruder")
             if self.toolhead_sensor.runout_helper.filament_present:
                 self._log_debug("Toolhead sensor reached after %.1fmm (%d moves)" % (step*(i+1), i+1))
@@ -2134,7 +2125,7 @@ class Ercf:
                         length -= self.sync_load_length
 
                 # Move the remaining distance to the nozzle meltzone under exclusive extruder stepper control
-                self._servo_select()
+                self._servo_up()
                 delta = self._trace_filament_move("Remainder of final move to meltzone", length, speed=self.nozzle_load_speed, motor="extruder")
 
             # Final sanity check
@@ -2235,7 +2226,7 @@ class Ercf:
                 self._log_debug("Assertion failure - unexpected state %d in _unload_sequence()" % self.loaded_status)
                 raise ErcfError("Unexpected state during unload sequence")
 
-            movement = self._servo_select()
+            movement = self._servo_up()
             if movement > self.ENCODER_MIN:
                 raise ErcfError("It may be time to get the pliers out! Filament appears to stuck somewhere")
 
@@ -2286,7 +2277,7 @@ class Ercf:
                 self._servo_down()
                 self._sync_gear_to_extruder(True)
             else:
-                self._servo_select()
+                self._servo_up()
 
             # Goal is to exit extruder. Different strategies depending on availability of toolhead sensor and synced steppers
             out_of_extruder = False
@@ -2454,7 +2445,7 @@ class Ercf:
                 self._servo_down()
                 self._sync_gear_to_extruder(True)
             else:
-                self._servo_select()
+                self._servo_up()
                 self._sync_gear_to_extruder(False)
 
             if self.extruder_tmc and self.extruder_form_tip_current > 100:
@@ -2623,9 +2614,9 @@ class Ercf:
         self._log_debug("Tool change initiated %s" % ("with slicer forming tip" if skip_tip else "with standalone ERCF tip formation"))
         skip_unload = False
         initial_tool_string = "Unknown" if self.tool_selected < 0 else ("T%d" % self.tool_selected)
-        if tool == self.tool_selected and self.loaded_status == self.LOADED_STATUS_FULL:
-                self._log_always("Tool T%d is already ready" % tool)
-                return
+        if tool == self.tool_selected and self.tool_to_gate_map[tool] == self.gate_selected and self.loaded_status == self.LOADED_STATUS_FULL:
+            self._log_always("Tool T%d is already ready" % tool)
+            return
 
         if self.loaded_status == self.LOADED_STATUS_UNLOADED:
             skip_unload = True
@@ -2668,14 +2659,14 @@ class Ercf:
 
         gate = self.tool_to_gate_map[tool]
         if tool == self.tool_selected and gate == self.gate_selected \
-                and (self.servo_state == self.SERVO_SELECT_STATE or self.servo_state == self.SERVO_DOWN_STATE):
+                and (self.servo_state == self.SERVO_UP_STATE or self.servo_state == self.SERVO_DOWN_STATE):
             return
 
         self._log_debug("Selecting tool T%d on gate #%d..." % (tool, gate))
         self._select_gate(gate)
         self._set_tool_selected(tool, silent=True)
-        if move_servo:
-            self._servo_select()
+#        if move_servo:
+#            self._servo_up()
         self._log_info("Tool T%d enabled%s" % (tool, (" on gate #%d" % gate) if tool != gate else ""))
 
     def _select_gate(self, gate):
@@ -2981,7 +2972,7 @@ class Ercf:
         # Filament position not specified so auto recover
         self._log_info("Recovering filament position/state...")
         self._recover_loaded_state()
-        self._servo_select()
+        self._servo_up()
 
 
 ### GCODE COMMANDS INTENDED FOR TESTING #####################################
@@ -3137,7 +3128,7 @@ class Ercf:
             initial_encoder_position = self.encoder_sensor.get_distance()
             self._home_to_extruder(self.extruder_homing_max)
             measured_movement = self.encoder_sensor.get_distance() - initial_encoder_position
-            spring = self._servo_select()
+            spring = self._servo_up()
             self._log_info("Filament homed to extruder, encoder measured %.1fmm, filament sprung back %.1fmm" % (measured_movement, spring))
             if restore:
                 self._servo_down()
