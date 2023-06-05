@@ -181,7 +181,7 @@ class Ercf:
         self.apply_bowden_correction = config.getint('apply_bowden_correction', 0, minval=0, maxval=1)
         self.load_bowden_tolerance = config.getfloat('load_bowden_tolerance', 10., minval=1.)
         self.unload_bowden_tolerance = config.getfloat('unload_bowden_tolerance', self.load_bowden_tolerance, minval=1.)
-        self.parking_distance = config.getfloat('parking_distance', 23., minval=12., maxval=30.)
+        self.parking_distance = config.getfloat('parking_distance', 23., minval=12., maxval=60.)
         self.encoder_move_step_size = config.getfloat('encoder_move_step_size', 15., minval=5., maxval=25.)
         self.load_encoder_retries = config.getint('load_encoder_retries', 2, minval=1, maxval=5)
         self.selector_offsets = list(config.getfloatlist('colorselector'))
