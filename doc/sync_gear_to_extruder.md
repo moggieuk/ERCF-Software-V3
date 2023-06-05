@@ -4,6 +4,7 @@ The ERCF system now offers the optional feature of coordinating its gear motor w
 # Setting up Synchronization
 
 - Modify the section title `[manual_stepper gear_stepper]` to `[manual_extruder_stepper gear_stepper]`.
+- Modify the section title `[tmc2209 extruder_stepper gear_stepper]` to `[tmc2209 manual_extruder_stepper gear_stepper]`. Note that if you are using a different stepper driver instead of TMC2209, you should change that according section instead.
 - Within the `ercf_parameters.cfg` file, include `sync_to_extruder: <target_extruder>`. Here, `<target_extruder>` represents the extruder which is to be coordinated with the ERCF's gear stepper. In most cases, this will simply be `sync_to_extruder: extruder`.
 
 # Synchronization Workflow
