@@ -46,8 +46,13 @@ class ManualExtruderStepper(kinematics_extruder.ExtruderStepper, manual_stepper.
         # setup extruder kinematics
         self.sk_extruder = ffi_main.gc(ffi_lib.extruder_stepper_alloc(),
                                        ffi_lib.free)
+        # Get the kinematics for the steppers under manual mode
+        # by temporarily setting the extruder kinematics to the extruder
+        # kinematics then setting back. This avoid using private APIs
         self.alt_stepper_sks = [s.set_stepper_kinematics(self.sk_extruder)
                                 for s in self.steppers]
+        # Set back to the manual kinematics
+        self._set_manual_kinematics()
         self.motion_queue = None
 
         # Register commands
@@ -99,9 +104,7 @@ class ManualExtruderStepper(kinematics_extruder.ExtruderStepper, manual_stepper.
         toolhead = self.printer.lookup_object('toolhead')
         toolhead.flush_step_generation()
         if not extruder_name:
-            for s, sk in zip(self.steppers, self.alt_stepper_sks):
-                s.set_stepper_kinematics(sk)
-            self.rail.set_trapq(self.trapq)
+            self._set_manual_kinematics()
             self.motion_queue = None
             return
         extruder = self.printer.lookup_object(extruder_name, None)
@@ -110,9 +113,15 @@ class ManualExtruderStepper(kinematics_extruder.ExtruderStepper, manual_stepper.
                                              % (extruder_name,))
         for s in self.steppers:
             s.set_stepper_kinematics(self.sk_extruder)
-        self.rail.set_position([extruder.last_position, 0., 0.])
         self.rail.set_trapq(extruder.get_trapq())
+        self.rail.set_position([extruder.last_position, 0., 0.])
         self.motion_queue = extruder_name
+
+    def _set_manual_kinematics(self):
+        for s, sk in zip(self.steppers, self.alt_stepper_sks):
+            s.set_stepper_kinematics(sk)
+        self.rail.set_trapq(self.trapq)
+
 
 def load_config_prefix(config):
     return ManualExtruderStepper(config)
