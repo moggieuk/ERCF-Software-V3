@@ -313,7 +313,18 @@ upgrade_config_files() {
         echo -e "${INFO}Pre upgrade config file ${dest_hardware} moved to ${next_dest} for reference"
         cp ${dest_hardware} ${next_dest}
 
-        update_servo=$(grep -c '\[servo ercf_servo\]' ${dest_hardware} || true)
+        update_gear_stepper=$(grep -c 'manual_stepper gear_stepper' ${dest_hardware} || true)
+        if [ "${update_gear_stepper}" -eq 2 ]; then
+            echo -e "${WARNING}Upgrading ${dest_hardware} for new manual_extruder_stepper..."
+            cat ${dest_hardware} | sed -e " \
+                s/manual_stepper gear_stepper\]/manual_extruder_stepper gear_stepper\]/ ;
+                    " > ${dest_hardware}.gear_stepper_upgrade
+        else
+            # Gear stepper already upgraded or can't upgrade
+            cp ${dest_hardware} ${dest_hardware}.gear_stepper_upgrade
+        fi
+
+        update_servo=$(grep -c '\[servo ercf_servo\]' ${dest_hardware}.gear_stepper_upgrade || true)
         if [ "${update_servo}" -eq 1 ]; then
             echo -e "${WARNING}Upgrading ${dest_hardware} for new ercf_servo..."
             cat ${dest_hardware} | sed -e " \
@@ -321,7 +332,7 @@ upgrade_config_files() {
                     " > ${dest_hardware}.servo_upgrade
         else
             # Servo already upgraded or can't upgrade
-            cp ${dest_hardware} ${dest_hardware}.servo_upgrade
+            cp ${dest_hardware}.gear_stepper_upgrade ${dest_hardware}.servo_upgrade
         fi
 
         # This is a little difficult to cleanly update, so try a couple of strategies

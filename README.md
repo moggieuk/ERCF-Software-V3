@@ -222,6 +222,31 @@ Regardless of loading settings above it is important to accurately set `home_to_
 This is much simplier than loading. The toolhead sensor, if installed, will automatically be leveraged as a checkpoint when extracting from the extruder.
 `sync_unload_length` controls the mm of synchronized movement at start of bowden unloading.  This can make unloading more reliable if the tip is caught in the gears and will act as what Ette refers to as a "hair pulling" step on unload.  This is an optional step, set to 0 to disable.
 
+### Synchronized Gear/Extruder motors
+The ERCF system now offers the optional feature of coordinating its gear motor with the extruder stepper during printing. This added functionality enhances the filament pulling torque, potentially alleviating friction-related problems. **It is crucial, however, to maintain precise rotational distances for both the primary extruder stepper and the gear stepper. A mismatch in filament transfer speeds between these components could lead to undue stress and filament grinding.**
+
+#### Setting up Print Synchronization
+Synchronizion during printing is controlled by 'sync_to_extruder' in `ercf_parameters.cfg`. If set to 1, after a toolchange, the ERCF servo will stay engaged and the gear motor will sync with he extruder for move extrusion and retraction moves
+
+#### Synchronization Workflow
+If the `sync_to_extruder` feature is activated, the gear stepper will automatically coordinate with the extruder stepper following a successful tool change. Any ERCF operation that necessitates exclusinve gear stepper movement (like buzzing the gear stepper to verify filament engagement), will automatically disengage the sync. Generally, you don't need to manually manage the coordination/discoordination of the gear stepper — Happy Hare handles the majority of these actions. However, if the printer enters ERCF_PAUSE state (due to a filament jam or runout, for example), synchronization is automatically disengaged and the servo lifted.  Upon resuming a print synchronization will automatically be resumed however if you wist to enable it whilst operating the ERCF during a pause use the `ERCF_SYNC_GEAR_MOTOR` command.
+
+The `ERCF_SYNC_GEAR_MOTOR sync={0|1} servo={0|1}` command functions as follows:
+- Defaults to `sync=1` and `servo=1`
+- If `sync=1` and `servo=1`, it triggers the servo and executes the synchronization
+- If `sync=1` and `servo=0`, it performs only the synchronization
+- If `sync=0` and `servo=1`, it disengages and lifts the servo
+- If `sync=0` and `servo=0`, it only disengages the synchronization
+
+You can still control the gear stepper motor with the `MANUAL_STEPPER` command, however, this will only be effective if the stepper is not currently syncing with the extruder.
+
+#### Other synchonization options
+In addition to synchronizing the gear motor to the extruder during print the same mechanism can be used to synchronize during other parts of the loading and unload process. Whilst these might seem like duplicates of previous partial load/unload sync movements they operate slightly more simlified manner. If they are all disabled, Happy Hare will operate as it did previously.  If these options are enabled they turn off the former functionality.  E.g. If `sync_extruder_load` is enabled it will keep the gear synchronized with the extruder for the entire loading of the extruder.<br>
+
+`sync_extruder_load` turns on synchronization of extruder loading
+`sync_extruder_unload` turns on synchronization of extruder unloading
+`sync_form_tip` turns on syncronization of the stand alone tip forming movement
+
 ### Clog/runout detection
 ERCF can use its encoder to detect filament runout or clog conditions. This functionality is enabled with the `enable_clog_detection` in ercf_parameters.cfg. It works by monitoring how much filament the extruder is pushing and comparing it that measured by the encoder.  If the extruder ever gets ahead by more that the calibrated `clog_detection_length` the runout/clog detection logic is triggered.  If it is determined to be a clog, the printer will pause in the usual manner and require `ERCF_UNLOCK` & `RESUME` to continue.  If a runout and endless spool is enabled the tool with be remaped and printing will automatically continue.
 
@@ -486,6 +511,7 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_ENABLE | Enable ERCF and reset state after disable | None |
   | ERCF_DISABLE | Disable all ERCF functionality | None |
   | ERCF_ENCODER | Explicitly enable or disable the encoder. Note that the encoder state is set automatically so this will only be sticky until next tool change | ENABLE=\[0\|1\] |
+  | ERCF_SYNC_GEAR_MOTOR | Explicitly override the synchronization of extruder and gear motors. Note that synchronization is set automatically so this will only be sticky until the next tool change | SYNC=\[0\|1\] Turn gear/extruder synchronization on/off (default 1) <br>SERVO=\[0\|1\] If 1 (the default) servo will engage if SYNC=1 or disengage if SYNC=0 otherwise servo position will not change |
   <br>
   
   ## Servo and motor control
