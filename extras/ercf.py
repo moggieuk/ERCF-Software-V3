@@ -1509,7 +1509,7 @@ class Ercf:
 
     def _pause(self, reason, force_in_print=False):
         run_pause = False
-        self.paused_extruder_temp = self.printer.lookup_object("extruder").heater.target_temp
+        self.paused_extruder_temp = self.printer.lookup_object(self.extruder_name).heater.target_temp
         if self._is_in_print() or force_in_print:
             if self.is_paused_locked: return
             self.is_paused_locked = True
@@ -1540,7 +1540,7 @@ class Ercf:
     def _unlock(self):
         if not self.is_paused_locked: return
         self.reactor.update_timer(self.heater_off_handler, self.reactor.NEVER)
-        if not self.printer.lookup_object("extruder").heater.can_extrude and self.paused_extruder_temp > 0:
+        if not self.printer.lookup_object(self.extruder_name).heater.can_extrude and self.paused_extruder_temp > 0:
             self._log_info("Enabling extruder heater (%.1f)" % self.paused_extruder_temp)
         self.gcode.run_script_from_command("M104 S%.1f" % self.paused_extruder_temp)
         self.encoder_sensor.reset_counts()    # Encoder 0000
@@ -1660,8 +1660,8 @@ class Ercf:
 
     # Ensure we are above desired or min temperature and that target is set
     def _set_above_min_temp(self, target_temp=-1):
-        extruder_heater = self.printer.lookup_object("extruder").heater
-        current_temp = self.printer.lookup_object("extruder").get_status(0)['temperature']
+        extruder_heater = self.printer.lookup_object(self.extruder_name).heater
+        current_temp = self.printer.lookup_object(self.extruder_name).get_status(0)['temperature']
 
         target_temp = max(target_temp, extruder_heater.target_temp, self.min_temp_extruder)
         new_target = False
@@ -2489,11 +2489,11 @@ class Ercf:
                 extruder_run_current = self.extruder_tmc.get_status(0)['run_current']
                 self._log_debug("Temporarily increasing extruder run current to %d%% for tip forming move"
                                     % self.extruder_form_tip_current)
-                self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=extruder CURRENT=%.2f"
-                                                    % ((extruder_run_current * self.extruder_form_tip_current)/100.))
+                self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=%s CURRENT=%.2f"
+                                                    % (self.extruder_name, (extruder_run_current * self.extruder_form_tip_current)/100.))
 
             initial_encoder_position = self.encoder_sensor.get_distance()
-            initial_pa = self.printer.lookup_object("extruder").get_status(0)['pressure_advance'] # Capture PA in case user's tip forming resets it
+            initial_pa = self.printer.lookup_object(self.extruder_name).get_status(0)['pressure_advance'] # Capture PA in case user's tip forming resets it
             self.gcode.run_script_from_command("_ERCF_FORM_TIP_STANDALONE")
             self.gcode.run_script_from_command("SET_PRESSURE_ADVANCE ADVANCE=%.4f" % initial_pa) # Restore PA
             delta = self.encoder_sensor.get_distance() - initial_encoder_position
@@ -2501,7 +2501,7 @@ class Ercf:
             self.encoder_sensor.set_distance(initial_encoder_position + park_pos)
 
             if self.extruder_tmc and self.extruder_form_tip_current > 100:
-                self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=extruder CURRENT=%.2f" % extruder_run_current)
+                self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=%s CURRENT=%.2f" % (self.extruder_name, extruder_run_current))
 
             if self.sync_form_tip and not disable_sync:
                 if delta > self.ENCODER_MIN:
