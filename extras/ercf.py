@@ -2358,7 +2358,7 @@ class Ercf:
         """Retract the filament by the extruder stepper and see if we do not have any encoder movement.
         
         This assumes that we already tip formed, and the filament is parked somewhere in the encoder."""
-        self._servo_select()
+        self._servo_up()
         self._sync_gear_to_extruder(False)
         delta = self._trace_filament_move("Moving extruder to test for exit", -length, speed=self.nozzle_load_speed * 0.5, motor="extruder")
         return (length - delta) < 1.0
