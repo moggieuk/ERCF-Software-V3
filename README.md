@@ -237,7 +237,14 @@ The `ERCF_SYNC_GEAR_MOTOR sync={0|1} servo={0|1}` command functions as follows:
 - If `sync=0` and `servo=1`, it disengages and lifts the servo
 - If `sync=0` and `servo=0`, it only disengages the synchronization
 
-You can still control the gear stepper motor with the `MANUL_STEPPER` command, however, this will only be effective if the stepper is not currently syncing with the extruder.
+You can still control the gear stepper motor with the `MANUAL_STEPPER` command, however, this will only be effective if the stepper is not currently syncing with the extruder.
+
+#### Other synchonization options
+In addition to synchronizing the gear motor to the extruder during print the same mechanism can be used to synchronize during other parts of the loading and unload process. Whilst these might seem like duplicates of previous partial load/unload sync movements they operate slightly more simlified manner. If they are all disabled, Happy Hare will operate as it did previously.  If these options are enabled they turn off the former functionality.  E.g. If `sync_extruder_load` is enabled it will keep the gear synchronized with the extruder for the entire loading of the extruder.<br>
+
+`sync_extruder_load` turns on synchronization of extruder loading
+`sync_extruder_unload` turns on synchronization of extruder unloading
+`sync_form_tip` turns on syncronization of the stand alone tip forming movement
 
 ### Clog/runout detection
 ERCF can use its encoder to detect filament runout or clog conditions. This functionality is enabled with the `enable_clog_detection` in ercf_parameters.cfg. It works by monitoring how much filament the extruder is pushing and comparing it that measured by the encoder.  If the extruder ever gets ahead by more that the calibrated `clog_detection_length` the runout/clog detection logic is triggered.  If it is determined to be a clog, the printer will pause in the usual manner and require `ERCF_UNLOCK` & `RESUME` to continue.  If a runout and endless spool is enabled the tool with be remaped and printing will automatically continue.

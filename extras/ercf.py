@@ -217,9 +217,9 @@ class Ercf:
 
         # Gear/Extruder synchronization controls
         self.sync_to_extruder = config.getint('sync_to_extruder', 0, minval=0, maxval=1)
-        self.sync_load = config.getint('sync_load', self.sync_to_extruder, minval=0, maxval=1)
-        self.sync_unload = config.getint('sync_unload', self.sync_to_extruder, minval=0, maxval=1)
-        self.sync_form_tip = config.getint('sync_form_tip', self.sync_to_extruder, minval=0, maxval=1)
+        self.sync_load_extruder = config.getint('sync_load_extruder', 0, minval=0, maxval=1)
+        self.sync_unload_extruder = config.getint('sync_unload_extruder', 0, minval=0, maxval=1)
+        self.sync_form_tip = config.getint('sync_form_tip', 0, minval=0, maxval=1)
 
         # Options
         self.homing_method = config.getint('homing_method', 0, minval=0, maxval=1)
@@ -1916,7 +1916,7 @@ class Ercf:
             else:
                 self._servo_up()
         if self.gear_stepper.is_synced() != sync:
-            self._log_debug("% gear stepper and extruder" % ("Syncing" if sync else "Unsyncing"))
+            self._log_debug("%s gear stepper and extruder" % ("Syncing" if sync else "Unsyncing"))
             self.gear_stepper.sync_to_extruder(self.extruder_name if sync else None)
 
 
@@ -2099,7 +2099,7 @@ class Ercf:
             # We shouldn't be here and probably means the toolhead sensor is malfunctioning/blocked
             raise ErcfError("Toolhead sensor malfunction - filament detected before it entered extruder!")
 
-        if self.sync_load:
+        if self.sync_load_extruder:
             # Newer simplified forced full sync move
             self._sync_gear_to_extruder(True, servo=True)
             step = self.toolhead_homing_step
@@ -2146,7 +2146,7 @@ class Ercf:
             self._log_debug("Loading last %.1fmm to the nozzle..." % length)
             initial_encoder_position = self.encoder_sensor.get_distance()
 
-            if self.sync_load and not skip_entry_moves:
+            if self.sync_load_extruder and not skip_entry_moves:
                 # Newer simplified forced full sync move
                 self._sync_gear_to_extruder(True, servo=True)
                 delta = self._trace_filament_move("Synchronously loading filament to nozzle", length, speed=self.sync_load_speed, motor="synced")
@@ -2306,7 +2306,7 @@ class Ercf:
             self.filament_direction = self.DIRECTION_UNLOAD
             self._set_above_min_temp()
 
-            if self.sync_unload:
+            if self.sync_unload_extruder:
                 self._sync_gear_to_extruder(True, servo=True)
             else:
                 self._servo_up()
@@ -2316,7 +2316,7 @@ class Ercf:
 
             if self._has_toolhead_sensor():
                 # This strategy supports both extruder only 'synced' modes of operation
-                motor = "synced" if self.sync_unload else "extruder"
+                motor = "synced" if self.sync_unload_extruder else "extruder"
                 safety_margin = 5.
                 #step = self.toolhead_homing_step # TODO Too slow
                 step = 3.
@@ -2337,7 +2337,7 @@ class Ercf:
                         out_of_extruder = True
                         break
 
-            elif not self.sync_unload:
+            elif not self.sync_unload_extruder:
                 # No toolhead sensor and not syncing gear and extruder motors:
                 # Back up around 15mm at a time until either the encoder doesn't see any movement
                 # Do this until we have traveled more than the length of the extruder
@@ -2555,7 +2555,7 @@ class Ercf:
         if self.sensorless_selector == 1:
             try:
                 self.selector_stepper.do_set_position(0.)
-                self._selector_stepper_move_wait(-selector_length, speed=75, homing_move=1)
+                self._selector_stepper_move_wait(-selector_length, speed=60, homing_move=1)
                 self.is_homed = self._check_selector_endstop()
                 if not self.is_homed:
                     self._set_tool_selected(self.TOOL_UNKNOWN)
@@ -3206,8 +3206,8 @@ class Ercf:
         self.sync_unload_length = gcmd.get_float('SYNC_UNLOAD_LENGTH', self.sync_unload_length, minval=0., maxval=100.)
         self.sync_unload_speed = gcmd.get_float('SYNC_UNLOAD_SPEED', self.sync_unload_speed, minval=1., maxval=100.)
         self.sync_to_extruder = gcmd.get_int('SYNC_TO_EXTRUDER', self.sync_to_extruder, minval=0, maxval=1)
-        self.sync_load = gcmd.get_int('SYNC_LOAD', self.sync_load, minval=0, maxval=1)
-        self.sync_unload = gcmd.get_int('SYNC_UNLOAD', self.sync_unload, minval=0, maxval=1)
+        self.sync_load_extruder = gcmd.get_int('SYNC_LOAD_EXTRUDER', self.sync_load_extruder, minval=0, maxval=1)
+        self.sync_unload_extruder = gcmd.get_int('SYNC_UNLOAD_EXTRUDER', self.sync_unload_extruder, minval=0, maxval=1)
         self.sync_form_tip = gcmd.get_int('SYNC_FORM_TIP', self.sync_form_tip, minval=0, maxval=1)
         self.num_moves = gcmd.get_int('NUM_MOVES', self.num_moves, minval=1)
         self.apply_bowden_correction = gcmd.get_int('APPLY_BOWDEN_CORRECTION', self.apply_bowden_correction, minval=0, maxval=1)
@@ -3246,8 +3246,8 @@ class Ercf:
         msg += "\nsync_unload_length = %.1f" % self.sync_unload_length
         msg += "\nsync_unload_speed = %.1f" % self.sync_unload_speed
         msg += "\nsync_to_extruder = %d" % self.sync_to_extruder
-        msg += "\nsync_load = %d" % self.sync_load
-        msg += "\nsync_unload = %d" % self.sync_unload
+        msg += "\nsync_load_extruder = %d" % self.sync_load_extruder
+        msg += "\nsync_unload_extruder = %d" % self.sync_unload_extruder
         msg += "\nsync_form_tip = %d" % self.sync_form_tip
         msg += "\nnum_moves = %d" % self.num_moves
         msg += "\napply_bowden_correction = %d" % self.apply_bowden_correction
