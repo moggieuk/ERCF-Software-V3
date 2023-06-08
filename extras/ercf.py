@@ -2111,7 +2111,7 @@ class Ercf:
             # We shouldn't be here and probably means the toolhead sensor is malfunctioning/blocked
             raise ErcfError("Toolhead sensor malfunction - filament detected before it entered extruder!")
 
-        if self.sync_load_extruder:
+        if self.sync_load_extruder and not skip_entry_moves:
             # Newer simplified forced full sync move
             self._sync_gear_to_extruder(True, servo=True)
             step = self.toolhead_homing_step
@@ -2311,24 +2311,21 @@ class Ercf:
     # Extract filament past extruder gear (end of bowden)
     # Assume that tip has already been formed and we are parked somewhere in the encoder either by
     # slicer or my stand alone tip creation
-    def _unload_extruder(self):
+    def _unload_extruder(self, disable_sync=False):
         current_action = self._set_action(self.ACTION_UNLOADING_EXTRUDER)
         try:
             self._log_debug("Extracting filament from extruder")
             self.filament_direction = self.DIRECTION_UNLOAD
             self._set_above_min_temp()
-
-            if self.sync_unload_extruder:
-                self._sync_gear_to_extruder(True, servo=True)
-            else:
-                self._servo_up()
+            sync_allowed = self.sync_unload_extruder and not disable_sync
+            self._sync_gear_to_extruder(sync_allowed, servo=True)
 
             # Goal is to exit extruder. Strategies depend on availability of toolhead sensor and synced motor option
             out_of_extruder = False
 
             if self._has_toolhead_sensor():
                 # This strategy supports both extruder only 'synced' modes of operation
-                motor = "synced" if self.sync_unload_extruder else "extruder"
+                motor = "synced" if sync_allowed else "extruder"
                 safety_margin = 5.
                 #step = self.toolhead_homing_step # TODO Too slow
                 step = 3.
@@ -2349,7 +2346,7 @@ class Ercf:
                         out_of_extruder = True
                         break
 
-            elif not self.sync_unload_extruder:
+            elif not sync_allowed:
                 # No toolhead sensor and not syncing gear and extruder motors:
                 # Back up around 15mm at a time until either the encoder doesn't see any movement
                 # Do this until we have traveled more than the length of the extruder
@@ -2482,7 +2479,7 @@ class Ercf:
         raise ErcfError("Unable to get the filament out of the encoder cart")
 
     # Form tip and return True if filament detected
-    def _form_tip_standalone(self, disable_sync = False):
+    def _form_tip_standalone(self, disable_sync=False):
         self.toolhead.wait_moves()
         filament_present = self._check_toolhead_sensor()
         if filament_present == 0:
@@ -2903,7 +2900,7 @@ class Ercf:
                 self._unload_tool()
             elif self.loaded_status != self.LOADED_STATUS_UNLOADED or extruder_only:
                 if self._form_tip_standalone(disable_sync=True):
-                    self._unload_extruder()
+                    self._unload_extruder(disable_sync=True)
                 if self.tool_selected == self.TOOL_BYPASS:
                     self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
                     self._log_always("Please pull the filament out clear of the ERCF selector")
