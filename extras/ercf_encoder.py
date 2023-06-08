@@ -67,7 +67,7 @@ class ErcfEncoder:
 
         # For flowrate functionality
         self.flowrate_last_encoder_pos = 0.
-        self.extrusion_flowrate = 1.
+        self.extrusion_flowrate = 0.
         self.samples = []
         self.flowrate_samples = config.getint('flowrate_samples', 20, minval=5)
 
@@ -145,7 +145,7 @@ class ErcfEncoder:
             eventtime = self.reactor.monotonic()
         self.last_extruder_pos = self._get_extruder_pos(eventtime)
         self.flowrate_last_encoder_pos = self.get_distance()
-        self.extrusion_flowrate = 1.
+        self.extrusion_flowrate = 0.
         self.samples = []
         self.filament_runout_pos = self.last_extruder_pos + self.detection_length + self.desired_headroom # Add headroom to decrease sensitivity on startup
         self.next_calibration_point = self.last_extruder_pos + self.calibration_length
