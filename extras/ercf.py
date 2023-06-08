@@ -161,6 +161,7 @@ class Ercf:
         self.reactor = self.printer.get_reactor()
         self.estimated_print_time = None
         self.last_sensorless_move = 0
+        self.gear_stepper_run_current = 0.
         self.printer.register_event_handler('klippy:connect', self.handle_connect)
         self.printer.register_event_handler("klippy:disconnect", self.handle_disconnect)
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
@@ -220,6 +221,7 @@ class Ercf:
         self.sync_load_extruder = config.getint('sync_load_extruder', 0, minval=0, maxval=1)
         self.sync_unload_extruder = config.getint('sync_unload_extruder', 0, minval=0, maxval=1)
         self.sync_form_tip = config.getint('sync_form_tip', 0, minval=0, maxval=1)
+        self.sync_gear_current = config.getint('sync_gear_current', 50, minval=10, maxval=100)
 
         # Options
         self.homing_method = config.getint('homing_method', 0, minval=0, maxval=1)
@@ -531,8 +533,8 @@ class Ercf:
         if not self.extruder:
             raise self.config.error("Extruder named `%s` not found on printer" % self.extruder_name)
 
-        # See if we have a TMC controller capable of current control for filament collision method on gear_stepper
-        # and tip forming on extruder
+        # See if we have a TMC controller capable of current control for filament collision detection and syncing
+        # on gear_stepper and tip forming on extruder
         self.gear_tmc = self.extruder_tmc = None
         tmc_chips = ["tmc2209", "tmc2130", "tmc2208", " tmc2660", "tmc5160"]
         for chip in tmc_chips:
@@ -550,7 +552,7 @@ class Ercf:
             except:
                 pass
         if self.gear_tmc is None:
-            self._log_debug("TMC driver not found for gear_stepper, cannot use current reduction for collision detection")
+            self._log_debug("TMC driver not found for gear_stepper, cannot use current reduction for collision detection or while synchronized printing")
         if self.extruder_tmc is None:
             self._log_debug("TMC driver not found for extruder, cannot use current increase for tip forming move")
 
@@ -1909,7 +1911,7 @@ class Ercf:
         delta = self._trace_filament_move("Checking extruder", -self.toolhead_homing_max, speed=25, motor="extruder")
         return (self.toolhead_homing_max - delta) > 1.
 
-    def _sync_gear_to_extruder(self, sync=True, servo=False):
+    def _sync_gear_to_extruder(self, sync=True, servo=False, adjust_tmc_current=False):
         if servo:
             if sync:
                 self._servo_down()
@@ -1918,6 +1920,16 @@ class Ercf:
         if self.gear_stepper.is_synced() != sync:
             self._log_debug("%s gear stepper and extruder" % ("Syncing" if sync else "Unsyncing"))
             self.gear_stepper.sync_to_extruder(self.extruder_name if sync else None)
+
+        # Option to reduce current during print
+        if adjust_tmc_current and sync and self.gear_tmc and self.sync_gear_current < 100:
+            self.gear_stepper_run_current = self.gear_tmc.get_status(0)['run_current']
+            self._log_info("Reducing reducing gear_stepper run current to %d%% for extruder syncing" % self.sync_gear_current)
+            self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=gear_stepper CURRENT=%.2f"
+                                                % ((self.gear_stepper_run_current * self.sync_gear_current) / 100.))
+        elif not sync and self.gear_tmc and self.gear_tmc.get_status(0)['run_current'] < self.gear_stepper_run_current:
+            self._log_info("Restoring gear_stepper run current to %.2fA" % self.gear_stepper_run_current)
+            self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=gear_stepper CURRENT=%.2f" % self.gear_stepper_run_current)
 
 
 ###########################
@@ -2057,7 +2069,7 @@ class Ercf:
             self._log_debug("Temporarily reducing gear_stepper run current to %d%% for collision detection"
                                 % self.extruder_homing_current)
             self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=gear_stepper CURRENT=%.2f"
-                                                % ((gear_stepper_run_current * self.extruder_homing_current)/100.))
+                                                % ((gear_stepper_run_current * self.extruder_homing_current) / 100.))
 
         initial_encoder_position = self.encoder_sensor.get_distance()
         homed = False
@@ -2106,7 +2118,7 @@ class Ercf:
             self._log_debug("Synchronized homing to toolhead sensor, up to %.1fmm in %.1fmm steps" % (self.toolhead_homing_max, step))
             for i in range(int(self.toolhead_homing_max / step)):
                 msg = "Homing step #%d" % (i+1)
-                delta = self._trace_filament_move(msg, step, speed=10, motor="synced") # TODO homing speed
+                delta = self._trace_filament_move(msg, step, speed=10, motor="synced")
                 if self.toolhead_sensor.runout_helper.filament_present:
                     self._log_debug("Toolhead sensor reached after %.1fmm (%d moves)" % (step*(i+1), i+1))
                     break
@@ -2121,7 +2133,7 @@ class Ercf:
                 msg = "Homing step #%d" % (i+1)
                 if not sync and step*(i+1) > delay:
                     self._servo_up()
-                delta = self._trace_filament_move(msg, step, speed=10, motor="both" if sync and step*(i+1) > delay else "extruder") # TODO homing speed
+                delta = self._trace_filament_move(msg, step, speed=10, motor="both" if sync and step*(i+1) > delay else "extruder")
                 if self.toolhead_sensor.runout_helper.filament_present:
                     self._log_debug("Toolhead sensor reached after %.1fmm (%d moves)" % (step*(i+1), i+1))
                     break
@@ -2186,7 +2198,7 @@ class Ercf:
             self._log_info('ERCF load successful')
 
             if self.sync_to_extruder and not skip_entry_moves:
-                self._sync_gear_to_extruder(True, servo=True)
+                self._sync_gear_to_extruder(True, servo=True, adjust_tmc_current=True)
 
         finally:
             self._set_action(current_action)
@@ -2962,7 +2974,7 @@ class Ercf:
         self.encoder_sensor.reset_counts()    # Encoder 0000
         self._enable_encoder_sensor(True)
         if self.sync_to_extruder:
-            self._sync_gear_to_extruder(True, servo=True)
+            self._sync_gear_to_extruder(True, servo=True, adjust_tmc_current=True)
         # Continue printing...
 
     # Not a user facing command - used in automatic wrapper
@@ -3197,8 +3209,6 @@ class Ercf:
         self.toolhead_homing_max = gcmd.get_float('TOOLHEAD_HOMING_MAX', self.toolhead_homing_max, minval=0.)
         self.toolhead_homing_step = gcmd.get_float('TOOLHEAD_HOMING_STEP', self.toolhead_homing_step, minval=0.5, maxval=5.)
         self.extruder_homing_current = gcmd.get_int('EXTRUDER_HOMING_CURRENT', self.extruder_homing_current, minval=10, maxval=100)
-        if self.extruder_homing_current == 0:
-            self.extruder_homing_current = 100
         self.extruder_form_tip_current = gcmd.get_int('EXTRUDER_FORM_TIP_CURRENT', self.extruder_form_tip_current, minval=100, maxval=150)
         self.delay_servo_release = gcmd.get_float('DELAY_SERVO_RELEASE', self.delay_servo_release, minval=0., maxval=5.)
         self.sync_load_length = gcmd.get_float('SYNC_LOAD_LENGTH', self.sync_load_length, minval=0., maxval=100.)
@@ -3209,6 +3219,7 @@ class Ercf:
         self.sync_load_extruder = gcmd.get_int('SYNC_LOAD_EXTRUDER', self.sync_load_extruder, minval=0, maxval=1)
         self.sync_unload_extruder = gcmd.get_int('SYNC_UNLOAD_EXTRUDER', self.sync_unload_extruder, minval=0, maxval=1)
         self.sync_form_tip = gcmd.get_int('SYNC_FORM_TIP', self.sync_form_tip, minval=0, maxval=1)
+        self.sync_gear_current = gcmd.get_int('SYNC_GEAR_CURRENT', self.sync_gear_current, minval=10, maxval=100)
         self.num_moves = gcmd.get_int('NUM_MOVES', self.num_moves, minval=1)
         self.apply_bowden_correction = gcmd.get_int('APPLY_BOWDEN_CORRECTION', self.apply_bowden_correction, minval=0, maxval=1)
         self.load_bowden_tolerance = gcmd.get_float('LOAD_BOWDEN_TOLERANCE', self.load_bowden_tolerance, minval=1., maxval=50.)
@@ -3249,6 +3260,7 @@ class Ercf:
         msg += "\nsync_load_extruder = %d" % self.sync_load_extruder
         msg += "\nsync_unload_extruder = %d" % self.sync_unload_extruder
         msg += "\nsync_form_tip = %d" % self.sync_form_tip
+        msg += "\nsync_gear_current = %d" % self.sync_gear_current
         msg += "\nnum_moves = %d" % self.num_moves
         msg += "\napply_bowden_correction = %d" % self.apply_bowden_correction
         msg += "\nload_bowden_tolerance = %d" % self.load_bowden_tolerance
@@ -3328,7 +3340,7 @@ class Ercf:
             self.encoder_sensor.reset_counts()    # Encoder 0000
             self._enable_encoder_sensor()
             if self.sync_to_extruder:
-                self._sync_gear_to_extruder(True, servo=True)
+                self._sync_gear_to_extruder(True, servo=True, adjust_tmc_current=True)
             # Continue printing...
         else:
             raise ErcfError("EndlessSpool mode is off - manual intervention is required")

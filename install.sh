@@ -304,8 +304,32 @@ upgrade_config_files() {
                 s/^encoder_resolution:/#encoder_resolution:/ ;
                 s/^extra_servo_dwell_up:/#extra_servo_dwell_up:/ ;
                 s/^extra_servo_dwell_down:/#extra_servo_dwell_down:/ ;
-                    " > ${dest_parameters}.encoder_upgrade && mv ${dest_parameters}.encoder_upgrade ${dest_parameters}
-	fi
+                    " > ${dest_parameters}.encoder_upgrade&& mv ${dest_parameters}.encoder_upgrade ${dest_parameters}
+        fi
+
+        update_sync=$(egrep -c '^sync_to_extruder:' ${dest_parameters} || true)
+        if [ "${update_sync}" -ne 1 ]; then
+
+            # Add on the new synchronization params and extruder name
+            echo -e "${WARNING}Upgrading ${dest_parameters} to add new sync and extruder parameters..."
+            cat << EOF >> ${dest_parameters}
+
+## Added in v1.3.0 ---------------------------------------------------------------------------------------------------------
+extruder_name: extruder		# Name of the toolhead extruder that ERCF is using
+
+# EXPERIMENTAL: New synchronized gear/extruder movement!
+# If enabled for loading or unloading extruder this will override 'sync_load_length' and 'sync_unload_length'
+# If you normally run with maxed out gear stepper current consider reducing it with 'sync_gear_current'
+#
+sync_to_extruder: 0		# Gear motor is synchronized to extruder during print
+sync_load_extruder: 0		# Full extruder load leveraging motor synchronization
+sync_unload_extruder: 0		# Full extruder unload (except stand alone tip forming) leveraging motor synchronization
+sync_form_tip: 0		# Standalone tip formation (initial part of unload) also leveraging motor synchronization
+#
+sync_gear_current: 100		# Percentage of gear_stepper current (10%-100%) to use when syncing with extruder during print
+
+EOF
+        fi
     fi
 
     if test -f $dest_hardware; then
@@ -481,7 +505,7 @@ questionaire() {
 		echo -e "${WARNING}Board Type: ${brd_type}"
 
                 echo
-                echo -e "${PROMPT}Sensorless selector operation? This allows for additional selector recovery steps but disables the 'extra' input on the EASY-BRD.${INPUT}"
+		echo -e "${PROMPT}Sensorless selector operation? This can be difficult to setup but allows for additional selector recovery steps (disables the 'extra' input on the EASY-BRD)${INPUT}"
                 yn=$(prompt_yn "Enable sensorless selector operation")
                 case $yn in
                     y)
