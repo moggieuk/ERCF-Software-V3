@@ -1,8 +1,12 @@
 # Important: Happy Hare upgrade notes
-In v1.2.0, v1.2.1 and v1.2.2 changes were made that altered the contents of the `ercf_hardware.cfg` and `ercf_parameters.cfg` as well as adding new klipper extra modules.  When upgrading to these versions it is necessary to also run:
+In v1.2.0, v1.2.1, v1.2.2 and v1.3.0 changes were made that altered the contents of the `ercf_hardware.cfg` and `ercf_parameters.cfg` as well as adding new klipper extra modules.  When upgrading to these versions it is necessary to also run:
 
  > cd /home/pi/ERCF-Software-V3<br>
  > ./install.sh
+
+Optionally if you have multiple instances of Klipper running on a single rpi or have Klipper installed in a non-standard location you will also need to add `-c` and `-k` flags like so:
+
+ > ./install.sh -k <klipper_home_dir> -c <klipper_config_dir>
 
 This will attempt to update your `.cfg` files for you and install the additional klipper modules.  If successful nothing else is required. However if you are curious or run into problems, keep reading...
 
@@ -43,7 +47,7 @@ Also the following option was added to `ercf_parameters.cfg`:
 
 
 ### v1.2.2
-Introduced a custom encoder driver that removes the need to `[duplicate_pin_override]` and the `[filament_motion_sensor]` in `ercf_hardware.cfg`. Which this change comes that ability to dynamically change clog detection during print and to choose a new automatic selection which iwill tune detection length automatically! 
+Introduced a custom encoder driver that removes the need to `[duplicate_pin_override]` and the `[filament_motion_sensor]` in `ercf_hardware.cfg`. Which this change comes that ability to dynamically change clog detection during print and to choose a new automatic selection which will tune detection length automatically! 
 
 This release requires a few changes:
 
@@ -74,4 +78,23 @@ Finally remove the section that looks like this from `ercf_parameters.cfg`
 And note that `enable_clog_detection` now has 3 possible values (2 is recommended):
 
     enable_clog_detection: 2         # 0 = disable, 1 = static length clog detection, 2 = automatic length clog detection
+
+
+### v1.3.0
+Introduced synchronized gear/extruder movement during print!  This is implemented through a stepper controller that can both act as a MANUAL_STEPPER and as an extruder.  The `[manual_stepper gear_stepper]` section of `ercf_hardware.cfg` needs to be changed to `[manual_extruder_stepper gear_stepper]`. Also, the `extruder: extruder` line under `[ercf_encoder]` can be deleted.  It is harmless but the extruder name is now centrally set in `ercf_parameters.cfg`
+
+In addition several new parameters are added to control gear/extruder syncing as well as the ability to any extruder for use with ERCF.
+
+    extruder_name: extruder		# Name of the toolhead extruder that ERCF is using
+
+    # EXPERIMENTAL: New synchronized gear/extruder movement!
+    # If enabled for loading or unloading extruder this will override 'sync_load_length' and 'sync_unload_length'
+    # If you normally run with maxed out gear stepper current consider reducing it with 'sync_gear_current'
+    #
+    sync_to_extruder: 0		# Gear motor is synchronized to extruder during print
+    sync_load_extruder: 0	# Full extruder load leveraging motor synchronization
+    sync_unload_extruder: 0	# Full extruder unload (except stand alone tip forming) leveraging motor synchronization
+    sync_form_tip: 0		# Standalone tip formation (initial part of unload) also leveraging motor synchronization
+    #
+    sync_gear_current: 100	# Percentage of gear_stepper current (10%-100%) to use when syncing with extruder during print
 
