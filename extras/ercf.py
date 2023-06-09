@@ -1928,7 +1928,7 @@ class Ercf:
             self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=gear_stepper CURRENT=%.2f"
                                                 % ((self.gear_stepper_run_current * self.sync_gear_current) / 100.))
         elif not sync and self.gear_tmc and self.gear_tmc.get_status(0)['run_current'] < self.gear_stepper_run_current:
-            self._log_info("Restoring gear_stepper run current to %.2fA" % self.gear_stepper_run_current)
+            self._log_info("Restoring gear_stepper run current to 100% configured")
             self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=gear_stepper CURRENT=%.2f" % self.gear_stepper_run_current)
 
 
