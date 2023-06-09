@@ -45,7 +45,7 @@ class ErcfEncoder:
         self._movement = False
 
         # For clog/runout functionality
-        self.extruder_name = config.get('extruder', None)
+        self.extruder_name = config.get('extruder', 'extruder')
         # The runout headroom that ERCF will attempt to maintain (closest ERCF comes to triggering runout)
         self.desired_headroom = config.getfloat('desired_headroom', 6., above=0.)
         # The "damping" effect of last measurement. Higher value means clog_length will be reduced more slowly
@@ -79,9 +79,11 @@ class ErcfEncoder:
         self.printer.register_event_handler('idle_timeout:idle', self._handle_not_printing)
 
     def _handle_connect(self):
-        self.extruder = self.printer.lookup_object(self.extruder_name)
-        if not self.extruder:
-            raise self.config.error("Extruder named `%s` not found" % self.extruder_name)
+        try:
+            self.extruder = self.printer.lookup_object(self.extruder_name)
+        except Exception:
+            # Can set this later
+            pass
         self.filament_runout_pos = self.min_headroom = self.detection_length
 
     def _handle_ready(self):
@@ -100,7 +102,10 @@ class ErcfEncoder:
         if eventtime is None:
             eventtime = self.reactor.monotonic()
         print_time = self.estimated_print_time(eventtime)
-        return self.extruder.find_past_position(print_time)
+        if self.extruder:
+            return self.extruder.find_past_position(print_time)
+        else:
+            return 0.
 
     # Called periodically to check filament movement 
     def _extruder_pos_update_event(self, eventtime):
@@ -223,6 +228,13 @@ class ErcfEncoder:
     def set_mode(self, mode):
         if mode >= self.RUNOUT_DISABLED and mode <= self.RUNOUT_AUTOMATIC:
             self.detection_mode = mode
+
+    def set_extruder(self, extruder_name):
+        self.extruder = self.printer.lookup_object(extruder_name)
+        if not self.extruder:
+            raise self.printer.config.error("Extruder named `%s` not found" % extruder_name)
+        self.extruder_name = extruder_name
+        self.filament_runout_pos = self.min_headroom = self.detection_length
 
     def set_logger(self, log):
         self._logger = log
