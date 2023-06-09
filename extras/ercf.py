@@ -2520,6 +2520,13 @@ class Ercf:
                         # Have more work to do
                         out_of_extruder = self._test_filament_in_extruder_by_retracting()
                         return not out_of_extruder
+                else:
+                    if filament_present == 1:
+                        # Big clog!
+                        raise ErcfError("Filament stuck in extruder")
+                    else:
+                        # Either big clog or more likely, no toolhead sensor and no filament in ERCF
+                        return False
             else:
                 # Not synchronous gear/extruder movement
                 return delta > self.ENCODER_MIN or filament_present == 1
