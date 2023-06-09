@@ -315,7 +315,7 @@ upgrade_config_files() {
             cat << EOF >> ${dest_parameters}
 
 ## Added in v1.3.0 ---------------------------------------------------------------------------------------------------------
-extruder_name: extruder		# Name of the toolhead extruder that ERCF is using
+extruder: extruder		# Name of the toolhead extruder that ERCF is using
 
 # EXPERIMENTAL: New synchronized gear/extruder movement!
 # If enabled for loading or unloading extruder this will override 'sync_load_length' and 'sync_unload_length'
