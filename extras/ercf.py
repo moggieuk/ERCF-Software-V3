@@ -173,8 +173,9 @@ class Ercf:
         # Specific build parameters / tuning
         self.version = config.getfloat('version', 1.1)
         self.extruder_name = config.get('extruder', 'extruder')
-        self.long_moves_speed = config.getfloat('long_moves_speed', 100.)
-        self.short_moves_speed = config.getfloat('short_moves_speed', 25.)
+        self.long_moves_speed = config.getfloat('long_moves_speed', 100., minval=1)
+        self.long_moves_speed_from_spool = config.getfloat('long_moves_speed_from_spool', self.long_moves_speed, minval=1)
+        self.short_moves_speed = config.getfloat('short_moves_speed', 25., minval=1)
         self.z_hop_height = config.getfloat('z_hop_height', 5., minval=0.)
         self.z_hop_speed = config.getfloat('z_hop_speed', 15., minval=1.)
         self.gear_homing_accel = config.getfloat('gear_homing_accel', 1000)
@@ -216,8 +217,6 @@ class Ercf:
         self.sensor_to_nozzle = config.getfloat('sensor_to_nozzle', 0., minval=5.) # For toolhead sensor
         self.nozzle_load_speed = config.getfloat('nozzle_load_speed', 15, minval=1., maxval=100.)
         self.nozzle_unload_speed = config.getfloat('nozzle_unload_speed', 20, minval=1., maxval=100.)
-        self.from_spool_bowden_load_speed = config.getfloat('from_spool_bowden_load_speed', 10, minval=1., maxval=100.)
-        self.from_buffer_bowden_load_speed = config.getfloat('from_buffer_bowden_load_speed', 10, minval=1., maxval=100.)
 
         # Gear/Extruder synchronization controls
         self.sync_to_extruder = config.getint('sync_to_extruder', 0, minval=0, maxval=1)
@@ -1789,7 +1788,16 @@ class Ercf:
         self.gear_stepper.do_set_position(0.)   # All gear moves are relative
         is_long_move = abs(dist) > self.LONG_MOVE_THRESHOLD
         if speed is None:
-            speed = self.long_moves_speed if is_long_move else self.short_moves_speed
+            if is_long_move:
+                if (dist > 0 and
+                    self.gate_selected >= 0 and
+                    self.gate_status[self.gate_selected] == self.GATE_AVAILABLE):
+                    # Long pulling move when we are sure that we are at a gate but the filament buffer might be empty
+                    speed = self.long_moves_speed_from_spool
+                else:
+                    speed = self.long_moves_speed
+            else:
+                speed = self.short_moves_speed
         if accel is None:
             accel = self.gear_stepper.accel
         self._log_stepper("GEAR: dist=%.1f, speed=%d, accel=%d sync=%s wait=%s" % (dist, speed, accel, sync, wait))
@@ -1825,7 +1833,7 @@ class Ercf:
                 # Special case to support stallguard homing of filament to extruder
                 self.gear_stepper.do_homing_move(distance, speed, accel, True, False)
             else:
-                self._gear_stepper_move_wait(distance, accel=accel)
+                self._gear_stepper_move_wait(distance, speed=speed, accel=accel)
         else:   # Extruder only or Gear synced with extruder
             self._log_stepper("%s: dist=%.1f, speed=%d" % (motor.upper(), distance, speed))
             pos = self.toolhead.get_position()
@@ -1997,7 +2005,7 @@ class Ercf:
         for i in range(retries):
             msg = "Initial load into encoder" if i == 0 else ("Retry load into encoder #%d" % i)
             delta = self._trace_filament_move(msg, self.LONG_MOVE_THRESHOLD,
-                speed=None if self.gate_status[self.gate_selected] == self.GATE_AVAILABLE_FROM_BUFFER else None)
+                speed=self.long_moves_speed if self.gate_status[self.gate_selected] == self.GATE_AVAILABLE_FROM_BUFFER else None)
             if (self.LONG_MOVE_THRESHOLD - delta) > 6.0:
                 self._set_gate_status(self.gate_selected, max(self.gate_status[self.gate_selected], self.GATE_AVAILABLE))
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_PAST_ENCODER)
