@@ -21,6 +21,7 @@
 import logging, logging.handlers, threading, queue, time
 import textwrap, math, os.path, re, json
 from random import randint
+from extras import homing
 
 # Forward all messages through a queue (polled by background thread)
 class QueueHandler(logging.Handler):
