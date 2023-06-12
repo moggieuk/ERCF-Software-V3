@@ -1787,6 +1787,7 @@ class Ercf:
         self._sync_gear_to_extruder(False) # Safety. TODO Needed?
         self.gear_stepper.do_set_position(0.)   # All gear moves are relative
         is_long_move = abs(dist) > self.LONG_MOVE_THRESHOLD
+        self._log_info(f"requested to move at speed={speed}")
         if speed is None:
             if is_long_move:
                 if (dist > 0 and
@@ -1798,6 +1799,7 @@ class Ercf:
                     speed = self.long_moves_speed
             else:
                 speed = self.short_moves_speed
+        self._log_info(f"actually moved at speed={speed}")
         if accel is None:
             accel = self.gear_stepper.accel
         self._log_stepper("GEAR: dist=%.1f, speed=%d, accel=%d sync=%s wait=%s" % (dist, speed, accel, sync, wait))
@@ -1812,13 +1814,11 @@ class Ercf:
     #         "synced" - gear and extruder synced together
     def _trace_filament_move(self, trace_str, distance, speed=None, accel=None, motor="gear", homing=False, track=False):
         self._sync_gear_to_extruder(motor == "synced")
-        if speed == None:
-            speed = self.gear_stepper.velocity
-        if accel == None:
-            accel = self.gear_stepper.accel
         start = self.encoder_sensor.get_distance()
         trace_str += ". Stepper: '%s' moved %%.1fmm, encoder measured %%.1fmm (delta %%.1fmm)" % motor
         if motor == "both":
+            speed = speed or self.gear_stepper.velocity
+            accel = accel or self.gear_stepper.accel
             self._log_stepper("BOTH: dist=%.1f, speed=%d, accel=%d" % (distance, speed, self.gear_sync_accel))
             self.gear_stepper.do_set_position(0.)                   # Make incremental move
             pos = self.toolhead.get_position()
@@ -1831,10 +1831,15 @@ class Ercf:
         elif motor == "gear":
             if homing:
                 # Special case to support stallguard homing of filament to extruder
-                self.gear_stepper.do_homing_move(distance, speed, accel, True, False)
+                self.gear_stepper.do_homing_move(
+                    distance,
+                    speed or self.gear_stepper.velocity,
+                    accel or self.gear_stepper.accel,
+                    True, False)
             else:
                 self._gear_stepper_move_wait(distance, speed=speed, accel=accel)
         else:   # Extruder only or Gear synced with extruder
+            speed = speed or self.gear_stepper.velocity
             self._log_stepper("%s: dist=%.1f, speed=%d" % (motor.upper(), distance, speed))
             pos = self.toolhead.get_position()
             pos[3] += distance
@@ -2004,8 +2009,7 @@ class Ercf:
         retries = self.load_encoder_retries if retry else 1
         for i in range(retries):
             msg = "Initial load into encoder" if i == 0 else ("Retry load into encoder #%d" % i)
-            delta = self._trace_filament_move(msg, self.LONG_MOVE_THRESHOLD,
-                speed=self.long_moves_speed if self.gate_status[self.gate_selected] == self.GATE_AVAILABLE_FROM_BUFFER else None)
+            delta = self._trace_filament_move(msg, self.LONG_MOVE_THRESHOLD)
             if (self.LONG_MOVE_THRESHOLD - delta) > 6.0:
                 self._set_gate_status(self.gate_selected, max(self.gate_status[self.gate_selected], self.GATE_AVAILABLE))
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_PAST_ENCODER)
