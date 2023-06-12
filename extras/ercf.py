@@ -2324,7 +2324,7 @@ class Ercf:
             out_of_extruder = False
 
             if self._has_toolhead_sensor():
-                # This strategy supports both extruder only 'synced' modes of operation
+                # This strategy supports both extruder only and 'synced' modes of operation
                 motor = "synced" if sync_allowed else "extruder"
                 safety_margin = 5.
                 #step = self.toolhead_homing_step # TODO Too slow
