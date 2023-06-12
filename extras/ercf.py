@@ -1791,7 +1791,7 @@ class Ercf:
             if is_long_move:
                 if (dist > 0 and
                     self.gate_selected >= 0 and
-                    self.gate_status[self.gate_selected] == self.GATE_AVAILABLE):
+                    self.gate_status[self.gate_selected] != self.GATE_AVAILABLE_FROM_BUFFER):
                     # Long pulling move when we are sure that we are at a gate but the filament buffer might be empty
                     speed = self.long_moves_speed_from_spool
                 else:
