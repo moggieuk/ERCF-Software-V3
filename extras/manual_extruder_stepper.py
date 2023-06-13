@@ -13,6 +13,26 @@ import stepper, chelper, logging
 from kinematics import extruder as kinematics_extruder
 from . import manual_stepper
 
+
+class PrinterRailWithMockEndstop(stepper.PrinterRail):
+    """PrinterRail that pretends to have an endstop during the initial setup phase.
+    The rail is only homable if it has a properly configured endstop at runtime."""
+
+    class MockEndstop:
+        def add_stepper(self, *args, **kwargs):
+            pass
+    
+    def __init__(self, *args, **kwargs):
+        self._in_setup = True
+        super(PrinterRailWithMockEndstop, self).__init__(*args, **kwargs)
+        self.endstops = []
+
+    def add_extra_stepper(self, *args, **kwargs):
+        if self._in_setup:
+            self.endstops = [(self.MockEndstop(), "")] # hack: pretend we have endstops
+        return super(PrinterRailWithMockEndstop, self).add_extra_stepper(*args, **kwargs)
+
+
 class ManualExtruderStepper(kinematics_extruder.ExtruderStepper, manual_stepper.ManualStepper, object):
     """Extruder stepper that can be manually controlled when it is not synced to its motion queue"""
 
@@ -25,14 +45,16 @@ class ManualExtruderStepper(kinematics_extruder.ExtruderStepper, manual_stepper.
         self.config_smooth_time = config.getfloat('pressure_advance_smooth_time', 0.040, above=0., maxval=.200)
 
         # Setup stepper
-        if config.get('endstop_pin', None) is not None:
+        if not self.name.startswith('extruder'):
             self.can_home = True
-            self.stepper = stepper.PrinterRail(config, need_position_minmax=False, default_position_endstop=0.)
+            self.stepper = PrinterRailWithMockEndstop(config, need_position_minmax=False, default_position_endstop=0.)
             self.steppers = self.stepper.get_steppers()
         else:
+            # if we are a toolhead extruder, can't have an endstop for now
             self.can_home = False
             self.stepper = stepper.PrinterStepper(config)
             self.steppers = [self.stepper]
+
         self.rail = self.stepper # For forwarding manual_stepper...
 
         self.velocity = config.getfloat('velocity', 5., above=0.)
