@@ -44,15 +44,9 @@ class ManualExtruderStepper(kinematics_extruder.ExtruderStepper, manual_stepper.
         self.config_smooth_time = config.getfloat('pressure_advance_smooth_time', 0.040, above=0., maxval=.200)
 
         # Setup stepper
-        if not self.name.startswith('extruder'):
-            self.can_home = True
-            self.stepper = PrinterRailWithMockEndstop(config, need_position_minmax=False, default_position_endstop=0.)
-            self.steppers = self.stepper.get_steppers()
-        else:
-            # if we are a toolhead extruder, can't have an endstop for now
-            self.can_home = False
-            self.stepper = stepper.PrinterStepper(config)
-            self.steppers = [self.stepper]
+        self.can_home = True
+        self.stepper = PrinterRailWithMockEndstop(config, need_position_minmax=False, default_position_endstop=0.)
+        self.steppers = self.stepper.get_steppers()
 
         self.rail = self.stepper # For forwarding manual_stepper...
 

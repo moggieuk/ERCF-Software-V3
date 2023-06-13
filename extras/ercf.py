@@ -21,6 +21,8 @@
 import logging, logging.handlers, threading, queue, time, contextlib
 import textwrap, math, os.path, re, json
 from random import randint
+import chelper
+
 
 # Forward all messages through a queue (polled by background thread)
 class QueueHandler(logging.Handler):
@@ -167,7 +169,7 @@ class Ercf:
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
 
         # ERCF hardware (steppers, servo, encoder and optional toolhead sensor)
-        self.selector_stepper = self.gear_stepper = self.toolhead_stepper = self.toolhead_sensor = self.toolhead_sensor_mcu_endstop = self.encoder_sensor = self.servo = None
+        self.selector_stepper = self.gear_stepper = self.toolhead_sensor = self.toolhead_sensor_mcu_endstop = self.encoder_sensor = self.servo = None
 
         # Specific build parameters / tuning
         self.version = config.getfloat('version', 1.1)
@@ -479,12 +481,8 @@ class Ercf:
             stepper_name = manual_stepper[1].get_steppers()[0].get_name()
             if stepper_name == 'manual_extruder_stepper gear_stepper':
                 self.gear_stepper = manual_stepper[1]
-            if stepper_name == "manual_extruder_stepper extruder":
-                self.toolhead_stepper = manual_stepper[1]
         if self.gear_stepper is None:
             raise self.config.error("Missing [manual_extruder_stepper gear_stepper] definition in ercf_hardware.cfg\n%s" % self.UPGRADE_REMINDER)
-        if self.toolhead_stepper is None:
-            raise self.config.error("Missing [manual_extruder_stepper extruder] definition in ercf_hardware.cfg\n%s" % self.UPGRADE_REMINDER)
 
         try:
             self.toolhead_sensor = self.printer.lookup_object("filament_switch_sensor toolhead_sensor")
@@ -505,6 +503,8 @@ class Ercf:
             self.toolhead_sensor_mcu_endstop = ppins.setup_pin('endstop', endstop_pin)
             for s in self.gear_stepper.steppers:
                 self.toolhead_sensor_mcu_endstop.add_stepper(s)
+            ffi_main, ffi_lib = chelper.get_ffi()
+            self.toolhead_homing_sk = ffi_main.gc(ffi_lib.cartesian_stepper_alloc(b'x'), ffi_lib.free)
 
         # Get endstops
         self.query_endstops = self.printer.lookup_object('query_endstops')
@@ -577,9 +577,6 @@ class Ercf:
         self.extruder = self.printer.lookup_object(self.extruder_name, None)
         if not self.extruder:
             raise self.config.error("Extruder named `%s` not found on printer" % self.extruder_name)
-
-        self.extruder.extruder_stepper = self.toolhead_stepper
-        self.toolhead_stepper.sync_to_extruder(self.extruder_name)
 
         try:
             self.pause_resume = self.printer.lookup_object('pause_resume')
@@ -1962,29 +1959,27 @@ class Ercf:
 
     @contextlib.contextmanager
     def _sync_toolhead_to_gear(self):
-        # switch both steppers to manual mode
+        toolhead_stepper = self.extruder.extruder_stepper.stepper
+        # switch gear stepper to manual mode
         gear_stepper_mq = self.gear_stepper.motion_queue
-        toolhead_stepper_mq = self.toolhead_stepper.motion_queue
         self.gear_stepper.sync_to_extruder(None)
-        self.toolhead_stepper.sync_to_extruder(None)
         # Sync toolhead to gear
-        # We do this by injecting the toolhead steppers into the gear stepper's rail
+        # We do this by injecting the toolhead stepper into the gear stepper's rail
         prev_gear_steppers = self.gear_stepper.steppers
         prev_gear_rail_steppers = self.gear_stepper.rail.steppers
-        self.gear_stepper.steppers = self.gear_stepper.steppers + self.toolhead_stepper.steppers
-        self.gear_stepper.rail.steppers = self.gear_stepper.rail.steppers + self.toolhead_stepper.steppers
+        self.gear_stepper.steppers = self.gear_stepper.steppers + [toolhead_stepper]
+        self.gear_stepper.rail.steppers = self.gear_stepper.rail.steppers + [toolhead_stepper]
         gear_trapq = self.gear_stepper.trapq
-        toolhead_trapqs = [s.set_trapq(gear_trapq) for s in self.toolhead_stepper.steppers]
+        prev_toolhead_trapq = toolhead_stepper.set_trapq(gear_trapq)
+        prev_toolhead_sk = toolhead_stepper.set_stepper_kinematics(self.toolhead_homing_sk)
         # yield to caller
         yield self
-        # Restore previous toolhead state
+        # Restore previous state
         self.gear_stepper.steppers = prev_gear_steppers
         self.gear_stepper.rail.steppers = prev_gear_rail_steppers
-        for s, q in zip(self.toolhead_stepper.steppers, toolhead_trapqs):
-            s.set_trapq(q)
-        # Restore motion queues
+        toolhead_stepper.set_trapq(prev_toolhead_trapq)
+        toolhead_stepper.set_stepper_kinematics(prev_toolhead_sk)
         self.gear_stepper.sync_to_extruder(gear_stepper_mq)
-        self.toolhead_stepper.sync_to_extruder(toolhead_stepper_mq)
 
 
 ###########################
