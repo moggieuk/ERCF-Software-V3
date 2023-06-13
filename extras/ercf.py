@@ -354,9 +354,6 @@ class Ercf:
                     desc=self.cmd_ERCF_SYNC_GEAR_MOTOR_help)
 
 	# Core ERCF functionality
-        self.gcode.register_command('ERCF_TESTTEST',
-                    self.cmd_ERCF_TESTTEST,
-                    desc = self.cmd_ERCF_TESTTEST_help)
         self.gcode.register_command('ERCF_ENABLE',
                     self.cmd_ERCF_ENABLE,
                     desc = self.cmd_ERCF_ENABLE_help)
@@ -2846,12 +2843,6 @@ class Ercf:
 
 
 ### CORE GCODE COMMANDS ##########################################################
-
-    cmd_ERCF_TESTTEST_help = "Test ERCF"
-    def cmd_ERCF_TESTTEST(self, gcmd):
-        with self._sync_toolhead_to_gear():
-            self.gear_stepper.rail.set_position([0, 0, 0, 0])
-            self.gear_stepper.do_move(50, 50, 200)
 
     cmd_ERCF_UNLOCK_help = "Unlock ERCF operations"
     def cmd_ERCF_UNLOCK(self, gcmd):

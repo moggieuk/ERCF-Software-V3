@@ -39,7 +39,6 @@ class ManualExtruderStepper(kinematics_extruder.ExtruderStepper, manual_stepper.
     def __init__(self, config):
         self.printer = config.get_printer()
         self.name = config.get_name().split()[-1]
-        self.extruder_name = config.get('extruder', None)
         self.pressure_advance = self.pressure_advance_smooth_time = 0.
         self.config_pa = config.getfloat('pressure_advance', 0., minval=0.)
         self.config_smooth_time = config.getfloat('pressure_advance_smooth_time', 0.040, above=0., maxval=.200)
@@ -112,13 +111,6 @@ class ManualExtruderStepper(kinematics_extruder.ExtruderStepper, manual_stepper.
                                    self.name, self.cmd_MANUAL_STEPPER,
                                    desc=self.cmd_MANUAL_STEPPER_help)
 
-
-        self.printer.register_event_handler("klippy:connect",
-                                            self.handle_connect)
-    
-    def handle_connect(self):
-        if self.extruder_name:
-            self.sync_to_extruder(self.extruder_name)
 
     def do_enable(self, enable):
         assert self.motion_queue is None
