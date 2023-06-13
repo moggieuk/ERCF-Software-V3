@@ -3222,6 +3222,7 @@ class Ercf:
     cmd_ERCF_TEST_CONFIG_help = "Runtime adjustment of ERCF configuration for testing or in-print tweaking purposes"
     def cmd_ERCF_TEST_CONFIG(self, gcmd):
         self.long_moves_speed = gcmd.get_float('LONG_MOVES_SPEED', self.long_moves_speed, above=20.)
+        self.long_moves_speed_from_spool = gcmd.get_float('LONG_MOVES_SPEED_FROM_SPOOL', self.long_moves_speed_from_spool, above=20.)
         self.short_moves_speed = gcmd.get_float('SHORT_MOVES_SPEED', self.short_moves_speed, above=20.)
         self.home_to_extruder = gcmd.get_int('HOME_TO_EXTRUDER', self.home_to_extruder, minval=0, maxval=1)
         self.ignore_extruder_load_error = gcmd.get_int('IGNORE_EXTRUDER_LOAD_ERROR', self.ignore_extruder_load_error, minval=0, maxval=1)
@@ -3263,6 +3264,7 @@ class Ercf:
         if clog_length != self.encoder_sensor.get_clog_detection_length():
             self.encoder_sensor.set_clog_detection_length(clog_length)
         msg = "long_moves_speed = %.1f" % self.long_moves_speed
+        msg = "long_moves_speed_from_spool = %.1f" % self.long_moves_speed_from_spool
         msg += "\nshort_moves_speed = %.1f" % self.short_moves_speed
         msg += "\nhome_to_extruder = %d" % self.home_to_extruder
         msg += "\nignore_extruder_load_error = %d" % self.ignore_extruder_load_error
