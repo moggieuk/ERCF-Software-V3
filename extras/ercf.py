@@ -18,9 +18,10 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 #
-import logging, logging.handlers, threading, queue, time
+import logging, logging.handlers, threading, queue, time, contextlib
 import textwrap, math, os.path, re, json
 from random import randint
+import toolhead
 from extras import homing
 
 # Forward all messages through a queue (polled by background thread)
@@ -168,7 +169,7 @@ class Ercf:
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
 
         # ERCF hardware (steppers, servo, encoder and optional toolhead sensor)
-        self.selector_stepper = self.gear_stepper = self.toolhead_sensor = self.encoder_sensor = self.servo = None
+        self.selector_stepper = self.gear_stepper = self.toolhead_stepper = self.toolhead_sensor = self.encoder_sensor = self.servo = None
 
         # Specific build parameters / tuning
         self.version = config.getfloat('version', 1.1)
@@ -356,6 +357,9 @@ class Ercf:
                     desc=self.cmd_ERCF_SYNC_GEAR_MOTOR_help)
 
 	# Core ERCF functionality
+        self.gcode.register_command('ERCF_TESTTEST',
+                    self.cmd_ERCF_TESTTEST,
+                    desc = self.cmd_ERCF_TESTTEST_help)
         self.gcode.register_command('ERCF_ENABLE',
                     self.cmd_ERCF_ENABLE,
                     desc = self.cmd_ERCF_ENABLE_help)
@@ -490,8 +494,12 @@ class Ercf:
             stepper_name = manual_stepper[1].get_steppers()[0].get_name()
             if stepper_name == 'manual_extruder_stepper gear_stepper':
                 self.gear_stepper = manual_stepper[1]
+            if stepper_name == "manual_extruder_stepper extruder":
+                self.toolhead_stepper = manual_stepper[1]
         if self.gear_stepper is None:
             raise self.config.error("Missing [manual_extruder_stepper gear_stepper] definition in ercf_hardware.cfg\n%s" % self.UPGRADE_REMINDER)
+        if self.toolhead_stepper is None:
+            raise self.config.error("Missing [manual_extruder_stepper extruder] definition in ercf_hardware.cfg\n%s" % self.UPGRADE_REMINDER)
 
         try:
             self.pause_resume = self.printer.lookup_object('pause_resume')
@@ -534,6 +542,9 @@ class Ercf:
         if not self.extruder:
             raise self.config.error("Extruder named `%s` not found on printer" % self.extruder_name)
 
+        self.extruder.extruder_stepper = self.toolhead_stepper
+        self.toolhead_stepper.sync_to_extruder(self.extruder_name)
+
         # See if we have a TMC controller capable of current control for filament collision detection and syncing
         # on gear_stepper and tip forming on extruder
         self.gear_tmc = self.extruder_tmc = None
@@ -575,6 +586,9 @@ class Ercf:
         self.encoder_sensor.set_logger(self._log_debug) # Combine with ERCF log
         self.encoder_sensor.set_extruder(self.extruder_name)
         self.encoder_sensor.set_mode(self.enable_clog_detection)
+
+        # Configure endstops
+        # TODO
 
         # Restore state
         self._load_persisted_state()
@@ -1918,6 +1932,7 @@ class Ercf:
                 self._servo_down()
             else:
                 self._servo_up()
+
         if self.gear_stepper.is_synced() != sync:
             self._log_debug("%s gear stepper and extruder" % ("Syncing" if sync else "Unsyncing"))
             self.gear_stepper.sync_to_extruder(self.extruder_name if sync else None)
@@ -1931,6 +1946,33 @@ class Ercf:
         elif not sync and self.gear_tmc and self.gear_tmc.get_status(0)['run_current'] < self.gear_stepper_run_current:
             self._log_info("Restoring gear_stepper run current to 100% configured")
             self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=gear_stepper CURRENT=%.2f" % self.gear_stepper_run_current)
+
+
+    @contextlib.contextmanager
+    def _sync_toolhead_to_gear(self):
+        # switch both steppers to manual mode
+        gear_stepper_mq = self.gear_stepper.motion_queue
+        toolhead_stepper_mq = self.toolhead_stepper.motion_queue
+        self.gear_stepper.sync_to_extruder(None)
+        self.toolhead_stepper.sync_to_extruder(None)
+        # Sync toolhead to gear
+        # We do this by injecting the toolhead steppers into the gear stepper's rail
+        prev_gear_steppers = self.gear_stepper.steppers
+        prev_gear_rail_steppers = self.gear_stepper.rail.steppers
+        self.gear_stepper.steppers = self.gear_stepper.steppers + self.toolhead_stepper.steppers
+        self.gear_stepper.rail.steppers = self.gear_stepper.rail.steppers + self.toolhead_stepper.steppers
+        gear_trapq = self.gear_stepper.trapq
+        toolhead_trapqs = [s.set_trapq(gear_trapq) for s in self.toolhead_stepper.steppers]
+        # yield to caller
+        yield self
+        # Restore previous toolhead state
+        self.gear_stepper.steppers = prev_gear_steppers
+        self.gear_stepper.rail.steppers = prev_gear_rail_steppers
+        for s, q in zip(self.toolhead_stepper.steppers, toolhead_trapqs):
+            s.set_trapq(q)
+        # Restore motion queues
+        self.gear_stepper.sync_to_extruder(gear_stepper_mq)
+        self.toolhead_stepper.sync_to_extruder(toolhead_stepper_mq)
 
 
 ###########################
@@ -2114,15 +2156,18 @@ class Ercf:
 
         if self.sync_load_extruder and not skip_entry_moves:
             # Newer simplified forced full sync move
-            self._sync_gear_to_extruder(True, servo=True)
-            step = self.toolhead_homing_step
-            self._log_debug("Synchronized homing to toolhead sensor, up to %.1fmm in %.1fmm steps" % (self.toolhead_homing_max, step))
-            for i in range(int(self.toolhead_homing_max / step)):
-                msg = "Homing step #%d" % (i+1)
-                delta = self._trace_filament_move(msg, step, speed=10, motor="synced")
-                if self.toolhead_sensor.runout_helper.filament_present:
-                    self._log_debug("Toolhead sensor reached after %.1fmm (%d moves)" % (step*(i+1), i+1))
-                    break
+            with self._sync_toolhead_to_gear():
+                self.gear_stepper.rail.set_position([0, 0, 0, 0])
+                self.gear_stepper.do_homing_move(self.toolhead_homing_max, speed=10, accel=self.gear_homing_accel, triggered=True, check_trigger=False)
+            # self._sync_gear_to_extruder(True, servo=True)
+            # step = self.toolhead_homing_step
+            # self._log_debug("Synchronized homing to toolhead sensor, up to %.1fmm in %.1fmm steps" % (self.toolhead_homing_max, step))
+            # for i in range(int(self.toolhead_homing_max / step)):
+            #     msg = "Homing step #%d" % (i+1)
+            #     delta = self._trace_filament_move(msg, step, speed=10, motor="synced")
+            #     if self.toolhead_sensor.runout_helper.filament_present:
+            #         self._log_debug("Toolhead sensor reached after %.1fmm (%d moves)" % (step*(i+1), i+1))
+            #         break
         else:
             # Original method either synced or extruder only
             sync = not skip_entry_moves and self.sync_load_length > 0.
@@ -2792,6 +2837,12 @@ class Ercf:
 
 
 ### CORE GCODE COMMANDS ##########################################################
+
+    cmd_ERCF_TESTTEST_help = "Test ERCF"
+    def cmd_ERCF_TESTTEST(self, gcmd):
+        with self._sync_toolhead_to_gear():
+            self.gear_stepper.rail.set_position([0, 0, 0, 0])
+            self.gear_stepper.do_move(50, 50, 200)
 
     cmd_ERCF_UNLOCK_help = "Unlock ERCF operations"
     def cmd_ERCF_UNLOCK(self, gcmd):

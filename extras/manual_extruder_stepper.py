@@ -112,7 +112,7 @@ class ManualExtruderStepper(kinematics_extruder.ExtruderStepper, manual_stepper.
 
     def do_homing_move(self, movepos, speed, accel, triggered, check_trigger):
         assert self.motion_queue is None
-        return super(ManualExtruderStepper, self).do_homing_move(self, movepos, speed, accel, triggered, check_trigger)
+        return super(ManualExtruderStepper, self).do_homing_move(movepos, speed, accel, triggered, check_trigger)
 
     def cmd_MANUAL_STEPPER(self, gcmd):
         if self.motion_queue is not None:
