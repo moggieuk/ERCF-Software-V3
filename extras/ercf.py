@@ -2197,8 +2197,8 @@ class Ercf:
             self._set_loaded_status(self.LOADED_STATUS_FULL)
             self._log_info('ERCF load successful')
 
-            if self.sync_to_extruder and not skip_entry_moves:
-                self._sync_gear_to_extruder(True, servo=True, adjust_tmc_current=True)
+            if not skip_entry_moves:
+                self._sync_gear_to_extruder(self.sync_to_extruder, servo=True, adjust_tmc_current=True)
 
         finally:
             self._set_action(current_action)
