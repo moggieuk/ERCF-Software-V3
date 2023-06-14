@@ -1982,6 +1982,24 @@ class Ercf:
         self.gear_stepper.sync_to_extruder(gear_stepper_mq)
 
 
+    def _gear_home_to_endstop(self, endstop, movpos, speed=10, accel=100, triggered=True, check_trigger=True):
+        name = self.gear_stepper.steppers[0].get_name(short=True)
+        gear_stepper_rail_endstops = self.gear_stepper.rail.endstops
+        self.gear_stepper.rail.endstops = [(endstop, name)]
+        self.gear_stepper.rail.set_position([0, 0, 0, 0])
+        # TODO: implement "twice homing"?
+        try:
+            homing_result = self.gear_stepper.do_homing_move(
+                movpos,
+                speed=speed, 
+                accel=accel,
+                triggered=triggered,
+                check_trigger=check_trigger)
+        finally:
+            self.gear_stepper.rail.endstops = gear_stepper_rail_endstops
+        return homing_result
+
+
 ###########################
 # FILAMENT LOAD FUNCTIONS #
 ###########################
@@ -2164,12 +2182,13 @@ class Ercf:
         if self.sync_load_extruder and not skip_entry_moves:
             # Newer simplified forced full sync move
             with self._sync_toolhead_to_gear():
-                name = self.gear_stepper.steppers[0].get_name(short=True)
-                gear_stepper_rail_endstops = self.gear_stepper.rail.endstops
-                self.gear_stepper.rail.endstops = [(self.toolhead_sensor_mcu_endstop, name)]
-                self.gear_stepper.rail.set_position([0, 0, 0, 0])
-                self.gear_stepper.do_homing_move(self.toolhead_homing_max, speed=10, accel=self.gear_homing_accel, triggered=True, check_trigger=False) # TODO: make these speed/accel configurable?
-                self.gear_stepper.rail.endstops = gear_stepper_rail_endstops
+                self._gear_home_to_endstop(
+                    self.toolhead_sensor_mcu_endstop, 
+                    self.toolhead_homing_max,
+                    speed=10, # TODO: make these speed/accel configurable?
+                    accel=self.gear_homing_accel,
+                    triggered=True,
+                    check_trigger=False)
         else:
             # Original method either synced or extruder only
             sync = not skip_entry_moves and self.sync_load_length > 0.
