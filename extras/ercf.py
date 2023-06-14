@@ -1983,13 +1983,14 @@ class Ercf:
 
 
     def _gear_home_to_endstop(self, endstop, movepos, speed=10, accel=100, triggered=True, check_trigger=True):
+        self.gear_stepper.do_set_position(-movepos)
         name = self.gear_stepper.steppers[0].get_name(short=True)
         gear_stepper_rail_endstops = self.gear_stepper.rail.endstops
         self.gear_stepper.rail.endstops = [(endstop, name)]
         # TODO: implement "twice homing"?
         try:
             homing_result = self.gear_stepper.do_homing_move(
-                movepos,
+                0,
                 speed=speed,
                 accel=accel,
                 triggered=triggered,
@@ -2180,7 +2181,6 @@ class Ercf:
 
         if self.sync_load_extruder and not skip_entry_moves:
             # Newer simplified forced full sync move
-            self.gear_stepper.do_set_position(0.)
             with self._sync_toolhead_to_gear():
                 self._gear_home_to_endstop(
                     self.toolhead_sensor_mcu_endstop,
@@ -2189,6 +2189,8 @@ class Ercf:
                     accel=self.gear_homing_accel,
                     triggered=True,
                     check_trigger=False)
+                # resets the filament runout length since homing the extruder changed its position
+                self.encoder_sensor.enable()
         else:
             # Original method either synced or extruder only
             sync = not skip_entry_moves and self.sync_load_length > 0.
