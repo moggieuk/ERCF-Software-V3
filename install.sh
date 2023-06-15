@@ -57,6 +57,15 @@ function nextfilename {
     printf "%s-%s.%s" ${name%%.*} $(date '+%Y%m%d_%H%M%S') ${name#*.}
 }
 
+function nextsuffix {
+    local name="$1"
+    local -i num=0
+    while [ -e "$name.0$num" ]; do
+        num+=1
+    done
+    printf "%s.0%d" "$name" "$num"
+}
+
 verify_not_root() {
     if [ "$EUID" -eq 0 ]; then
         echo -e "${ERROR}This script must not run as root"
