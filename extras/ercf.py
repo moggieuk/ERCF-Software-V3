@@ -536,7 +536,7 @@ class Ercf:
         # See if we have a TMC controller capable of current control for filament collision detection and syncing
         # on gear_stepper and tip forming on extruder
         self.gear_tmc = self.extruder_tmc = None
-        tmc_chips = ["tmc2209", "tmc2130", "tmc2208", " tmc2660", "tmc5160"]
+        tmc_chips = ["tmc2209", "tmc2130", "tmc2208", "tmc2660", "tmc5160", "tmc2240"]
         for chip in tmc_chips:
             try:
                 self.gear_tmc = self.printer.lookup_object('%s manual_extruder_stepper gear_stepper' % chip)
