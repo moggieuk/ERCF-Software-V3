@@ -52,6 +52,11 @@ WARNING="${B_YELLOW}"
 PROMPT="${CYAN}"
 INPUT="${OFF}"
 
+function nextfilename {
+    local name="$1"
+    printf "%s-%s.%s" ${name%%.*} $(date '+%Y%m%d_%H%M%S') ${name#*.}
+}
+
 function nextsuffix {
     local name="$1"
     local -i num=0
@@ -156,7 +161,7 @@ copy_template_files() {
         dest=${KLIPPER_CONFIG_HOME}/${file}
 
         if test -f $dest; then
-            next_dest="$(nextsuffix "$dest")"
+            next_dest="$(nextfilename "$dest")"
             echo -e "${INFO}Config file ${file} already exists - moving old one to ${next_dest}"
             mv ${dest} ${next_dest}
         fi
@@ -249,7 +254,7 @@ copy_template_files() {
             # Link in all includes if not already present
             dest=${KLIPPER_CONFIG_HOME}/printer.cfg
             if test -f $dest; then
-                next_dest="$(nextsuffix "$dest")"
+                next_dest="$(nextfilename "$dest")"
                 echo -e "${INFO}Copying original printer.cfg file to ${next_dest}"
                 cp ${dest} ${next_dest}
                 if [ ${menu_12864} -eq 1 ]; then
@@ -287,7 +292,7 @@ upgrade_config_files() {
     encoder_pin="<FIXME>"
     encoder_resolution="<FIXME>"
     if test -f $dest_parameters; then
-        next_dest="$(nextsuffix "$dest_parameters")"
+        next_dest="$(nextfilename "$dest_parameters")"
         echo -e "${INFO}Pre upgrade config file ${dest_parameters} moved to ${next_dest} for reference"
         cp ${dest_parameters} ${next_dest}
 
@@ -333,7 +338,7 @@ EOF
     fi
 
     if test -f $dest_hardware; then
-        next_dest="$(nextsuffix "$dest_hardware")"
+        next_dest="$(nextfilename "$dest_hardware")"
         echo -e "${INFO}Pre upgrade config file ${dest_hardware} moved to ${next_dest} for reference"
         cp ${dest_hardware} ${next_dest}
 
