@@ -2241,7 +2241,7 @@ class Ercf:
 
             if check_state or self.loaded_status == self.LOADED_STATUS_UNKNOWN:
                 # Let's determine where filament is and reset state before continuing
-                self._log_error("Unknown filament position, recovering state...")
+                self._log_error("Unsure of filament position, recovering state...")
                 self._recover_loaded_state()
 
             if self.loaded_status == self.LOADED_STATUS_UNLOADED:
@@ -2561,15 +2561,21 @@ class Ercf:
         try:
             if self._get_calibration_version() != 3:
                 self._log_info("You are running an old calibration version.\nIt is strongly recommended that you rerun 'ERCF_CALIBRATE_SINGLE TOOL=0' to generate updated calibration values")
+
             self._log_info("Homing ERCF...")
-            if force_unload != -1:
-                self._log_debug("(asked to %s)" % ("force unload" if force_unload == 1 else "not unload"))
             if self.is_paused_locked:
                 self._log_debug("ERCF is locked, unlocking it before continuing...")
                 self._unlock()
 
-            if force_unload == 1 or (force_unload == -1 and self.loaded_status != self.LOADED_STATUS_UNLOADED):
+            if force_unload != -1:
+                self._log_debug("(asked to %s)" % ("force unload" if force_unload == 1 else "not unload"))
+            if force_unload == 1:
+                # Forced unload case for recovery
                 self._unload_sequence(self._get_calibration_ref(), check_state=True)
+            elif force_unload == -1 and self.loaded_status != self.LOADED_STATUS_UNLOADED:
+                # Automatic unload case
+                self._unload_sequence(self._get_calibration_ref())
+
             self._unselect_tool()
             self._home_selector()
             if tool >= 0:
