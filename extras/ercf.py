@@ -1800,7 +1800,7 @@ class Ercf:
                 speed = self.short_moves_speed
         if accel is None:
             accel = self.gear_stepper.accel
-        self._log_stepper("GEAR: dist=%.1f, speed=%d, accel=%d sync=%s wait=%s" % (dist, speed, accel, sync, wait))
+        self._log_stepper("GEAR: dist=%.1f, speed=%1.f, accel=%.1f sync=%s wait=%s" % (dist, speed, accel, sync, wait))
         self.gear_stepper.do_move(dist, speed, accel, sync)
         if wait:
             self.toolhead.wait_moves()
@@ -1817,7 +1817,7 @@ class Ercf:
         if motor == "both":
             speed = speed or self.gear_stepper.velocity
             accel = accel or self.gear_stepper.accel
-            self._log_stepper("BOTH: dist=%.1f, speed=%d, accel=%d" % (distance, speed, self.gear_sync_accel))
+            self._log_stepper("BOTH: dist=%.1f, speed=%.1f, accel=%.1f" % (distance, speed, self.gear_sync_accel))
             self.gear_stepper.do_set_position(0.)                   # Make incremental move
             pos = self.toolhead.get_position()
             pos[3] += distance
@@ -1838,7 +1838,7 @@ class Ercf:
                 self._gear_stepper_move_wait(distance, speed=speed, accel=accel)
         else:   # Extruder only or Gear synced with extruder
             speed = speed or self.gear_stepper.velocity
-            self._log_stepper("%s: dist=%.1f, speed=%d" % (motor.upper(), distance, speed))
+            self._log_stepper("%s: dist=%.1f, speed=%.1f" % (motor.upper(), distance, speed))
             pos = self.toolhead.get_position()
             pos[3] += distance
             self.toolhead.manual_move(pos, speed)
@@ -1866,7 +1866,7 @@ class Ercf:
         if accel == None:
             accel = self.selector_stepper.accel
         if homing_move != 0:
-            self._log_stepper("SELECTOR: dist=%.1f, speed=%d, accel=%d homing=%d" % (dist, speed, accel, homing_move))
+            self._log_stepper("SELECTOR: dist=%.1f, speed=%.1f, accel=%.1f homing=%d" % (dist, speed, accel, homing_move))
             # Don't allow sensorless home moves in rapid succession (TMC limitation)
             if self.sensorless_selector == 1:
                 current_time = self.estimated_print_time(self.reactor.monotonic())
@@ -1879,7 +1879,7 @@ class Ercf:
                 self.toolhead.dwell(1)
             self.selector_stepper.do_homing_move(dist, speed, accel, homing_move > 0, abs(homing_move) == 1)
         else:
-            self._log_stepper("SELECTOR: dist=%.1f, speed=%d, accel=%d" % (dist, speed, accel))
+            self._log_stepper("SELECTOR: dist=%.1f, speed=%.1f, accel=%.1f" % (dist, speed, accel))
             self.selector_stepper.do_move(dist, speed, accel)
         if wait:
             self.toolhead.wait_moves()
