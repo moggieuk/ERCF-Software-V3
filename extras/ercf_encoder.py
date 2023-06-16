@@ -1,5 +1,5 @@
 # Happy Hare ERCF Software
-# Driver for encoder that supports movement measurement and runout/clog detection
+# Driver for encoder that supports movement measurement, runout/clog detection and flow rate calc
 #
 # Copyright (C) 2022  moggieuk#6538 (discord)
 #                     moggieuk@hotmail.com
