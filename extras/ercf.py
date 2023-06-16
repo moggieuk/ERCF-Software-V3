@@ -85,7 +85,7 @@ class Ercf:
 
     GATE_UNKNOWN = -1
     GATE_EMPTY = 0
-    GATE_AVAILABLE = 1 # available to load from either buffer or spool
+    GATE_AVAILABLE = 1 # Available to load from either buffer or spool
     GATE_AVAILABLE_FROM_BUFFER = 2
 
     LOADED_STATUS_UNKNOWN = -1
@@ -173,9 +173,9 @@ class Ercf:
         # Specific build parameters / tuning
         self.version = config.getfloat('version', 1.1)
         self.extruder_name = config.get('extruder', 'extruder')
-        self.long_moves_speed = config.getfloat('long_moves_speed', 100., minval=1)
-        self.long_moves_speed_from_spool = config.getfloat('long_moves_speed_from_spool', self.long_moves_speed, minval=1)
-        self.short_moves_speed = config.getfloat('short_moves_speed', 25., minval=1)
+        self.long_moves_speed = config.getfloat('long_moves_speed', 100., minval=1.)
+        self.long_moves_speed_from_spool = config.getfloat('long_moves_speed_from_spool', self.long_moves_speed, minval=1.)
+        self.short_moves_speed = config.getfloat('short_moves_speed', 25., minval=1.)
         self.z_hop_height = config.getfloat('z_hop_height', 5., minval=0.)
         self.z_hop_speed = config.getfloat('z_hop_speed', 15., minval=1.)
         self.gear_homing_accel = config.getfloat('gear_homing_accel', 1000)
@@ -1784,10 +1784,9 @@ class Ercf:
 ####################################################################################
 
     def _gear_stepper_move_wait(self, dist, wait=True, speed=None, accel=None, sync=True):
-        self._sync_gear_to_extruder(False) # Safety. TODO Needed?
+        self._sync_gear_to_extruder(False) # Safety
         self.gear_stepper.do_set_position(0.)   # All gear moves are relative
         is_long_move = abs(dist) > self.LONG_MOVE_THRESHOLD
-        self._log_info(f"requested to move at speed={speed}")
         if speed is None:
             if is_long_move:
                 if (dist > 0 and
@@ -1799,7 +1798,6 @@ class Ercf:
                     speed = self.long_moves_speed
             else:
                 speed = self.short_moves_speed
-        self._log_info(f"actually moved at speed={speed}")
         if accel is None:
             accel = self.gear_stepper.accel
         self._log_stepper("GEAR: dist=%.1f, speed=%d, accel=%d sync=%s wait=%s" % (dist, speed, accel, sync, wait))
@@ -2011,7 +2009,7 @@ class Ercf:
             msg = "Initial load into encoder" if i == 0 else ("Retry load into encoder #%d" % i)
             delta = self._trace_filament_move(msg, self.LONG_MOVE_THRESHOLD)
             if (self.LONG_MOVE_THRESHOLD - delta) > 6.0:
-                self._set_gate_status(self.gate_selected, max(self.gate_status[self.gate_selected], self.GATE_AVAILABLE))
+                self._set_gate_status(self.gate_selected, max(self.gate_status[self.gate_selected], self.GATE_AVAILABLE)) # Don't reset if filament is buffered
                 self._set_loaded_status(self.LOADED_STATUS_PARTIAL_PAST_ENCODER)
                 return self.encoder_sensor.get_distance() - initial_encoder_position
             else:
@@ -2267,17 +2265,20 @@ class Ercf:
                 # This error case can occur when home to sensor failed and we may be stuck in extruder
                 self._unload_extruder()
                 self._unload_encoder(length) # Full slow unload
+                self._set_gate_status(self.gate_selected, self.GATE_AVAILABLE_FROM_BUFFER)
 
             elif self.loaded_status >= self.LOADED_STATUS_PARTIAL_HOMED_SENSOR:
                 # Exit extruder, fast unload of bowden, then slow unload encoder
                 self._unload_extruder()
                 self._unload_bowden(length - self.unload_buffer, skip_sync_move=skip_sync_move)
                 self._unload_encoder(self.unload_buffer)
+                self._set_gate_status(self.gate_selected, self.GATE_AVAILABLE_FROM_BUFFER)
 
             elif self.loaded_status >= self.LOADED_STATUS_PARTIAL_HOMED_EXTRUDER:
                 # fast unload of bowden, then slow unload encoder
                 self._unload_bowden(length - self.unload_buffer, skip_sync_move=skip_sync_move)
                 self._unload_encoder(self.unload_buffer)
+                self._set_gate_status(self.gate_selected, self.GATE_AVAILABLE_FROM_BUFFER)
 
             elif self.loaded_status >= self.LOADED_STATUS_PARTIAL_BEFORE_ENCODER:
                 # Have to do slow unload because we don't know exactly where we are
@@ -2491,7 +2492,6 @@ class Ercf:
                 if park - delta > 1.0: # We expect 0, but relax the test a little
                     self._log_info("Warning: Possible encoder malfunction (free-spinning) during final filament parking")
                 self._set_loaded_status(self.LOADED_STATUS_UNLOADED)
-                self._set_gate_status(self.gate_selected, self.GATE_AVAILABLE_FROM_BUFFER)
                 return
         raise ErcfError("Unable to get the filament out of the encoder cart")
 
@@ -3376,6 +3376,16 @@ class Ercf:
         self.gate_status[gate] = state
         self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE='%s'" % (self.VARS_ERCF_GATE_STATUS, self.gate_status))
 
+    def _get_filament_char(self, gate_status, no_space=False):
+        if gate_status == self.GATE_AVAILABLE_FROM_BUFFER:
+            return "@"
+        elif gate_status == self.GATE_AVAILABLE:
+            return "*"
+        elif gate_status == self.GATE_EMPTY:
+            return ("." if no_space else " ")
+        else:
+            return "?"
+
     def _tool_to_gate_map_to_human_string(self, summary=False):
         msg = ""
         if not summary:
@@ -3383,7 +3393,7 @@ class Ercf:
             for i in range(num_tools): # Tools
                 msg += "\n" if i else ""
                 gate = self.tool_to_gate_map[i]
-                msg += "%s-> Gate #%d%s" % (("T%d " % i)[:3], gate, "(*)" if self.gate_status[gate] >= self.GATE_AVAILABLE else "( )" if self.gate_status[gate] == self.GATE_EMPTY else "(?)")
+                msg += "%s-> Gate #%d%s" % (("T%d " % i)[:3], gate, "(" + self._get_filament_char(self.gate_status[gate]) + ")")
                 if self.enable_endless_spool:
                     group = self.endless_spool_groups[gate]
                     es = " Group_%s: " % group
@@ -3392,14 +3402,14 @@ class Ercf:
                     for j in range(num_tools): # Gates
                         gate = (j + starting_gate) % num_tools
                         if self.endless_spool_groups[gate] == group:
-                            es += "%s%d%s" % (prefix, gate,("(*)" if self.gate_status[gate] >= self.GATE_AVAILABLE else "( )" if self.gate_status[gate] == self.GATE_EMPTY else "(?)"))
+                            es += "%s%d%s" % (prefix, gate,self._get_filament_char(self.gate_status[gate]))
                             prefix = " > "
                     msg += es
                 if i == self.tool_selected:
                     msg += " [SELECTED on gate #%d]" % self.gate_selected
             msg += "\n"
             for gate in range(len(self.selector_offsets)):
-                msg += "\nGate #%d%s" % (gate, ("(*)" if self.gate_status[gate] >= self.GATE_AVAILABLE else "( )" if self.gate_status[gate] == self.GATE_EMPTY else "(?)"))
+                msg += "\nGate #%d%s" % (gate, "(" + self._get_filament_char(self.gate_status[gate]) + ")")
                 tool_str = " -> "
                 prefix = ""
                 for t in range(len(self.selector_offsets)):
@@ -3418,7 +3428,7 @@ class Ercf:
             msg_selct = "Selct: "
             for g in range(len(self.selector_offsets)):
                 msg_gates += ("|#%d " % g)[:4]
-                msg_avail += "| %s " % ("*" if self.gate_status[g] >= self.GATE_AVAILABLE else "." if self.gate_status[g] == self.GATE_EMPTY else "?")
+                msg_avail += "| %s " % self._get_filament_char(self.gate_status[g], True)
                 tool_str = ""
                 prefix = ""
                 for t in range(len(self.selector_offsets)):
@@ -3429,8 +3439,7 @@ class Ercf:
                 if tool_str == "": tool_str = " . "
                 msg_tools += ("|%s " % tool_str)[:4]
                 if self.gate_selected == g:
-                    icon = "*" if self.gate_status[g] >= self.GATE_AVAILABLE else "." if self.gate_status[g] == self.GATE_EMPTY else "?"
-                    msg_selct += ("| %s " % icon)
+                    msg_selct += ("| %s " % self._get_filament_char(self.gate_status[g], True))
                 else:
                     msg_selct += "|---" if self.gate_selected != self.GATE_UNKNOWN and self.gate_selected == (g - 1) else "----"
             msg += msg_gates
@@ -3451,7 +3460,7 @@ class Ercf:
             material = self.gate_material[g] if self.gate_material[g] != "" else "n/a"
             color = self.gate_color[g] if self.gate_color[g] != "" else "n/a"
             available = {
-                self.GATE_AVAILABLE_FROM_BUFFER: "Buffer Available", 
+                self.GATE_AVAILABLE_FROM_BUFFER: "Buffered", 
                 self.GATE_AVAILABLE: "Available",
                 self.GATE_EMPTY: "Empty",
                 self.GATE_UNKNOWN: "Unknown"
