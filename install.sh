@@ -109,6 +109,17 @@ link_ercf_plugin() {
     fi
 }
 
+unlink_ercf_plugin() {
+    echo -e "${INFO}Unlinking ercf extension to Klipper..."
+    if [ -d "${KLIPPER_HOME}/klippy/extras" ]; then
+        for file in `cd ${SRCDIR}/extras ; ls *.py`; do
+            rm -f "${KLIPPER_HOME}/klippy/extras/${file}"
+        done
+    else
+        echo -e "${WARNING}ERCF modules not uninstalled because Klipper 'extras' directory not found!"
+    fi
+}
+
 copy_template_files() {
     if [ "${INSTALL_TEMPLATES}" -eq 0 ]; then
         # Then check to see if we need to upgrade the current config files
@@ -281,6 +292,32 @@ copy_template_files() {
     fi
 }
 
+remove_template_files() {
+    echo -e "${INFO}Removing ERCF configuration files from ${KLIPPER_CONFIG_HOME}"
+    for file in `cd ${SRCDIR} ; ls *.cfg`; do
+        dest=${KLIPPER_CONFIG_HOME}/${file}
+
+        if test -f $dest; then
+            echo -e "${INFO}Removing config file ${file}"
+            mv -f ${dest} /tmp/${file}_uninstalled
+        fi
+    done
+
+    echo -e "${INFO}Cleaning ERCF references from printer.cfg"
+    dest=${KLIPPER_CONFIG_HOME}/printer.cfg
+    if test -f $dest; then
+        next_dest="$(nextfilename "$dest")"
+        echo -e "${INFO}Copying original printer.cfg file to ${next_dest} before cleaning"
+        cp ${dest} ${next_dest}
+        cat "${dest}" | sed -e " \
+            /\[include client_macros.cfg\]/ d; \
+            /\[include ercf_software.cfg\]/ d; \
+            /\[include ercf_parameters.cfg\]/ d; \
+            /\[include ercf_hardware.cfg\]/ d; \
+            /\[include ercf_menu.cfg\]/ d" > "${dest}.tmp" && mv "${dest}.tmp" "${dest}"
+    fi
+}
+
 # Save the user some time and attempt the upgrade of config files for them...
 upgrade_config_files() {
     echo -e "${INFO}Upgrading configuration files..."
@@ -309,7 +346,7 @@ upgrade_config_files() {
                 s/^encoder_resolution:/#encoder_resolution:/ ;
                 s/^extra_servo_dwell_up:/#extra_servo_dwell_up:/ ;
                 s/^extra_servo_dwell_down:/#extra_servo_dwell_down:/ ;
-                    " > ${dest_parameters}.encoder_upgrade&& mv ${dest_parameters}.encoder_upgrade ${dest_parameters}
+                    " > ${dest_parameters}.encoder_upgrade && mv ${dest_parameters}.encoder_upgrade ${dest_parameters}
         fi
 
         update_sync=$(egrep -c '^sync_to_extruder:' ${dest_parameters} || true)
@@ -400,21 +437,41 @@ EOF
 
 install_update_manager() {
     echo -e "${INFO}Adding update manager to moonraker.conf"
-    if [ -f "${KLIPPER_CONFIG_HOME}/moonraker.conf" ]; then
+    file="${KLIPPER_CONFIG_HOME}/moonraker.conf"
+    if [ -f "${file}" ]; then
         update_section=$(grep -c '\[update_manager ercf-happy_hare\]' \
-        ${KLIPPER_CONFIG_HOME}/moonraker.conf || true)
+        ${file} || true)
         if [ "${update_section}" -eq 0 ]; then
-            echo "" >> ${KLIPPER_CONFIG_HOME}/moonraker.conf
+            echo "" >> "${file}"
             while read -r line; do
-                echo -e "${line}" >> ${KLIPPER_CONFIG_HOME}/moonraker.conf
+                echo -e "${line}" >> "${file}"
             done < "${SRCDIR}/moonraker_update.txt"
-            echo "" >> ${KLIPPER_CONFIG_HOME}/moonraker.conf
+            echo "" >> "${file}"
             restart_moonraker
         else
-            echo -e "${INFO}[update_manager ercf] already exist in moonraker.conf - skipping install"
+            echo -e "${INFO}[update_manager ercf-happy_hare] already exist in moonraker.conf - skipping install"
         fi
     else
-        echo -e "${WARNING}Moonraker.conf not found!"
+        echo -e "${WARNING}moonraker.conf not found!"
+    fi
+}
+
+uninstall_update_manager() {
+    echo -e "${INFO}Removing update manager from moonraker.conf"
+    file="${KLIPPER_CONFIG_HOME}/moonraker.conf"
+    if [ -f "${file}" ]; then
+        update_section=$(grep -c '\[update_manager ercf-happy_hare\]' \
+        ${file} || true)
+        if [ "${update_section}" -eq 0 ]; then
+            echo -e "${INFO}[update_manager ercf-happy_hare] not found in moonraker.conf - skipping removal"
+        else
+            cat "${file}" | sed -e " \
+                /\[update_manager ercf-happy_hare\]/,+6 d; \
+                    " > "${file}.new" && mv "${file}.new" "${file}"
+            restart_moonraker
+        fi
+    else
+        echo -e "${WARNING}moonraker.conf not found!"
     fi
 }
 
@@ -722,9 +779,10 @@ questionaire() {
 
 usage() {
     echo -e "${EMPHASIZE}"
-    echo "Usage: $0 [-k <klipper_home_dir>] [-c <klipper_config_dir>] [-i]"
+    echo "Usage: $0 [-k <klipper_home_dir>] [-c <klipper_config_dir>] [-i] [-u]"
     echo
     echo "-i for interactive"
+    echo "-u for uninstall"
     echo
     exit 1
 }
@@ -736,13 +794,15 @@ clear
 # Find SRCDIR from the pathname of this script
 SRCDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/ && pwd )"
 
+UNINSTALL=0
 INSTALL_TEMPLATES=0
 INSTALL_KLIPPER_SCREEN_ONLY=0
-while getopts "k:c:i" arg; do
+while getopts "k:c:iu" arg; do
     case $arg in
         k) KLIPPER_HOME=${OPTARG};;
         c) KLIPPER_CONFIG_HOME=${OPTARG};;
         i) INSTALL_TEMPLATES=1;;
+        u) UNINSTALL=1;;
         *) usage;;
     esac
 done
@@ -750,16 +810,47 @@ done
 verify_not_root
 verify_home_dirs
 check_klipper
-questionaire
-link_ercf_plugin
-copy_template_files
-install_update_manager
+if [ "$UNINSTALL" -eq 0 ]; then
+    questionaire
+    link_ercf_plugin
+    copy_template_files
+    install_update_manager
+else
+    echo
+    echo -e "${WARNING}You have asked me to remove Happy Hare and cleanup"
+    echo
+    yn=$(prompt_yn "Are you sure you want to proceed with deleting Happy Hare?")
+    case $yn in
+        y)
+            unlink_ercf_plugin
+            remove_template_files
+            uninstall_update_manager
+            ;;
+        n)
+            echo -e "${INFO}Well that was a close call!  Everything still intact"
+            echo
+	    exit 0
+            ;;
+    esac
+fi
 restart_klipper
 
-echo -e "${EMPHASIZE}"
-echo "Done.  Enjoy ERCF (and thank you Ette for a wonderful design)..."
-echo -e "${INFO}"
-echo '(\_/)'
-echo '( *,*)'
-echo '(")_(") ERCF Ready'
-echo
+if [ "$UNINSTALL" -eq 0 ]; then
+    echo -e "${EMPHASIZE}"
+    echo "Done.  Enjoy ERCF (and thank you Ette for a wonderful design)..."
+    echo -e "${INFO}"
+    echo '(\_/)'
+    echo '( *,*)'
+    echo '(")_(") ERCF Ready'
+    echo
+else
+    echo
+    echo -e "${INFO}Uninstall complete except for the ERCF-Software-V2 directory - you can now safely delete that as well"
+    echo -e "${EMPHASIZE}"
+    echo "Sad to see you go (but maybe you'll be back)..."
+    echo -e "${INFO}"
+    echo '(\_/)'
+    echo '( v,v)'
+    echo '(")^(") ERCF Unready'
+    echo
+fi
