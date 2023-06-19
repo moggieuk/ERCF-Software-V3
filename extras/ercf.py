@@ -1958,7 +1958,9 @@ class Ercf:
 
 
     @contextlib.contextmanager
-    def _sync_toolhead_to_gear(self):
+    def _sync_toolhead_to_gear(self, disable_encoder = False):
+        if disable_encoder:
+            self._disable_encoder_sensor()
         toolhead_stepper = self.extruder.extruder_stepper.stepper
         # switch gear stepper to manual mode
         gear_stepper_mq = self.gear_stepper.motion_queue
@@ -1980,6 +1982,8 @@ class Ercf:
         toolhead_stepper.set_trapq(prev_toolhead_trapq)
         toolhead_stepper.set_stepper_kinematics(prev_toolhead_sk)
         self.gear_stepper.sync_to_extruder(gear_stepper_mq)
+        if disable_encoder:
+            self._enable_encoder_sensor()
 
 
     def _gear_home_to_endstop(self, endstop, movepos, speed=10, accel=100, triggered=True, check_trigger=True):
@@ -2181,7 +2185,7 @@ class Ercf:
 
         if self.sync_load_extruder and not skip_entry_moves:
             # Newer simplified forced full sync move
-            with self._sync_toolhead_to_gear():
+            with self._sync_toolhead_to_gear(disable_encoder=True):
                 self._gear_home_to_endstop(
                     self.toolhead_sensor_mcu_endstop,
                     self.toolhead_homing_max,
@@ -2189,8 +2193,6 @@ class Ercf:
                     accel=self.gear_homing_accel,
                     triggered=True,
                     check_trigger=False)
-                # resets the filament runout length since homing the extruder changed its position
-                self.encoder_sensor.enable()
         else:
             # Original method either synced or extruder only
             sync = not skip_entry_moves and self.sync_load_length > 0.
