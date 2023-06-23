@@ -493,6 +493,7 @@ class Ercf:
                 self.gear_stepper = manual_stepper[1]
         if self.gear_stepper is None:
             raise self.config.error("Missing [manual_extruder_stepper gear_stepper] definition in ercf_hardware.cfg\n%s" % self.UPGRADE_REMINDER)
+        self.default_gear_rotational_distance = self.gear_stepper.stepper.get_rotation_distance() # rotational distance for Gate 0
 
         try:
             self.pause_resume = self.printer.lookup_object('pause_resume')
@@ -1211,6 +1212,9 @@ class Ercf:
         else:
             self._log_always("Warning: ercf_calib_%d value (%.6f) is invalid. Using reference 1.0. Re-run ERCF_CALIBRATE_SINGLE TOOL=%d" % (gate, ratio, gate))
             return 1.
+
+    def _get_gate_rotational_distance(self, gate):
+        return self._get_gate_ratio(gate) * self.default_gear_rotational_distance
 
     def _calculate_calibration_ref(self, extruder_homing_length=400, repeats=3):
         try:
@@ -1934,6 +1938,12 @@ class Ercf:
         if self.gear_stepper.is_synced() != sync:
             self._log_debug("%s gear stepper and extruder" % ("Syncing" if sync else "Unsyncing"))
             self.gear_stepper.sync_to_extruder(self.extruder_name if sync else None)
+
+        if sync:
+            rot_dist = self._get_gate_rotational_distance(self.gate_selected)
+        else:
+            rot_dist = self.default_gear_rotational_distance
+        self.gear_stepper.stepper.set_rotational_distance(rot_dist)
 
         # Option to reduce current during print
         if adjust_tmc_current and sync and self.gear_tmc and self.sync_gear_current < 100:
