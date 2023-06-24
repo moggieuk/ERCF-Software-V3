@@ -162,7 +162,7 @@ class Ercf:
         self.reactor = self.printer.get_reactor()
         self.estimated_print_time = None
         self.last_sensorless_move = 0
-        self.gear_stepper_run_current = 0.
+        self.gear_stepper_run_current = -1
         self.printer.register_event_handler('klippy:connect', self.handle_connect)
         self.printer.register_event_handler("klippy:disconnect", self.handle_disconnect)
         self.printer.register_event_handler("klippy:ready", self.handle_ready)
@@ -1936,7 +1936,7 @@ class Ercf:
             self.gear_stepper.sync_to_extruder(self.extruder_name if sync else None)
 
         # Option to reduce current during print
-        if adjust_tmc_current and sync and self.gear_tmc and self.sync_gear_current < 100:
+        if adjust_tmc_current and sync and self.gear_tmc and self.sync_gear_current < 100 and self.gear_stepper_run_current < 0:
             self.gear_stepper_run_current = self.gear_tmc.get_status(0)['run_current']
             self._log_info("Reducing reducing gear_stepper run current to %d%% for extruder syncing" % self.sync_gear_current)
             self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=gear_stepper CURRENT=%.2f"
@@ -1944,6 +1944,7 @@ class Ercf:
         elif not sync and self.gear_tmc and self.gear_tmc.get_status(0)['run_current'] < self.gear_stepper_run_current:
             self._log_info("Restoring gear_stepper run current to 100% configured")
             self.gcode.run_script_from_command("SET_TMC_CURRENT STEPPER=gear_stepper CURRENT=%.2f" % self.gear_stepper_run_current)
+            self.gear_stepper_run_current = -1
 
 
 ###########################
@@ -3384,7 +3385,7 @@ class Ercf:
 
     def _get_filament_char(self, gate_status, no_space=False):
         if gate_status == self.GATE_AVAILABLE_FROM_BUFFER:
-            return "@"
+            return "B"
         elif gate_status == self.GATE_AVAILABLE:
             return "*"
         elif gate_status == self.GATE_EMPTY:
