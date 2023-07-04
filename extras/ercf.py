@@ -1117,7 +1117,8 @@ class Ercf:
             self._gear_stepper_move_wait(0.5, speed=25, accel=self.gear_buzz_accel, wait=False, sync=False)
             self.toolhead.dwell(0.05)
             self._gear_stepper_move_wait(-0.5, speed=25, accel=self.gear_buzz_accel, wait=False, sync=(i == oscillations - 1))
-        self.toolhead.dwell(max(0., self.servo_duration - (0.1 * oscillations)))
+        if self.servo_duration != float("inf"):
+            self.toolhead.dwell(max(0., self.servo_duration - (0.1 * oscillations)))
         self.servo_state = self.SERVO_DOWN_STATE
 
     def _servo_up(self):
@@ -1129,7 +1130,7 @@ class Ercf:
         self.servo_state = self.SERVO_UP_STATE
 
         # Report on spring back in filament then reset counter
-        self.toolhead.dwell(self.servo_duration)
+        self.toolhead.dwell(self.servo_duration if self.servo_duration != float("inf") else 0.2)
         self.toolhead.wait_moves()
         delta = self.encoder_sensor.get_distance() - initial_encoder_position
         if delta > 0.:

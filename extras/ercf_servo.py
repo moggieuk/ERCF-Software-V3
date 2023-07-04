@@ -107,7 +107,7 @@ class ErcfServo:
             value = self._get_pwm_from_pulse_width(width)
         else:
             value = self._get_pwm_from_angle(angle)
-        if duration is not None:
+        if duration not in (None, float('inf')):
             self._set_burst_pwm(print_time, value, duration)
         elif value != self.last_value:
             self._set_pwm(print_time, value)
