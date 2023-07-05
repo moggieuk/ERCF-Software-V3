@@ -184,7 +184,7 @@ class Ercf:
         self.servo_up_angle = config.getfloat('servo_up_angle')
         self.servo_down_angle = config.getfloat('servo_down_angle')
         self.servo_duration = config.getfloat('servo_duration', 0.2, minval=0.1)
-        self.active_servo_down = config.getint('active_servo_down', 0, minval=0, maxval=1)
+        self.servo_active_down = config.getint('servo_active_down', 0, minval=0, maxval=1)
         self.num_moves = config.getint('num_moves', 1, minval=1)
         self.apply_bowden_correction = config.getint('apply_bowden_correction', 0, minval=0, maxval=1)
         self.load_bowden_tolerance = config.getfloat('load_bowden_tolerance', 10., minval=1.)
@@ -1111,14 +1111,14 @@ class Ercf:
         if self.gate_selected == self.TOOL_BYPASS: return
         self._log_debug("Setting servo to down angle: %d" % (self.servo_down_angle))
         self.toolhead.wait_moves()
-        self.servo.set_value(angle=self.servo_down_angle, duration=None if self.active_servo_down else self.servo_duration)
+        self.servo.set_value(angle=self.servo_down_angle, duration=None if self.servo_active_down else self.servo_duration)
         oscillations = 2
         for i in range(oscillations):
             self.toolhead.dwell(0.05)
             self._gear_stepper_move_wait(0.5, speed=25, accel=self.gear_buzz_accel, wait=False, sync=False)
             self.toolhead.dwell(0.05)
             self._gear_stepper_move_wait(-0.5, speed=25, accel=self.gear_buzz_accel, wait=False, sync=(i == oscillations - 1))
-        if not self.active_servo_down:
+        if not self.servo_active_down:
             self.toolhead.dwell(max(0., self.servo_duration - (0.1 * oscillations)))
         self.servo_state = self.SERVO_DOWN_STATE
 
