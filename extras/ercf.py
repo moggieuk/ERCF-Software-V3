@@ -1425,7 +1425,6 @@ class Ercf:
                 self._log_always("Warning: Encoder is not detecting the expected number of counts. It is possible that reflections from some teeth are unreliable")
 
             msg = "Before calibration measured length = %.6f" % old_result
-            msg += "\nBefore calibration measured length = %.6f" % old_result
             msg += "\nResulting resolution for the encoder = %.6f" % resolution
             msg += "\nAfter calibration measured length = %.6f" % new_result
             self._log_always(msg)
