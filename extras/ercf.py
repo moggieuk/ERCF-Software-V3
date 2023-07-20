@@ -217,6 +217,7 @@ class Ercf:
         self.sensor_to_nozzle = config.getfloat('sensor_to_nozzle', 0., minval=5.) # For toolhead sensor
         self.nozzle_load_speed = config.getfloat('nozzle_load_speed', 15, minval=1., maxval=100.)
         self.nozzle_unload_speed = config.getfloat('nozzle_unload_speed', 20, minval=1., maxval=100.)
+        self.filamentblock_width = config.getint('filamentblock_width', 21) # 21 for ERCF v1.1 default filament blocks
 
         # Gear/Extruder synchronization controls
         self.sync_to_extruder = config.getint('sync_to_extruder', 0, minval=0, maxval=1)
@@ -1449,7 +1450,7 @@ class Ercf:
         try:
             self.calibrating = True
             self._servo_up()
-            move_length = 10. + gate*21 + (gate//3)*5 + (self.bypass_offset > 0)
+            move_length = 10. + gate*self.filamentblock_width + (gate//3)*5 + (self.bypass_offset > 0)
             self._log_always("Measuring the selector position for gate %d" % gate)
             selector_steps = self.selector_stepper.steppers[0].get_step_dist()
             init_position = self.selector_stepper.get_position()[0]
@@ -2589,7 +2590,7 @@ class Ercf:
         self.gate_selected = self.TOOL_UNKNOWN
         self._servo_up()
         num_channels = len(self.selector_offsets)
-        selector_length = 10. + (num_channels-1)*21. + ((num_channels-1)//3)*5. + (self.bypass_offset > 0)
+        selector_length = 10. + (num_channels-1)*self.filamentblock_width + ((num_channels-1)//3)*5. + (self.bypass_offset > 0)
         self._log_debug("Moving up to %.1fmm to home a %d channel ERCF" % (selector_length, num_channels))
         self.toolhead.wait_moves()
         if self.sensorless_selector == 1:
