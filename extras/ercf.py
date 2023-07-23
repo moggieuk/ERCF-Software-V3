@@ -1123,14 +1123,15 @@ class Ercf:
 
     def _servo_up(self):
         if self.servo_state == self.SERVO_UP_STATE: return 0.
-        initial_encoder_position = self.encoder_sensor.get_distance()
         self._log_debug("Setting servo to up angle: %d" % (self.servo_up_angle))
+        self.toolhead.dwell(0.2)
         self.toolhead.wait_moves()
+        initial_encoder_position = self.encoder_sensor.get_distance()
         self.servo.set_value(angle=self.servo_up_angle, duration=self.servo_duration)
         self.servo_state = self.SERVO_UP_STATE
 
         # Report on spring back in filament then reset counter
-        self.toolhead.dwell(self.servo_duration)
+        self.toolhead.dwell(min(self.servo_duration, 0.4))
         self.toolhead.wait_moves()
         delta = self.encoder_sensor.get_distance() - initial_encoder_position
         if delta > 0.:
