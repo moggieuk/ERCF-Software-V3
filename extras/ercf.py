@@ -1131,7 +1131,7 @@ class Ercf:
         self.servo_state = self.SERVO_UP_STATE
 
         # Report on spring back in filament then reset counter
-        self.toolhead.dwell(min(self.servo_duration, 0.4))
+        self.toolhead.dwell(max(self.servo_duration, 0.4))
         self.toolhead.wait_moves()
         delta = self.encoder_sensor.get_distance() - initial_encoder_position
         if delta > 0.:
