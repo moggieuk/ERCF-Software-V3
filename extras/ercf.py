@@ -217,7 +217,7 @@ class Ercf:
         self.sensor_to_nozzle = config.getfloat('sensor_to_nozzle', 0., minval=5.) # For toolhead sensor
         self.nozzle_load_speed = config.getfloat('nozzle_load_speed', 15, minval=1., maxval=100.)
         self.nozzle_unload_speed = config.getfloat('nozzle_unload_speed', 20, minval=1., maxval=100.)
-        self.filamentblock_width = config.getint('filamentblock_width', 21) # 21 for ERCF v1.1 default filament blocks
+        self.filamentblock_width = config.getfloat('filamentblock_width', 21.) # 21 for ERCF v1.1 default filament blocks
 
         # Gear/Extruder synchronization controls
         self.sync_to_extruder = config.getint('sync_to_extruder', 0, minval=0, maxval=1)
