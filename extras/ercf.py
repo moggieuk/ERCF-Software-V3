@@ -691,6 +691,8 @@ class Ercf:
             self.queue_listener.stop()
 
     def handle_ready(self):
+        self._log_debug('ERCF handle_ready working...')
+
         self.printer.register_event_handler("idle_timeout:printing", self._handle_idle_timeout_printing)
         self.printer.register_event_handler("idle_timeout:ready", self._handle_idle_timeout_ready)
         self.printer.register_event_handler("idle_timeout:idle", self._handle_idle_timeout_idle)
@@ -720,14 +722,36 @@ class Ercf:
         waketime = self.reactor.monotonic() + self.BOOT_DELAY
         self.reactor.register_callback(self._bootup_tasks, waketime)
 
+    def _enable_sync_gear_to_extruder(self):
+        if self._check_is_disabled():
+            self._log_debug("_enable_sync_gear_to_extruder not enable because ERCF is disabled.")
+            return
+        if self._check_in_bypass():
+            self._log_debug("_enable_sync_gear_to_extruder not enable because in bypass.")
+            return
+        self._sync_gear_to_extruder(sync=True, servo=True)
+
     def _bootup_tasks(self, eventtime):
         try:
             self.encoder_sensor.set_clog_detection_length(self.variables.get(self.VARS_ERCF_CALIB_CLOG_LENGTH))
+            self._log_debug("!!!_bootup_tasks working...")
+
+            if self.sync_to_extruder:
+               # if self.loaded_status == self.LOADED_STATUS_FULL	#	self.LOADED_STATUS_UNKNOWN
+               # regardless what the ercf load status ??? can adjust later
+               self._log_debug("regardless what the ercf load status??? can adjust later...")
+               self._log_debug("ERCF about to enable sync gear motor...")
+               self._enable_sync_gear_to_extruder()
+
+            else:
+                self._log_debug("ERCF not enabling sync gear motor because sync_to_extruder Not set.")
+
             self._log_always('(\_/)\n( *,*)\n(")_(") ERCF Ready')
             if self.startup_status > 0:
                 self._log_always(self._tool_to_gate_map_to_human_string(self.startup_status == 1))
                 self._display_visual_state(silent=(self.persistence_level < 4))
-                self._servo_up()
+                self._log_debug('leaveing servo the same status')
+                # self._servo_up()
         except Exception as e:
             self._log_always('Warning: Error booting up ERCF: %s' % str(e))
 
@@ -1228,10 +1252,12 @@ class Ercf:
                 self._load_bowden(self.calibration_bowden_length - encoder_moved)
                 self._log_info("Finding extruder gear position (try #%d of %d)..." % (i+1, repeats))
                 self._home_to_extruder(extruder_homing_length)
+                self._log_info(f"_home_to_extruder({extruder_homing_length}) done!")
                 measured_movement = self.encoder_sensor.get_distance()
                 spring = self._servo_up()
                 reference = measured_movement - (spring * 0.1)
                 if spring > 0:
+                    self._log_info("about to run _must_home_to_extruder")
                     if self._must_home_to_extruder():
                         # Home to extruder step is enabled so we don't need any spring
                         # in filament since we will do it again on every load
@@ -1381,6 +1407,8 @@ class Ercf:
         test_speed = min_speed
         speed_incr = (max_speed - min_speed) / repeats
         try:
+            self._servo_down()
+
             self.calibrating = True
             plus_values, min_values = [], []
             for x in range(repeats):
@@ -2430,7 +2458,7 @@ class Ercf:
 
     # Fast unload of filament from exit of extruder gear (end of bowden) to close to ERCF (but still in encoder)
     def _unload_bowden(self, length, skip_sync_move=False):
-        self._log_debug("Unloading bowden tube")
+        self._log_debug(f"Unloading bowden tube {length}")
         self.filament_direction = self.DIRECTION_UNLOAD
         tolerance = self.unload_bowden_tolerance
         self._servo_down()
@@ -2711,6 +2739,7 @@ class Ercf:
             msg = "Tool change requested: T%d" % tool
             m117_msg = ("> T%d" % tool)
         else:
+
             msg = "Tool change requested, from %s to T%d" % (initial_tool_string, tool)
             m117_msg = ("%s > T%d" % (initial_tool_string, tool))
         # Important to always inform user in case there is an error and manual recovery is necessary
@@ -3146,6 +3175,8 @@ class Ercf:
         if self._check_is_disabled(): return
         if self._check_is_paused(): return
         if self._check_in_bypass(): return
+        self._servo_down()
+
         length = gcmd.get_float('LENGTH', 200.)
         speed = gcmd.get_float('SPEED', 50.)
         accel = gcmd.get_float('ACCEL', 200., minval=0.)
@@ -3386,7 +3417,7 @@ class Ercf:
 
     def _get_filament_char(self, gate_status, no_space=False):
         if gate_status == self.GATE_AVAILABLE_FROM_BUFFER:
-            return "B"
+            return "Buf"
         elif gate_status == self.GATE_AVAILABLE:
             return "*"
         elif gate_status == self.GATE_EMPTY:
