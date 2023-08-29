@@ -587,7 +587,6 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_TEST_HOME_TO_EXTRUDER | For calibrating extruder homing - TMC current setting, etc. | RETURN=\[0\|1\] Whether to return the filament to the approximate starting position after homing - good for repeated testing |
   | ERCF_TEST_TRACKING | Simple visual test to see how encoder tracks with gear motor | DIRECTION=\[-1\|1\] Direction to perform the test <br>STEP=\[0.5..20\] Size of individual steps <br>Defaults to load direction and 1mm step size |
   | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime | Many. Best to run ERCF_TEST_CONFIG without options to report all parameters than can be specified |
-
   | ERCF_SOAKTEST_SELECTOR | QA reliability testing to put the selector movement under stress to test for failures | LOOP=..\[100\] Number of times to repeat the test <br>SERVO=\[0\|1\] Whether to include the servo down movement in the test |
   | ERCF_TEST_LOAD_SEQUENCE | Soak testing of load sequence. Great for testing reliability and repeatability| LOOP=..\[10\] Number of times to loop while testing <br>RANDOM=\[0\|1\] Whether to randomize tool selection <br>FULL=\[0 \|1 \] Whether to perform full load to nozzle or short load just past encoder |
   <br>
