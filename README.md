@@ -25,7 +25,7 @@ Klipper control software for ERCF v1.1
 </p>
 
 # :new: A major rework of Happy Hare to support of any MMU!
-The Hare has grown up! A new reworked version of Happy Hare, dubbed Happy Hare v2 is nearing completion. It will be somewhat familar to users of this software but will allow for different type of MMU to be controlled (ERCF, Tradrack, Prusa, ...) as well as being able to support sophisticated stepper syncing and multi-homing options and still be controlled from the companion KlipperScreen. It also has much improved doc.  Currently in closed Beta it is expected to ship in August. If you are curious to take a [look here](https://github.com/moggieuk/Happy-Hare).
+**The Hare has grown up! A new reworked version of Happy Hare, dubbed Happy Hare v2 is complete. It will be somewhat familar to users of this software but will allow for different type of MMU to be controlled (ERCF, Tradrack, Prusa, ...) as well as being able to support sophisticated stepper syncing and multi-homing options and still be controlled from the companion KlipperScreen. It also has much improved doc.  This original version is well established and will remain but I highly recommend all new users [look here](https://github.com/moggieuk/Happy-Hare) and existing users upgrade when they have time.**
 
 # Motivation
 I love my ERCF and building it was the most fun I've had in many years of the 3D-printing hobby. Whilst the design is brilliant I found a few problems with the software and wanted to add some features and improve user friendliness.  This became especially true after the separation of functionality with the introduction of the "sensorless filament homing" branch. I liked the new python implementation as a Klipper plug-in but wanted to leverage my (very reliable) toolhead sensor.  So I rewrote the software behind ERCF - it still has the structure and much of the code of the original but, more significantly, it has many new features, integrates the toolhead sensor and sensorless options.  I'm calling it the **"Happy Hare"** release or v3.
@@ -587,7 +587,6 @@ Good luck and hopefully a little less *enraged* printing.  You can find me on di
   | ERCF_TEST_HOME_TO_EXTRUDER | For calibrating extruder homing - TMC current setting, etc. | RETURN=\[0\|1\] Whether to return the filament to the approximate starting position after homing - good for repeated testing |
   | ERCF_TEST_TRACKING | Simple visual test to see how encoder tracks with gear motor | DIRECTION=\[-1\|1\] Direction to perform the test <br>STEP=\[0.5..20\] Size of individual steps <br>Defaults to load direction and 1mm step size |
   | ERCF_TEST_CONFIG | Dump / Change essential load/unload config options at runtime | Many. Best to run ERCF_TEST_CONFIG without options to report all parameters than can be specified |
-
   | ERCF_SOAKTEST_SELECTOR | QA reliability testing to put the selector movement under stress to test for failures | LOOP=..\[100\] Number of times to repeat the test <br>SERVO=\[0\|1\] Whether to include the servo down movement in the test |
   | ERCF_TEST_LOAD_SEQUENCE | Soak testing of load sequence. Great for testing reliability and repeatability| LOOP=..\[10\] Number of times to loop while testing <br>RANDOM=\[0\|1\] Whether to randomize tool selection <br>FULL=\[0 \|1 \] Whether to perform full load to nozzle or short load just past encoder |
   <br>
