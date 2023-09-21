@@ -88,7 +88,7 @@ class Ercf:
     GATE_AVAILABLE = 1 # Available to load from either buffer or spool
     GATE_AVAILABLE_FROM_BUFFER = 2
 
-    MATERIAL_UNKNOWN = -1
+    MATERIAL_UNKNOWN = "Unknown"
     LOADED_STATUS_UNKNOWN = -1
     LOADED_STATUS_UNLOADED = 0
     LOADED_STATUS_PARTIAL_BEFORE_ENCODER = 1
@@ -197,12 +197,6 @@ class Ercf:
         self.timeout_pause = config.getint('timeout_pause', 72000)
         self.timeout_unlock = config.getint('timeout_unlock', -1)
         self.disable_heater = config.getint('disable_heater', 600)
-
-        #!!!!
-        #self.min_temp_extruder = config.getfloat('min_temp_extruder', 180.)
-
-
-
         self.calibration_bowden_length = config.getfloat('calibration_bowden_length')
         self.unload_buffer = config.getfloat('unload_buffer', 30., minval=15.)
         self.home_to_extruder = config.getint('home_to_extruder', 0, minval=0, maxval=1)
@@ -241,7 +235,6 @@ class Ercf:
         self.default_tool_to_gate_map = list(config.getintlist('tool_to_gate_map', []))
         self.default_gate_status = list(config.getintlist('gate_status', []))
         self.default_gate_material = list(config.getlist('gate_material', []))
-        #!!!!
 
         self.default_gate_color = list(config.getlist('gate_color', []))
         self.persistence_level = config.getint('persistence_level', 0, minval=0, maxval=4)
@@ -475,14 +468,29 @@ class Ercf:
                     self.cmd_ERCF_CHECK_GATES,
                     desc = self.cmd_ERCF_CHECK_GATES_help)
 
-    # load from config file
+    # load from config file for different temperature for different material
     def load_config_min_temp_materials(self, config, material_list):
-        # !!!
         self.min_temp_materials = dict()
-        self.min_temp_extruder = config.getfloat('min_temp_extruder', 180.)
+        # hopefully min_temp_extruder is defined, otherwise use 199
+        self.min_temp_extruder = config.getfloat('min_temp_extruder', 199.)
+
+        # any material has not defined min_temp, use this value, keep the value from min_temp_extruder since
+        # it will be soon overwritten when we select different gates
+        self.default_material_min_temp = self.min_temp_extruder
         for material in material_list:
-            material_name = f'min_temp_{material}'
-            self.min_temp_materials[material]=config.getfloat(material_name, self.min_temp_extruder)
+            material_key_name = f'min_temp_{material}'
+            try:
+                temp = config.getfloat(material_key_name)
+                # alternatively, when not defined, use self.min_temp_extruder as default value.
+                # so all material listed will always have a temp, but we won't know which material's min temp is not defined.
+                # temp = config.getfloat(material_key_name, self.min_temp_extruder)
+                self.min_temp_materials[material] = temp
+            except Exception:
+
+
+                # if one material's min temp is not defined, it's OK, just ignore it.
+                continue
+
 
     def handle_connect(self):
         # Setup background file based logging before logging any messages
@@ -615,7 +623,6 @@ class Ercf:
         self.tool_selected = self._next_tool = self._last_tool = self.TOOL_UNKNOWN
         self._last_toolchange = "Unknown"
         self.gate_selected = self.GATE_UNKNOWN  # We keep record of gate selected in case user messes with mapping in print
-        #!!!!
         self.material_selected = self.MATERIAL_UNKNOWN
         self.servo_state = self.SERVO_UNKNOWN_STATE
         self.loaded_status = self.LOADED_STATUS_UNKNOWN
@@ -701,8 +708,7 @@ class Ercf:
             self.selector_offsets = selector_offsets
             self._log_debug("Loaded saved selector offsets: %s" % selector_offsets)
         else:
-            errors.append("Incorrect number of gates specified in %s" % self.VARS_ERCF_SELECTOR_OFFSETS)
-
+            errors.append(f"Incorrect number of gates specified in {self.VARS_ERCF_SELECTOR_OFFSETS}, len(selector_offsets){len(selector_offsets)}!=num_gates:{num_gates}")
         if len(errors) > 0:
             self._log_info("Warning: Some persisted state was ignored because it contained errors:\n%s" % ''.join(errors))
 
@@ -781,10 +787,9 @@ class Ercf:
             if self.startup_status > 0:
                 self._log_always(self._tool_to_gate_map_to_human_string(self.startup_status == 1))
                 self._display_visual_state(silent=(self.persistence_level < 4))
-                self._log_debug('leaveing servo the same status')
-                self._log_debug(f"material temp:{self.min_temp_materials}")
-                self._log_debug(f"min temp for material {self.get_selected_material()} is {self.min_temp_extruder }")
-#!!!!
+                self._log_debug(f"materials temp list:{self.min_temp_materials}")
+                self._log_debug(f"selected material and min temp: {self.get_selected_material()} {self.min_temp_extruder}C")
+
                 # self._servo_up()
         except Exception as e:
             self._log_always('Warning: Error booting up ERCF: %s' % str(e))
@@ -1731,21 +1736,30 @@ class Ercf:
             return print_status
 
     def get_selected_material(self):
-        material = self.gate_material_list[self.gate_selected]
-        self._log_debug(f"material is now {material} (gate {self.gate_selected})")
+        max = len(self.gate_material_list)
+        if self.gate_selected>= 0 and self.gate_selected<max:
+            material = self.gate_material_list[self.gate_selected]
+        else:
+            material = self.MATERIAL_UNKNOWN
         return material
 
     def get_selected_material_min_temp(self):
-        #!!!!
+        # to test this function, simply use ERCF_SELECT_TOOL macro button to choose diff gates.
         self._log_info("get_selected_material_min_temp() working")
         self._log_info(f" self.gate_selected: {self.gate_selected}")
-        self._log_info(f" self.gate_material_list: {self.gate_material_list}")
+        # self._log_info(f" self.gate_material_list: {self.gate_material_list}")
 
         material = self.get_selected_material()
-        self._log_info(f" self.gate_material_list[selected]: {material}")
-
-        min_temp = self.min_temp_materials[material]
-        self._log_info(f"min temp for selected matrial {material} is {min_temp}")
+        if material in self.min_temp_materials:
+           min_temp = self.min_temp_materials[material]
+           self._log_info(f"for material {material}, using min temp:{min_temp}")
+        else:
+           # if in the load function load_config_min_temp_materials() , load with a default value as backup plan,
+           # then it's impossible to run into here
+           # since all material are always in this dict and have a value (user set value or a default one).
+           # then we won't have a chance to show a warning to let user add the min temp for that material here
+           min_temp = self.default_material_min_temp
+           self._log_always(f"material min temp not defined:{material}, please add min_temp_{material} in ercf_parameters.cfg. Now using default from min_temp_extruder")
         return min_temp
 
     # Ensure we are above desired or min temperature and that target is set
@@ -1757,7 +1771,7 @@ class Ercf:
         new_target = False
         if extruder_heater.target_temp < target_temp:
             if (target_temp == self.min_temp_extruder):
-                self._log_error("Heating extruder to minimum temp (%.1f)" % target_temp)
+                self._log_error("Heating extruder for material: %s to minimum temp %.1fC" % (self.material_selected, target_temp))
             else:
                 self._log_info("Heating extruder to desired temp (%.1f)" % target_temp)
             self.gcode.run_script_from_command("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=%.1f" % target_temp)
@@ -2321,7 +2335,7 @@ class Ercf:
         if self.loaded_status == self.LOADED_STATUS_UNLOADED:
             self._log_debug("Tool already unloaded")
             return
-        self._log_debug("Unloading tool %s" % self._selected_tool_string())
+        self._log_debug("Unloading tool %s %s %s" % (self._selected_tool_string(), self.material_selected, self.min_temp_extruder))
         self._unload_sequence(self._get_calibration_ref(), skip_tip=skip_tip)
 
     def _unload_sequence(self, length, check_state=False, skip_sync_move=False, skip_tip=False):
@@ -2666,9 +2680,9 @@ class Ercf:
                 return delta > self.ENCODER_MIN or filament_present == 1
         finally:
             self._log_info("here: finally")
-
             self._set_action(current_action)
             return True
+        return True
 
 
 #################################################
@@ -2913,10 +2927,8 @@ class Ercf:
         self.gate_selected = gate
         self.gcode.run_script_from_command("SAVE_VARIABLE VARIABLE=%s VALUE=%d" % (self.VARS_ERCF_GATE_SELECTED, self.gate_selected))
         self.material_selected = self.get_selected_material()
-
         self.min_temp_extruder = self.get_selected_material_min_temp()
-        #!!!!
-        self._log_info(f"self.min_temp_extruder is now {self.min_temp_extruder}")
+        self._log_info(f"selected gate:{gate}, material:{self.material_selected}, min temp:{self.min_temp_extruder}")
 
     def _set_tool_selected(self, tool, silent=False):
         self.tool_selected = tool
