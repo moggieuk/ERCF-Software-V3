@@ -553,16 +553,12 @@ class Ercf:
 
         # Get servo and encoder
         self.servo = self.printer.lookup_object('ercf_servo ercf_servo', None)
-        if self.servo:
-            self._log_debug(f"servo object loaded: {self.servo}")
-        else:
+        if not self.servo:
             raise self.config.error("Missing [ercf_servo] definition in ercf_hardware.cfg\n%s" % self.UPGRADE_REMINDER)
 
         self.encoder_sensor = self.printer.lookup_object('ercf_encoder ercf_encoder', None)
-        if self.encoder_sensor:
-            self._log_debug(f"encoder_sensor object loaded: {self.encoder_sensor}")
-        else:
-            raise self.config.error("Missing [ercf_encoder] definition in ercf_hardware.cfg\n%s" % self.UPGRADE_REMINDER)
+        if not self.encoder_sensor:
+           raise self.config.error("Missing [ercf_encoder] definition in ercf_hardware.cfg\n%s" % self.UPGRADE_REMINDER)
 
         # Sanity check extruder name
         self.extruder = self.printer.lookup_object(self.extruder_name, None)
@@ -728,7 +724,6 @@ class Ercf:
             self.queue_listener.stop()
 
     def handle_ready(self):
-        self._log_debug('ERCF handle_ready working...')
 
         self.printer.register_event_handler("idle_timeout:printing", self._handle_idle_timeout_printing)
         self.printer.register_event_handler("idle_timeout:ready", self._handle_idle_timeout_ready)
@@ -3555,7 +3550,7 @@ class Ercf:
                             prefix = " > "
                     msg += es
                 if i == self.tool_selected:
-                    msg += " [SELECTED on gate #%d material %s]" % (self.gate_selected, self.material_selected)
+                    msg += " [SELECTED on gate #%d %s]" % (self.gate_selected, self.material_selected)
             msg += "\n"
             for gate in range(len(self.selector_offsets)):
                 msg += "\nGate #%d%s" % (gate, "(" + self._get_filament_char(self.gate_status[gate]) + ")")
@@ -3568,7 +3563,7 @@ class Ercf:
                 msg += tool_str
                 msg += "?" if prefix == "" else ""
                 if gate == self.gate_selected:
-                    msg += " [SELECTED%s]" % ((" supporting tool T%d" % self.tool_selected) if self.tool_selected >= 0 else "")
+                    msg += " [SELECTED%s %s]" % (((" supporting tool T%d" % self.tool_selected) if self.tool_selected >= 0 else ""), self.material_selected)
         else:
             multi_tool = False
             msg_gates = "Gates: "
@@ -3614,7 +3609,7 @@ class Ercf:
                 self.GATE_EMPTY: "Empty",
                 self.GATE_UNKNOWN: "Unknown"
             }[self.gate_status[g]]
-            msg += ("Gate #%d: Material: %s, Color: %s, Status: %s\n" % (g, material, color, available))
+            msg += ("Gate #%d: %s, Color: %s, Status: %s\n" % (g, material, color, available))
         return msg
 
     def _remap_tool(self, tool, gate, available):
