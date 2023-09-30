@@ -3876,8 +3876,8 @@ class Ercf:
         if self._check_in_bypass(): return
         if self._check_is_loaded(): return
         self._log_debug(f"cmd_ERCF_PRELOAD() current gate is {self.gate_selected}")
-        # gate = gcmd.get_int('GATE', self.gate_selected, minval=0, maxval=len(self.selector_offsets) - 1)
-        gate = gcmd.get_int('GATE', minval=-1, maxval=len(self.selector_offsets) - 1)
+        gate = gcmd.get_int('GATE', default=self.gate_selected, minval=-1, maxval=len(self.selector_offsets) - 1)
+
         self._log_always(f"command ERCF_PRELOAD has gate {gate}")
         current_action = self._set_action(self.ACTION_CHECKING)
         try:
