@@ -3870,10 +3870,11 @@ class Ercf:
     cmd_ERCF_PRELOAD_help = "Preloads filament at specified or current gate"
     def cmd_ERCF_PRELOAD(self, gcmd):
         if self._check_is_disabled(): return
-        if self._check_not_homed(): return
         if self._check_in_bypass(): return
         if self._check_is_loaded(): return
-        gate = gcmd.get_int('GATE', -1, minval=0, maxval=len(self.selector_offsets)-1)
+
+        gate = gcmd.get_int('GATE', self.gate_selected, minval=0, maxval=len(self.selector_offsets) - 1)
+        self._log_always(f"command ERCF_PRELOAD has gate {gate}")
         current_action = self._set_action(self.ACTION_CHECKING)
         try:
             self.calibrating = True # To suppress visual filament position
