@@ -2707,6 +2707,9 @@ class Ercf:
 
             self._unselect_tool()
             self._home_selector()
+            # since we just homed the selector, so the load status must be unloaded,otherwise the selector can't move at all due to filament blocking
+            self._log_debug("since we just finished home, load status should be UNLOADED.")
+            self.loaded_status = self.LOADED_STATUS_UNLOADED
             if tool >= 0:
                 self._select_tool(tool)
         finally:
@@ -3872,8 +3875,9 @@ class Ercf:
         if self._check_is_disabled(): return
         if self._check_in_bypass(): return
         if self._check_is_loaded(): return
-
-        gate = gcmd.get_int('GATE', self.gate_selected, minval=0, maxval=len(self.selector_offsets) - 1)
+        self._log_debug(f"cmd_ERCF_PRELOAD() current gate is {self.gate_selected}")
+        # gate = gcmd.get_int('GATE', self.gate_selected, minval=0, maxval=len(self.selector_offsets) - 1)
+        gate = gcmd.get_int('GATE', minval=-1, maxval=len(self.selector_offsets) - 1)
         self._log_always(f"command ERCF_PRELOAD has gate {gate}")
         current_action = self._set_action(self.ACTION_CHECKING)
         try:
