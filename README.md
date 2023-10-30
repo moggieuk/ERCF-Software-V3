@@ -2,7 +2,7 @@
 (\_/) <br>
 ( *,*) <br>
 (")_(")</h2>
-  <h1 align="center">ERCF-Software-V3 aka "Happy Hare v1"</h1>
+  <h1 align="center">"Happy Hare v1"</h1>
 </p>
 
 <p align="center">
@@ -24,8 +24,28 @@ Klipper control software for ERCF v1.1
   </a>
 </p>
 
-# :new: A major rework of Happy Hare to support of any MMU!
+# :new: STOP! The software is deprecated ... read this!
 **The Hare has grown up! A new reworked version of Happy Hare, dubbed Happy Hare v2 is complete. It will be somewhat familar to users of this software but will allow for different type of MMU to be controlled (ERCF, Tradrack, Prusa, ...) as well as being able to support sophisticated stepper syncing and multi-homing options and still be controlled from the companion KlipperScreen. It also has much improved doc.  This original version is well established and will remain but I highly recommend all new users [look here](https://github.com/moggieuk/Happy-Hare) and existing users upgrade when they have time.**
+
+[NEW VERSION HERE](https://github.com/moggieuk/Happy-Hare)
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+<br>
+
+<br>
 
 # Motivation
 I love my ERCF and building it was the most fun I've had in many years of the 3D-printing hobby. Whilst the design is brilliant I found a few problems with the software and wanted to add some features and improve user friendliness.  This became especially true after the separation of functionality with the introduction of the "sensorless filament homing" branch. I liked the new python implementation as a Klipper plug-in but wanted to leverage my (very reliable) toolhead sensor.  So I rewrote the software behind ERCF - it still has the structure and much of the code of the original but, more significantly, it has many new features, integrates the toolhead sensor and sensorless options.  I'm calling it the **"Happy Hare"** release or v3.
