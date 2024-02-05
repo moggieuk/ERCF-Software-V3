@@ -155,6 +155,7 @@ class Ercf:
                   'turquoise', 'violet', 'wheat', 'white', 'whitesmoke', 'yellow', 'yellowgreen']
 
     UPGRADE_REMINDER = "Did you upgrade? Run Happy Hare './install.sh' again to fix configuration files and/or read https://github.com/moggieuk/ERCF-Software-V3/blob/master/doc/UPGRADE.md"
+    EOL_REMINDER = "ERCF-Software-V3 is deprecated. Upgrade to Happy Hare: https://github.com/moggieuk/Happy-Hare"
 
     def __init__(self, config):
         self.config = config
@@ -724,6 +725,7 @@ class Ercf:
         try:
             self.encoder_sensor.set_clog_detection_length(self.variables.get(self.VARS_ERCF_CALIB_CLOG_LENGTH))
             self._log_always('(\_/)\n( *,*)\n(")_(") ERCF Ready')
+            self._log_error(self.EOL_REMINDER)
             if self.startup_status > 0:
                 self._log_always(self._tool_to_gate_map_to_human_string(self.startup_status == 1))
                 self._display_visual_state(silent=(self.persistence_level < 4))
